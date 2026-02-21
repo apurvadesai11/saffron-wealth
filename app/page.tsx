@@ -59,7 +59,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Budget Tracker</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Saffron Wealth</h1>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-4 mb-8">
