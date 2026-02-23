@@ -225,3 +225,123 @@ Key characteristics:
 ### Quality
 - **Alert False Positive Rate:** % of alerts that fire at incorrect thresholds due to calculation errors — target: 0%
 - **Budget Persistence Accuracy:** % of months where budget correctly carries forward from prior month without user action — target: 100%
+
+---
+
+## 8. Implementation Log
+
+*Decisions and changes made during development. Ordered chronologically by phase.*
+
+**Status:** Shipped — commit `481a89d` on `main`, February 2026
+
+---
+
+### Phase 1 — Foundation (`lib/`)
+
+**Files created:** `lib/types.ts`, `lib/budget-utils.ts`, `lib/mock-data.ts`
+
+**Decision: Forward-compatible period model**
+`BudgetPeriod` was defined as `'monthly' | 'quarterly' | 'semi-annual' | 'annual'` even though only `monthly` is exposed in v1. `getPeriodBounds`, `getPeriodKey`, and all utilities accept the full union. Quarterly/semi-annual/annual code paths are structurally complete stubs. This means future period support is an activation, not a schema migration.
+
+**Decision: `AlertRecord.periodKey` as a string**
+Rather than storing month/year as integers, alert records use a period-scoped string key (e.g. `"2026-01"` for monthly, `"2026-Q1"` for quarterly). This allows alert state to generalise across all period types without a data model change.
+
+**Decision: `getHistoricalAverage` returns `{ average, periodsOfData } | null`**
+The `periodsOfData` count is surfaced in the edit modal when fewer than 2 months of history are available, satisfying US-02 AC ("limited history" warning) without a separate API call.
+
+**Decision: Mock data designed to exercise all bar states on load**
+February 2026 transactions were seeded so that every progress bar color state is visible on first load: Housing at 100% (red), Transport at ~81% (yellow), Entertainment at 123% (deep-red), others green, Salary at 100% (income green), Freelance at 50% (income orange). This makes visual QA immediate.
+
+---
+
+### Phase 2 — Budget Overview UI (`components/`, `app/budget/`)
+
+**Files created:** `components/BudgetProgressBar.tsx`, `components/BudgetCategoryRow.tsx`, `components/BudgetCategoryList.tsx`, `app/budget/page.tsx`
+
+**Decision: Tailwind v4 full class names in constant maps**
+Tailwind v4 purges classes that aren't present as complete strings in source. All color classes in `BudgetProgressBar` and `AlertBanner` are stored as full strings in constant maps (e.g. `'bg-green-500'`) rather than assembled dynamically, ensuring they are not stripped from the production build.
+
+**Decision: `/budget` as a separate route**
+Budget tracking was initially implemented at `/budget` to keep the existing transaction tracker at `/` unchanged during development. Integration into the main page happened in Phase 6.
+
+---
+
+### Phase 3 — Budget Editing
+
+**Files created:** `components/BudgetEditModal.tsx`
+
+**Decision: `$0` as a valid input with live "Hidden from Budgets" preview**
+The modal shows a live preview label as the user types, so entering `0` immediately reveals the "Hidden from Budgets" consequence before saving. This removes the need for a separate confirmation step.
+
+**Decision: Keyboard-first modal interactions**
+Enter submits, Escape dismisses, input autofocuses on mount. Backdrop click also dismisses. No additional UX affordances needed.
+
+---
+
+### Phase 4 — In-App Alerting
+
+**Files created:** `components/AlertBanner.tsx`, `components/AlertPanel.tsx`
+
+**Decision: Functional `setAlertRecords` updater to avoid stale closures**
+The alert evaluation `useEffect` uses `setAlertRecords(prevRecords => ...)` rather than reading `alertRecords` from component scope. This avoids including `alertRecords` in the dependency array (which would cause infinite re-evaluation loops) while still allowing the accumulation check — both 80% and 100% thresholds can fire in the same evaluation pass without double-firing.
+
+**Decision: `useMemo` for `asOf`**
+`getAsOf` returns `new Date()` for the current month, which produces a new object on every render. Wrapping it in `useMemo(() => getAsOf(month, year), [month, year])` produces a stable reference, preventing the `useEffect` from re-firing on every render.
+
+**Decision: FR-19 reset implemented in `handleSave`**
+When a budget is increased, `handleSave` computes the new spend percentage against the new budget amount and filters out any `AlertRecord` entries where `newPercent < threshold`. This allows those thresholds to re-fire if crossed again, matching the FR-19 spec exactly.
+
+---
+
+### Phase 5 — Cashflow View
+
+**Files created:** `components/CashflowCard.tsx`
+
+**Decision: `CashflowCard` is self-contained**
+The component receives `{ transactions, budgets, categories, asOf }` and computes projection and MTD actuals internally, rather than accepting pre-computed values as props. This keeps the parent page clean and makes `CashflowCard` independently testable.
+
+**Decision: `isStaticProjection: boolean` flag on `CashflowProjection`**
+Rather than inferring projection mode from a brittle equality check (`projectedExpenses === budgetedExpenses`), an explicit flag is returned from `getCashflowProjection`. Used by `CashflowCard` to show `'budget plan'` vs. `'projected surplus/deficit'` sub-labels.
+
+---
+
+### Phase 6 — Integration (React Context)
+
+**Files created:** `lib/app-context.tsx`, `app/providers.tsx`
+
+**Decision: `AppProvider` wraps the layout via a client component shim**
+`app/layout.tsx` is a Next.js Server Component and cannot be marked `"use client"`. A thin `app/providers.tsx` client component wraps `AppProvider` and is imported into the layout, allowing the Server Component to remain a Server Component while the context is available to all client pages.
+
+**Decision: `MOCK_TRANSACTIONS` and `MOCK_BUDGETS` as seed state in context**
+Rather than being imported directly by each page, the mock data seeds the `useState` in `AppProvider`. Pages import `useApp()` and receive live state. This means a transaction added on the home page immediately appears in the budget page's spend calculations — both pages operate on the same in-memory state.
+
+**Decision: `app/page.tsx` category migration from string literals to IDs**
+The original `app/page.tsx` used local string-literal categories (`"Housing"`, `"Food"`, `"Income"`, `"Other"`). These were migrated to category IDs (`'housing'`, `'groceries'`, `'salary'`, `'other'`). An `'other'` category was added to `MOCK_CATEGORIES` for backward compatibility. The category dropdown in the add-transaction form now filters options by transaction type (expense/income) and auto-resets when type changes.
+
+---
+
+### Post-Phase UX Changes (in response to product decisions)
+
+**Change: Budget moved from `/budget` route to main page**
+The separate budget screen was removed as the primary surface. Budget tracking, editing, and alerting were all brought into `app/page.tsx`. The `/budget` route remains in the codebase but is no longer linked from the main page.
+
+**Change: Cashflow projection removed from main page**
+FR-20–FR-24 (rate-based end-of-month projection) were de-prioritised for the main page. The `getCashflowProjection` utility and `CashflowCard` component remain in the codebase and are used by the `/budget` route. The main page shows actual month-to-date figures only (Earned, Spent, Net), not extrapolated projections.
+
+**Change: Alerts moved behind a bell icon**
+Instead of an inline alert banner stack, a bell icon in the page header shows an active alert count badge. Clicking the bell toggles the alert panel. Alert evaluation still fires for the current month only; the panel is hidden by default and can be dismissed per alert.
+
+**Change: Monthly Review widget — merged Budget and Cashflow into a tabbed card**
+The two sections were merged into a single `bg-white` card with:
+- A "Monthly Review" heading
+- Budget and Cashflow tab selector
+- A shared month navigator (drives both tabs simultaneously)
+- Earned/Spent/Net summary cards pinned to the top of the tab content area, visible regardless of active tab
+- Budget tab: category progress rows, unbudgeted section, conditional Auto-Set All
+- Cashflow tab: Spending by Category breakdown
+
+**Change: Auto-Set All is conditionally visible**
+`Auto-Set All` is shown in the Budget tab only when `unbudgetedCategories.length > 0`. Once all categories have a budget set, the option disappears. This reduces noise for users who have already configured their budgets.
+
+**Change: Month navigator is shared across both tabs**
+A single `month`/`year` state drives both the cashflow actuals and the budget progress calculations. Navigating to a past month shows historical spend vs. the budgets set at that time. Alert evaluation is guarded by an `isCurrentMonth` check so alerts only fire when viewing the live month.
