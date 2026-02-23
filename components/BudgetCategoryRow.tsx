@@ -20,7 +20,6 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
   const isExpense = categoryType === 'expense';
   const delta = budgetAmount - spent;
 
-  const spentLabel    = isExpense ? 'Spent'    : 'Received';
   const remainLabel   = isExpense ? 'left'     : 'remaining';
   const overLabel     = isExpense ? 'over budget' : 'surplus';
   const percentSuffix = isExpense ? '% used'   : '% received';

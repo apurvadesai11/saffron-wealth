@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertRecord } from "@/lib/types";
+import { useMemo, useState } from "react";
 import { useApp } from "@/lib/app-context";
 import {
   buildBudgetProgressList,
@@ -9,7 +8,7 @@ import {
   getCurrentPeriodSpend,
   getDaysRemainingInPeriod,
   getHistoricalAverage,
-  getPendingAlerts,
+  getProgressPercent,
   getPeriodKey,
 } from "@/lib/budget-utils";
 import BudgetCategoryList from "@/components/BudgetCategoryList";
@@ -67,7 +66,6 @@ export default function Home() {
 
   // ── Widget + alert state ───────────────────────────────────────────────
   const [widgetTab, setWidgetTab]         = useState<WidgetTab>("budget");
-  const [alertRecords, setAlertRecords]   = useState<AlertRecord[]>([]);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const [showAlertPanel, setShowAlertPanel] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -83,44 +81,9 @@ export default function Home() {
   const [showForm, setShowForm]   = useState(false);
   const [txTab, setTxTab]         = useState<TxTab>("all");
 
-  // ── Alert evaluation (current month only) ─────────────────────────────
-  useEffect(() => {
-    if (!isCurrentMonth) return;
-
-    setAlertRecords(prevRecords => {
-      const newRecords: AlertRecord[] = [];
-      const firedAt = new Date().toISOString();
-      const period = "monthly" as const;
-
-      categories
-        .filter(cat => cat.type === "expense")
-        .forEach(cat => {
-          const budget = budgets.find(b => b.categoryId === cat.id && b.period === period);
-          if (!budget || budget.amount === 0) return;
-
-          const spent = getCurrentPeriodSpend(transactions, cat.id, period, asOf);
-          const pending = getPendingAlerts(
-            spent, budget, [...prevRecords, ...newRecords], cat.id, asOf
-          );
-
-          pending.forEach(threshold => {
-            newRecords.push({
-              categoryId: cat.id,
-              periodKey:  getPeriodKey(asOf, period),
-              threshold,
-              firedAt,
-            });
-          });
-        });
-
-      return newRecords.length > 0 ? [...prevRecords, ...newRecords] : prevRecords;
-    });
-  }, [budgets, transactions, categories, asOf, isCurrentMonth]);
-
   // ── Budget handlers ────────────────────────────────────────────────────
   function handleSave(categoryId: string, amount: number) {
     const oldBudget = budgets.find(b => b.categoryId === categoryId && b.period === "monthly");
-    const oldAmount = oldBudget?.amount;
 
     setBudgets(prev => {
       const idx = prev.findIndex(b => b.categoryId === categoryId && b.period === "monthly");
@@ -132,23 +95,28 @@ export default function Home() {
       return [...prev, { categoryId, amount, period: "monthly" }];
     });
 
-    // FR-19: if budget increased, remove records where spend now falls below threshold
-    if (amount > 0 && oldAmount !== undefined && amount > oldAmount) {
-      const spent      = getCurrentPeriodSpend(transactions, categoryId, "monthly", asOf);
+    // FR-19: if budget increased and spend drops below a dismissed threshold,
+    // clear the dismissed key so the alert can re-appear if crossed again
+    if (oldBudget && amount > oldBudget.amount) {
+      const spent = getCurrentPeriodSpend(transactions, categoryId, "monthly", asOf);
       const newPercent = (spent / amount) * 100;
-      const periodKey  = getPeriodKey(asOf, "monthly");
-      setAlertRecords(prev =>
-        prev.filter(r => {
-          if (r.categoryId !== categoryId || r.periodKey !== periodKey) return true;
-          return newPercent >= r.threshold;
-        })
-      );
+      const periodKey = getPeriodKey(asOf, "monthly");
+      setDismissedKeys(prev => {
+        const next = new Set(prev);
+        if (newPercent < 80) next.delete(`${categoryId}-${periodKey}-80`);
+        if (newPercent < 100) next.delete(`${categoryId}-${periodKey}-100`);
+        return next.size !== prev.size ? next : prev;
+      });
     }
 
     setEditingCategoryId(null);
   }
 
   function handleAutoSetAll() {
+    const oldAmounts = new Map(
+      budgets.filter(b => b.period === "monthly").map(b => [b.categoryId, b.amount])
+    );
+
     setBudgets(prev => {
       const next = [...prev];
       categories.forEach(cat => {
@@ -164,6 +132,25 @@ export default function Home() {
       });
       return next;
     });
+
+    // FR-19: clear dismissed keys for categories where budget increased
+    const periodKey = getPeriodKey(asOf, "monthly");
+    setDismissedKeys(prev => {
+      const next = new Set(prev);
+      categories.forEach(cat => {
+        const avg = getHistoricalAverage(transactions, cat.id, "monthly", asOf);
+        if (!avg) return;
+        const newAmount = Math.round(avg.average);
+        const oldAmount = oldAmounts.get(cat.id);
+        if (oldAmount !== undefined && newAmount > oldAmount) {
+          const spent = getCurrentPeriodSpend(transactions, cat.id, "monthly", asOf);
+          const newPercent = (spent / newAmount) * 100;
+          if (newPercent < 80) next.delete(`${cat.id}-${periodKey}-80`);
+          if (newPercent < 100) next.delete(`${cat.id}-${periodKey}-100`);
+        }
+      });
+      return next.size !== prev.size ? next : prev;
+    });
   }
 
   function handleDismissAlert(key: string) {
@@ -177,24 +164,48 @@ export default function Home() {
   const budgetedIds          = new Set(budgets.filter(b => b.period === "monthly").map(b => b.categoryId));
   const unbudgetedCategories = categories.filter(c => !budgetedIds.has(c.id));
 
-  const activeAlerts: ActiveAlert[] = alertRecords
-    .filter(r => {
-      const key = `${r.categoryId}-${r.periodKey}-${r.threshold}`;
-      if (dismissedKeys.has(key)) return false;
-      const budget = budgets.find(b => b.categoryId === r.categoryId && b.period === "monthly");
-      return budget && budget.amount > 0;
-    })
-    .map(r => {
-      const cat    = categories.find(c => c.id === r.categoryId)!;
-      const budget = budgets.find(b => b.categoryId === r.categoryId && b.period === "monthly")!;
-      const spent  = getCurrentPeriodSpend(transactions, r.categoryId, "monthly", asOf);
-      const days   = getDaysRemainingInPeriod(asOf, "monthly");
-      return {
-        key:       `${r.categoryId}-${r.periodKey}-${r.threshold}`,
-        threshold: r.threshold,
-        message:   formatAlertMessage(r.threshold, cat.name, spent, budget.amount, days),
-      };
-    });
+  // Derive active alerts from current state — no accumulator needed.
+  // Thresholds that are currently crossed produce alerts; dismissed ones are filtered out.
+  const activeAlerts: ActiveAlert[] = useMemo(() => {
+    if (!isCurrentMonth) return [];
+    const period = "monthly" as const;
+    const periodKey = getPeriodKey(asOf, period);
+    const alerts: ActiveAlert[] = [];
+
+    categories
+      .filter(cat => cat.type === "expense")
+      .forEach(cat => {
+        const budget = budgets.find(b => b.categoryId === cat.id && b.period === period);
+        if (!budget || budget.amount === 0) return;
+
+        const spent = getCurrentPeriodSpend(transactions, cat.id, period, asOf);
+        const percent = getProgressPercent(spent, budget.amount);
+        const days = getDaysRemainingInPeriod(asOf, period);
+
+        if (percent >= 80) {
+          const key = `${cat.id}-${periodKey}-80`;
+          if (!dismissedKeys.has(key)) {
+            alerts.push({
+              key,
+              threshold: 80 as const,
+              message: formatAlertMessage(80, cat.name, spent, budget.amount, days),
+            });
+          }
+        }
+        if (percent >= 100) {
+          const key = `${cat.id}-${periodKey}-100`;
+          if (!dismissedKeys.has(key)) {
+            alerts.push({
+              key,
+              threshold: 100 as const,
+              message: formatAlertMessage(100, cat.name, spent, budget.amount, days),
+            });
+          }
+        }
+      });
+
+    return alerts;
+  }, [categories, budgets, transactions, asOf, isCurrentMonth, dismissedKeys]);
 
   // ── Budget modal context ───────────────────────────────────────────────
   const editingCategory = editingCategoryId
@@ -225,10 +236,11 @@ export default function Home() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.description || !form.amount || !form.categoryId) return;
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.description || !form.amount || !form.categoryId || isNaN(parsedAmount) || parsedAmount <= 0) return;
     addTransaction({
       description: form.description,
-      amount:      parseFloat(form.amount),
+      amount:      parsedAmount,
       categoryId:  form.categoryId,
       type:        form.type,
       date:        form.date,

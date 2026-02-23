@@ -22,12 +22,14 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+let nextId = 1000; // start above mock IDs to avoid collisions
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [budgets, setBudgets] = useState<Budget[]>(MOCK_BUDGETS);
 
   function addTransaction(t: Omit<Transaction, "id">) {
-    setTransactions(prev => [{ ...t, id: Date.now() }, ...prev]);
+    setTransactions(prev => [{ ...t, id: ++nextId }, ...prev]);
   }
 
   function deleteTransaction(id: number) {
