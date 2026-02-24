@@ -232,7 +232,7 @@ Key characteristics:
 
 *Decisions and changes made during development. Ordered chronologically by phase.*
 
-**Status:** Shipped — commit `481a89d` on `main`, February 2026
+**Status:** Shipped — latest commit `1760415` on `main`, February 2026
 
 ---
 
@@ -254,15 +254,14 @@ February 2026 transactions were seeded so that every progress bar color state is
 
 ---
 
-### Phase 2 — Budget Overview UI (`components/`, `app/budget/`)
+### Phase 2 — Budget Overview UI (`components/`)
 
-**Files created:** `components/BudgetProgressBar.tsx`, `components/BudgetCategoryRow.tsx`, `components/BudgetCategoryList.tsx`, `app/budget/page.tsx`
+**Files created:** `components/BudgetProgressBar.tsx`, `components/BudgetCategoryRow.tsx`, `components/BudgetCategoryList.tsx`
 
 **Decision: Tailwind v4 full class names in constant maps**
 Tailwind v4 purges classes that aren't present as complete strings in source. All color classes in `BudgetProgressBar` and `AlertBanner` are stored as full strings in constant maps (e.g. `'bg-green-500'`) rather than assembled dynamically, ensuring they are not stripped from the production build.
 
-**Decision: `/budget` as a separate route**
-Budget tracking was initially implemented at `/budget` to keep the existing transaction tracker at `/` unchanged during development. Integration into the main page happened in Phase 6.
+**Historical note:** Budget tracking was initially built at a separate `/budget` route during development, then integrated into the main page in Phase 6. The `/budget` route was removed in a later cleanup (see Post-Phase section).
 
 ---
 
@@ -282,14 +281,11 @@ Enter submits, Escape dismisses, input autofocuses on mount. Backdrop click also
 
 **Files created:** `components/AlertBanner.tsx`, `components/AlertPanel.tsx`
 
-**Decision: Functional `setAlertRecords` updater to avoid stale closures**
-The alert evaluation `useEffect` uses `setAlertRecords(prevRecords => ...)` rather than reading `alertRecords` from component scope. This avoids including `alertRecords` in the dependency array (which would cause infinite re-evaluation loops) while still allowing the accumulation check — both 80% and 100% thresholds can fire in the same evaluation pass without double-firing.
+**Decision: Derived alerts via `useMemo` (replaces `useEffect` accumulator)**
+Alerts are derived from current state rather than accumulated imperatively. A `useMemo` computes which thresholds are currently crossed for each expense category; a `dismissedKeys` Set tracks alerts the user has dismissed. This eliminates the `useEffect`/`setState` pattern (which React 19 flags as a lint error) and makes FR-19 reset automatic — when a budget increases and spend drops below a threshold, the alert simply disappears from the derived set. `handleSave` and `handleAutoSetAll` clear dismissed keys for thresholds that are no longer crossed, so alerts can re-appear if the threshold is crossed again.
 
 **Decision: `useMemo` for `asOf`**
-`getAsOf` returns `new Date()` for the current month, which produces a new object on every render. Wrapping it in `useMemo(() => getAsOf(month, year), [month, year])` produces a stable reference, preventing the `useEffect` from re-firing on every render.
-
-**Decision: FR-19 reset implemented in `handleSave`**
-When a budget is increased, `handleSave` computes the new spend percentage against the new budget amount and filters out any `AlertRecord` entries where `newPercent < threshold`. This allows those thresholds to re-fire if crossed again, matching the FR-19 spec exactly.
+`getAsOf` returns `new Date()` for the current month, which produces a new object on every render. Wrapping it in `useMemo(() => getAsOf(month, year), [month, year])` produces a stable reference, preventing unnecessary recomputation.
 
 ---
 
@@ -313,7 +309,7 @@ Rather than inferring projection mode from a brittle equality check (`projectedE
 `app/layout.tsx` is a Next.js Server Component and cannot be marked `"use client"`. A thin `app/providers.tsx` client component wraps `AppProvider` and is imported into the layout, allowing the Server Component to remain a Server Component while the context is available to all client pages.
 
 **Decision: `MOCK_TRANSACTIONS` and `MOCK_BUDGETS` as seed state in context**
-Rather than being imported directly by each page, the mock data seeds the `useState` in `AppProvider`. Pages import `useApp()` and receive live state. This means a transaction added on the home page immediately appears in the budget page's spend calculations — both pages operate on the same in-memory state.
+Rather than being imported directly by each page, the mock data seeds the `useState` in `AppProvider`. Components import `useApp()` and receive live state.
 
 **Decision: `app/page.tsx` category migration from string literals to IDs**
 The original `app/page.tsx` used local string-literal categories (`"Housing"`, `"Food"`, `"Income"`, `"Other"`). These were migrated to category IDs (`'housing'`, `'groceries'`, `'salary'`, `'other'`). An `'other'` category was added to `MOCK_CATEGORIES` for backward compatibility. The category dropdown in the add-transaction form now filters options by transaction type (expense/income) and auto-resets when type changes.
@@ -323,10 +319,13 @@ The original `app/page.tsx` used local string-literal categories (`"Housing"`, `
 ### Post-Phase UX Changes (in response to product decisions)
 
 **Change: Budget moved from `/budget` route to main page**
-The separate budget screen was removed as the primary surface. Budget tracking, editing, and alerting were all brought into `app/page.tsx`. The `/budget` route remains in the codebase but is no longer linked from the main page.
+The separate budget screen was removed as the primary surface. Budget tracking, editing, and alerting were all brought into `app/page.tsx`.
+
+**Change: `/budget` route removed from codebase**
+`app/budget/page.tsx` was deleted. All budget functionality lives on the main page. The `CashflowCard` component and `getCashflowProjection` utility remain in the codebase as available building blocks for future use but are not currently rendered.
 
 **Change: Cashflow projection removed from main page**
-FR-20–FR-24 (rate-based end-of-month projection) were de-prioritised for the main page. The `getCashflowProjection` utility and `CashflowCard` component remain in the codebase and are used by the `/budget` route. The main page shows actual month-to-date figures only (Earned, Spent, Net), not extrapolated projections.
+FR-20–FR-24 (rate-based end-of-month projection) were de-prioritised for the main page. The main page shows actual month-to-date figures only (Earned, Spent, Net), not extrapolated projections.
 
 **Change: Alerts moved behind a bell icon**
 Instead of an inline alert banner stack, a bell icon in the page header shows an active alert count badge. Clicking the bell toggles the alert panel. Alert evaluation still fires for the current month only; the panel is hidden by default and can be dismissed per alert.
@@ -345,3 +344,29 @@ The two sections were merged into a single `bg-white` card with:
 
 **Change: Month navigator is shared across both tabs**
 A single `month`/`year` state drives both the cashflow actuals and the budget progress calculations. Navigating to a past month shows historical spend vs. the budgets set at that time. Alert evaluation is guarded by an `isCurrentMonth` check so alerts only fire when viewing the live month.
+
+---
+
+### Cleanup Pass (commit `1760415`)
+
+**Files added:** `app/error.tsx`
+**Files deleted:** `app/budget/page.tsx`
+**Files modified:** `app/page.tsx`, `app/globals.css`, `components/BudgetCategoryRow.tsx`, `lib/app-context.tsx`
+
+**Fix: Alert system refactored from imperative accumulator to derived computation**
+The `useEffect` + `alertRecords` state pattern was replaced with a `useMemo` derivation (see Phase 4 decision update). This fixed two React 19 ESLint errors (`react-hooks/set-state-in-effect`) and a missing dependency bug where alerts on the former `/budget` page wouldn't re-evaluate when transactions changed.
+
+**Fix: FR-19 alert reset added to `handleAutoSetAll`**
+Previously only `handleSave` cleared stale alert state when a budget was increased. Now `handleAutoSetAll` also clears dismissed keys for categories where the new budget causes spend to drop below a previously-dismissed threshold.
+
+**Fix: Dark mode CSS removed**
+`globals.css` defined dark mode CSS variables but the UI used hardcoded light-mode Tailwind classes, causing a visual mismatch for users with `prefers-color-scheme: dark`. The dark mode block was removed; the app is light-mode only.
+
+**Fix: Transaction ID generation**
+Replaced `Date.now()` with an incrementing counter to prevent duplicate IDs when transactions are added in rapid succession.
+
+**Fix: Transaction amount validation**
+Added explicit `parsedAmount <= 0` and `isNaN` checks in `handleSubmit` to reject invalid amounts.
+
+**Addition: Error boundary (`app/error.tsx`)**
+Added a Next.js error boundary so component errors display a user-friendly message with a retry button instead of a white screen.
