@@ -33,19 +33,29 @@ test.describe("Auth proxy gating", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("/login is accessible without a session", async ({ page }) => {
+  test("/login is accessible without a session and fully renders", async ({ page }) => {
     await page.goto("/login");
+    // Heading proves the page rendered (not stuck on Suspense "Loading…" fallback).
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    // Form fields and submit button prove JS hydrated — they only exist after
+    // the client-side LoginForm mounts (the SSR output is just "Loading…").
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("/register is accessible without a session", async ({ page }) => {
+  test("/register is accessible without a session and fully renders", async ({ page }) => {
     await page.goto("/register");
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
   });
 
-  test("/password-reset is accessible without a session", async ({ page }) => {
+  test("/password-reset is accessible without a session and fully renders", async ({ page }) => {
     await page.goto("/password-reset");
     await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: /send/i })).toBeVisible();
   });
 
   test("a session cookie matching the shape regex passes the proxy", async ({ page, context }) => {
