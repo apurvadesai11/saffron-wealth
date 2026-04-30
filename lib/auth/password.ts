@@ -48,5 +48,5 @@ export function getDummyHash(): Promise<string> {
     const random = randomBytes(32).toString("base64url");
     dummyHashCache = hash(random, ARGON2_OPTIONS);
   }
-  return dummyHashCache;
+  return dummyHashCache!;
 }
