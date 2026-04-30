@@ -24,6 +24,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Linux lightningcss native binary
+        if: runner.os == 'Linux'
+        run: |
+          VERSION=$(node -e "console.log(require('./node_modules/lightningcss/package.json').version)")
+          npm install --no-save lightningcss-linux-x64-gnu@$VERSION
+
       - name: Lint
         run: npm run lint
 
