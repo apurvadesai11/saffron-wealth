@@ -2,6 +2,22 @@ import { test, expect } from "@playwright/test";
 
 // State is in-memory and resets on every page load — each test starts fresh.
 
+// All app routes are gated by proxy.ts. The proxy only does a SHAPE check on
+// the session cookie (regex; no DB call), so a fake cookie matching the regex
+// is enough to let these UI tests through. Real DB-backed auth is verified in
+// the auth-* spec files.
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([
+    {
+      name: "sw_session",
+      value: "e2e_test_fake_session_cookie_42chars_aabbcc",
+      domain: "localhost",
+      path: "/",
+      sameSite: "Lax",
+    },
+  ]);
+});
+
 test.describe("App shell", () => {
   test("loads the Monthly Review page at /", async ({ page }) => {
     await page.goto("/");
