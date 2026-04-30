@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   try {
     publicUrl = await uploadAvatar(processed);
   } catch (uploadErr) {
-    // eslint-disable-next-line no-console
+     
     console.error("[profile/picture] upload failed", uploadErr);
     return err("UPLOAD_FAILED", "Could not save the image. Try again.", 500);
   }

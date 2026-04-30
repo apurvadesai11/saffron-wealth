@@ -9,10 +9,7 @@ import {
   validateEmail,
   normalizeEmail,
 } from "@/lib/auth/validation";
-import {
-  createSession,
-  revokeAllSessionsForUser,
-} from "@/lib/auth/sessions";
+import { createSession } from "@/lib/auth/sessions";
 import { setSessionCookie } from "@/lib/auth/session-cookie";
 
 interface ErrorBody {

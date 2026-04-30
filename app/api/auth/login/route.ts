@@ -16,7 +16,6 @@ import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 import {
   getBackoffStatus,
-  recordFailedLogin,
   clearFailedLoginsForUser,
   acquireLoginLock,
 } from "@/lib/auth/exponential-backoff";

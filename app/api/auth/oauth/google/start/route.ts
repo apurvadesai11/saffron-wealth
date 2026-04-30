@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     url = buildGoogleAuthorizeUrl(state, redirectUri);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error("[oauth/google/start] config missing", err);
     return NextResponse.redirect(new URL("/login?oauth=unconfigured", req.url));
   }

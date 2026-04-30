@@ -38,7 +38,7 @@ export async function sendPasswordResetEmail(opts: {
 </body></html>`;
 
   if (!apiKey) {
-    // eslint-disable-next-line no-console
+     
     console.log(
       `[email] (RESEND_API_KEY not set — printing instead) to=${opts.to} subject="${subject}"\n${text}`,
     );
@@ -53,7 +53,7 @@ export async function sendPasswordResetEmail(opts: {
     html,
   });
   if (result.error) {
-    // eslint-disable-next-line no-console
+     
     console.error("[email] resend send failed", result.error);
     return { ok: false, delivered: "resend" };
   }

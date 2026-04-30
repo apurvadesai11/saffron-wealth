@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   try {
     tokens = await exchangeGoogleCode(code, redirectUri);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error("[oauth/google/callback] code exchange failed", err);
     return redirectErr(req, "token_exchange_failed");
   }
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   try {
     profile = await fetchGoogleProfile(tokens.access_token);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error("[oauth/google/callback] userinfo failed", err);
     return redirectErr(req, "userinfo_failed");
   }

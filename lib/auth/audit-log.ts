@@ -23,7 +23,7 @@ export async function recordAuthEvent(input: AuthEventInput): Promise<void> {
       },
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error("[audit-log] failed to record event", input.type, err);
   }
 }
