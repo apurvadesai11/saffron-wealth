@@ -12,12 +12,23 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^5.22.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "@vercel/blob": "^2.3.3",
+    "file-type": "^19.6.0",
     "next": "^15.3.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "resend": "^6.12.2",
+    "sharp": "^0.34.5"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.60.2",
@@ -36,6 +47,7 @@
     "eslint": "^9",
     "eslint-config-next": "^15.3.0",
     "happy-dom": "^20.9.0",
+    "prisma": "^5.22.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
     "vite-tsconfig-paths": "^5.1.4",
