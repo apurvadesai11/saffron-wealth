@@ -14,7 +14,9 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
