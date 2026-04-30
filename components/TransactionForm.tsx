@@ -51,8 +51,9 @@ export default function TransactionForm({ onSubmitted }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+          <label htmlFor="tx-form-type" className="block text-sm font-medium text-gray-700 mb-1">Type</label>
           <select
+            id="tx-form-type"
             value={form.type}
             onChange={e => handleTypeChange(e.target.value as CategoryType)}
             className={inputClass}
@@ -62,8 +63,9 @@ export default function TransactionForm({ onSubmitted }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <label htmlFor="tx-form-category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
           <select
+            id="tx-form-category"
             value={form.categoryId}
             onChange={e => setForm(prev => ({ ...prev, categoryId: e.target.value }))}
             className={inputClass}
@@ -76,8 +78,9 @@ export default function TransactionForm({ onSubmitted }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label htmlFor="tx-form-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <input
+            id="tx-form-description"
             type="text"
             placeholder="e.g. Netflix subscription"
             value={form.description}
@@ -87,8 +90,9 @@ export default function TransactionForm({ onSubmitted }: Props) {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+          <label htmlFor="tx-form-amount" className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
           <input
+            id="tx-form-amount"
             type="number"
             placeholder="0.00"
             min="0.01"
@@ -101,8 +105,9 @@ export default function TransactionForm({ onSubmitted }: Props) {
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+        <label htmlFor="tx-form-date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
         <input
+          id="tx-form-date"
           type="date"
           value={form.date}
           onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))}

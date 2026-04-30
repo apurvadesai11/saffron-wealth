@@ -72,8 +72,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
       {/* Row 1: search + type */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="sm:col-span-2">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <label htmlFor="tx-filter-search" className="block text-xs font-medium text-gray-500 mb-1">Search</label>
           <input
+            id="tx-filter-search"
             type="text"
             placeholder="Search by description or category…"
             value={value.search}
@@ -82,8 +83,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+          <label htmlFor="tx-filter-type" className="block text-xs font-medium text-gray-500 mb-1">Type</label>
           <select
+            id="tx-filter-type"
             value={value.type}
             onChange={e => onChange({ ...value, type: e.target.value as TransactionTypeFilter })}
             className={inputClass}
@@ -98,8 +100,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
       {/* Row 2: date range + amount range */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+          <label htmlFor="tx-filter-date-from" className="block text-xs font-medium text-gray-500 mb-1">From</label>
           <input
+            id="tx-filter-date-from"
             type="date"
             value={value.dateFrom}
             onChange={e => onChange({ ...value, dateFrom: e.target.value })}
@@ -107,8 +110,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+          <label htmlFor="tx-filter-date-to" className="block text-xs font-medium text-gray-500 mb-1">To</label>
           <input
+            id="tx-filter-date-to"
             type="date"
             value={value.dateTo}
             onChange={e => onChange({ ...value, dateTo: e.target.value })}
@@ -116,8 +120,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Min ($)</label>
+          <label htmlFor="tx-filter-amount-min" className="block text-xs font-medium text-gray-500 mb-1">Min ($)</label>
           <input
+            id="tx-filter-amount-min"
             type="number"
             min="0"
             step="0.01"
@@ -128,8 +133,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Max ($)</label>
+          <label htmlFor="tx-filter-amount-max" className="block text-xs font-medium text-gray-500 mb-1">Max ($)</label>
           <input
+            id="tx-filter-amount-max"
             type="number"
             min="0"
             step="0.01"
