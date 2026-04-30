@@ -37,8 +37,17 @@ const TransactionsIcon = createElement(
   createElement("path",     { d: "M21 13v2a4 4 0 0 1-4 4H3" }),
 );
 
+const ProfileIcon = createElement(
+  "svg",
+  iconProps,
+  // user silhouette
+  createElement("path",   { d: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" }),
+  createElement("circle", { cx: 12, cy: 7, r: 4 }),
+);
+
 // Adding a new feature surface? Append a NavItem here.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/",             label: "Monthly Review", icon: MonthlyReviewIcon },
   { href: "/transactions", label: "Transactions",   icon: TransactionsIcon  },
+  { href: "/profile",      label: "Profile",        icon: ProfileIcon       },
 ];

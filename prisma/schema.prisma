@@ -1,0 +1,106 @@
+// Saffron Wealth — auth & user data model
+// Argon2id password hashes (m=64MB, t=3, p=4) live in `User.passwordHash`.
+// Session tokens are stored only as SHA-256 hashes in `Session.tokenHash`.
+// Password-reset tokens are stored only as SHA-256 hashes in `PasswordResetToken.tokenHash`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailNormalized String    @unique
+  firstName       String
+  lastName        String
+  passwordHash    String?
+  profilePicture  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sessions       Session[]
+  oauthAccounts  OAuthAccount[]
+  resetTokens    PasswordResetToken[]
+  failedLogins   FailedLogin[]
+  authEvents     AuthEvent[]
+
+  @@index([emailNormalized])
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  userAgent   String?
+  ipAddress   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model OAuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model FailedLogin {
+  id              String   @id @default(cuid())
+  userId          String?
+  emailNormalized String
+  attemptedAt     DateTime @default(now())
+  ipAddress       String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([emailNormalized, attemptedAt])
+  @@index([userId, attemptedAt])
+}
+
+model AuthEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}

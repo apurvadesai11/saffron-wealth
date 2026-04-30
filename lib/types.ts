@@ -61,6 +61,27 @@ export interface CashflowProjection {
   isStaticProjection: boolean;
 }
 
+// Authenticated user surfaced to UI (subset of the Prisma User row).
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  profilePicture: string | null;
+}
+
+export type AuthEventType =
+  | 'signup'
+  | 'login_success'
+  | 'login_failure'
+  | 'password_change'
+  | 'password_reset_requested'
+  | 'password_reset_completed'
+  | 'session_revoked'
+  | 'google_oauth_signin'
+  | 'hibp_unavailable'
+  | 'email_change';
+
 // Computed view model used by budget list UI components
 export interface BudgetProgress {
   categoryId: string;
