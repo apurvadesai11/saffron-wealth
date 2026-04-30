@@ -7,25 +7,33 @@ import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 
 export async function POST(req: NextRequest) {
-  if (!validateCsrfFromRequest(req)) {
+  try {
+    if (!validateCsrfFromRequest(req)) {
+      return NextResponse.json(
+        { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
+        { status: 403 },
+      );
+    }
+
+    const raw = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (raw) {
+      await revokeSession(raw);
+      await recordAuthEvent({
+        type: "session_revoked",
+        ipAddress: clientIp(req),
+        userAgent: userAgent(req),
+        metadata: { reason: "logout" },
+      });
+    }
+
+    const res = NextResponse.json({ ok: true });
+    clearSessionCookie(res);
+    return res;
+  } catch (e) {
+    console.error("[api/auth/logout] unhandled error", e);
     return NextResponse.json(
-      { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
-      { status: 403 },
+      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      { status: 500 },
     );
   }
-
-  const raw = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (raw) {
-    await revokeSession(raw);
-    await recordAuthEvent({
-      type: "session_revoked",
-      ipAddress: clientIp(req),
-      userAgent: userAgent(req),
-      metadata: { reason: "logout" },
-    });
-  }
-
-  const res = NextResponse.json({ ok: true });
-  clearSessionCookie(res);
-  return res;
 }

@@ -7,30 +7,38 @@ import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json(
+        { ok: false, error: { code: "UNAUTHENTICATED", message: "Not signed in." } },
+        { status: 401 },
+      );
+    }
+    if (!validateCsrfFromRequest(req)) {
+      return NextResponse.json(
+        { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
+        { status: 403 },
+      );
+    }
+
+    await revokeAllSessionsForUser(session.user.id);
+    await recordAuthEvent({
+      type: "session_revoked",
+      userId: session.user.id,
+      ipAddress: clientIp(req),
+      userAgent: userAgent(req),
+      metadata: { reason: "logout_all" },
+    });
+
+    const res = NextResponse.json({ ok: true });
+    clearSessionCookie(res);
+    return res;
+  } catch (e) {
+    console.error("[api/auth/logout-all] unhandled error", e);
     return NextResponse.json(
-      { ok: false, error: { code: "UNAUTHENTICATED", message: "Not signed in." } },
-      { status: 401 },
+      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      { status: 500 },
     );
   }
-  if (!validateCsrfFromRequest(req)) {
-    return NextResponse.json(
-      { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
-      { status: 403 },
-    );
-  }
-
-  await revokeAllSessionsForUser(session.user.id);
-  await recordAuthEvent({
-    type: "session_revoked",
-    userId: session.user.id,
-    ipAddress: clientIp(req),
-    userAgent: userAgent(req),
-    metadata: { reason: "logout_all" },
-  });
-
-  const res = NextResponse.json({ ok: true });
-  clearSessionCookie(res);
-  return res;
 }
