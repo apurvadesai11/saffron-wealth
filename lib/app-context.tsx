@@ -18,6 +18,9 @@ interface AppContextValue {
   setBudgets: Dispatch<SetStateAction<Budget[]>>;
   addTransaction: (t: Omit<Transaction, "id">) => void;
   deleteTransaction: (id: number) => void;
+  // Lifted so the sidebar AlertsButton and the MonthlyReviewWidget share state
+  dismissedKeys: Set<string>;
+  setDismissedKeys: Dispatch<SetStateAction<Set<string>>>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -27,6 +30,7 @@ let nextId = 1000; // start above mock IDs to avoid collisions
 export function AppProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [budgets, setBudgets] = useState<Budget[]>(MOCK_BUDGETS);
+  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
 
   function addTransaction(t: Omit<Transaction, "id">) {
     setTransactions(prev => [{ ...t, id: ++nextId }, ...prev]);
@@ -44,6 +48,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBudgets,
       addTransaction,
       deleteTransaction,
+      dismissedKeys,
+      setDismissedKeys,
     }}>
       {children}
     </AppContext.Provider>
