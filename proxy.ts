@@ -47,8 +47,24 @@ function ensureCsrfCookie(req: NextRequest, res: NextResponse): void {
   });
 }
 
+// Paths the middleware must never gate — static assets, Next internals, API
+// routes, and public files. The matcher regex is a first filter but isn't
+// reliable across all Next.js/Vercel versions, so we guard explicitly here too.
+function isPassthrough(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/api/") ||
+    pathname === "/favicon.ico" ||
+    /^\/saffron\./.test(pathname)
+  );
+}
+
 export function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  if (isPassthrough(pathname)) {
+    return NextResponse.next();
+  }
 
   if (isAuthPath(pathname)) {
     const res = NextResponse.next();
