@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-// These tests verify the proxy-level redirect behavior. No DB or session
-// table is required because proxy.ts does a cheap shape check only.
+// These tests verify end-to-end auth gating across the proxy AND the (app)
+// server layout. The proxy does a cheap cookie-shape check; the (app) layout
+// does the real DB-backed validation. A forged cookie that passes the shape
+// check must still be rejected by the layout (which fails closed if the DB
+// is unreachable).
 
-test.describe("Auth proxy gating", () => {
+test.describe("Auth gating", () => {
   test("redirects unauthenticated visitors at / to /login with next param", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/login\?next=%2F$/);
@@ -58,7 +61,10 @@ test.describe("Auth proxy gating", () => {
     await expect(page.getByRole("button", { name: /send/i })).toBeVisible();
   });
 
-  test("a session cookie matching the shape regex passes the proxy", async ({ page, context }) => {
+  test("a forged shape-valid cookie passes the proxy but is rejected by the (app) layout", async ({ page, context }) => {
+    // This cookie matches the proxy's shape regex but does not correspond to a
+    // real session row. The proxy lets it through (cheap edge check), but
+    // (app)/layout.tsx must call getSession() and redirect on null.
     await context.addCookies([
       {
         name: "sw_session",
@@ -69,7 +75,20 @@ test.describe("Auth proxy gating", () => {
       },
     ]);
     await page.goto("/");
-    // Reaches the actual page (no redirect to /login).
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(/\/login(\?|$)/);
+  });
+
+  test("forged cookie cannot reach /transactions either", async ({ page, context }) => {
+    await context.addCookies([
+      {
+        name: "sw_session",
+        value: "e2e_test_fake_session_cookie_42chars_aabbcc",
+        domain: "localhost",
+        path: "/",
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto("/transactions");
+    await expect(page).toHaveURL(/\/login(\?|$)/);
   });
 });

@@ -12,6 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,13 +45,14 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Push Prisma schema to test DB
+        run: npx prisma db push --skip-generate
+
       - name: Lint
         run: npm run lint
 
       - name: Build
         run: npm run build
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
       - name: Unit tests (Vitest)
         run: npm test
@@ -55,8 +74,6 @@ jobs:
 
       - name: E2E tests (Playwright)
         run: npm run test:e2e
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
       - name: Upload Playwright report on failure
         if: failure()
