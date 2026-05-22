@@ -11,15 +11,17 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-// Mock the storage module: avoid Vercel Blob / local-disk writes during tests.
-// Keep validateImageBuffer / processAvatarImage real so we still exercise the
-// actual image-validation path.
+// Mock storage module: avoid Vercel Blob / local-disk writes during tests AND
+// avoid sharp's native bindings (which can behave differently across runners —
+// see Linux CI). validateImageBuffer stays real so the magic-byte
+// rejection path is still exercised end-to-end.
 vi.mock("@/lib/auth/picture-storage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/auth/picture-storage")>(
     "@/lib/auth/picture-storage",
   );
   return {
     ...actual,
+    processAvatarImage: vi.fn(async (b: Buffer) => b),
     uploadAvatar: vi.fn(async () => "https://example.test/uploads/fake.webp"),
   };
 });
