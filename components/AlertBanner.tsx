@@ -26,7 +26,11 @@ export default function AlertBanner({ threshold, message, onDismiss }: Props) {
   const s = STYLES[threshold];
 
   return (
-    <div className={`flex items-start gap-3 rounded-lg border-l-4 ${s.border} ${s.bg} px-4 py-3`}>
+    <div
+      role="alert"
+      data-threshold={threshold}
+      className={`flex items-start gap-3 rounded-lg border-l-4 ${s.border} ${s.bg} px-4 py-3`}
+    >
       {/* Icon */}
       <span className={`shrink-0 font-bold text-sm mt-0.5 w-4 text-center ${s.iconColor}`}>
         {s.icon}

@@ -20,7 +20,7 @@ interface Props {
 export default function BudgetProgressBar({ percent, color, isHidden }: Props) {
   if (isHidden) {
     return (
-      <span className="text-xs text-gray-400 italic">Hidden from Budgets</span>
+      <span data-state="hidden" className="text-xs text-gray-400 italic">Hidden from Budgets</span>
     );
   }
 
@@ -28,8 +28,9 @@ export default function BudgetProgressBar({ percent, color, isHidden }: Props) {
   const fillWidth = Math.min(percent, 100);
 
   return (
-    <div className="w-full bg-gray-100 rounded-full h-2">
+    <div data-testid="budget-progress-bar" className="w-full bg-gray-100 rounded-full h-2">
       <div
+        data-state={color}
         className={`${BAR_COLOR_CLASSES[color]} h-2 rounded-full transition-all duration-300`}
         style={{ width: `${fillWidth}%` }}
       />
