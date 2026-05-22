@@ -1,4 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { loadEnvConfig } from "@next/env";
+
+// Load .env / .env.local the same way Next.js does, so test fixtures that
+// instantiate Prisma directly see DATABASE_URL without needing dotenv.
+loadEnvConfig(process.cwd());
 
 // Use a dedicated test port so local dev (typically :3000) is never disturbed.
 const PORT = 3100;

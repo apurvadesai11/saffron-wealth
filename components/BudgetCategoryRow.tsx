@@ -73,9 +73,15 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
     </>
   );
 
+  const dataAttrs = {
+    "data-category-type": categoryType,
+    "data-over-budget": isExpense && delta < 0 ? "true" : "false",
+    "data-hidden": isHidden ? "true" : "false",
+  };
+
   if (onEdit) {
     return (
-      <li>
+      <li {...dataAttrs}>
         <button
           onClick={onEdit}
           className="w-full text-left py-4 hover:bg-gray-50 transition-colors rounded-lg px-1 -mx-1"
@@ -86,5 +92,5 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
     );
   }
 
-  return <li className="py-4">{inner}</li>;
+  return <li {...dataAttrs} className="py-4">{inner}</li>;
 }
