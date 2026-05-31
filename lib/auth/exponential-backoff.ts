@@ -92,8 +92,11 @@ export async function clearFailedLoginsForUser(userId: string): Promise<void> {
 // the surrounding transaction. Cheap (per-key, in-memory in PG) and forecloses
 // on the concurrent-bypass race.
 export async function acquireLoginLock(
-  tx: Pick<typeof prisma, "$queryRaw">,
+  tx: Pick<typeof prisma, "$executeRaw">,
   emailNormalized: string,
 ): Promise<void> {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${emailNormalized}))`;
+  // Use $executeRaw (not $queryRaw) — pg_advisory_xact_lock returns void, and
+  // $queryRaw on Vercel Postgres throws P2010 trying to deserialize the void
+  // column.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${emailNormalized}))`;
 }
