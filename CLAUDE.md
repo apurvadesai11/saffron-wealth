@@ -44,7 +44,7 @@ FIRE-minded user would respect.
 
 The app is intended to grow into an integrated personal-wealth platform:
 
-- Net worth tracking
+- Net worth tracking (Phase 1 shipped; see below)
 - Transaction management
 - Budgets (shipped; see below)
 - Cashflow reports
@@ -59,6 +59,13 @@ The app is intended to grow into an integrated personal-wealth platform:
 
 The first feature delivered against the vision is the **Monthly Budget** module.
 PRD: `docs/saffron-wealth-monthly-budget-prd.md`.
+
+The second is **Net Worth Phase 1** — accounts + the current net worth number.
+Plan: `docs/saffron-wealth-net-worth-phase1-plan.md`. It is the **first real
+financial-data persistence** in the app (see the table below) and is deliberately
+scoped to exclude the net-worth-over-time graph and the Monarch CSV import,
+which are later phases (named in the plan so the data model doesn't need to
+change to support them).
 
 User-visible v1 capabilities:
 
@@ -78,6 +85,10 @@ User-visible v1 capabilities:
   navigator. Earned / Spent / Net summary cards pinned above tab content.
 - **Transactions** screen (separate route) with add/delete, filter by type,
   category, date range, amount range, and free-text search.
+- **Net Worth** screen (separate route, persisted) — Total Assets / Total
+  Liabilities / Net Worth summary; accounts grouped by bucket (Cash,
+  Investments, Retirement, Real Estate, Debt); add / edit (incl. changing
+  type) / delete an account. No graph yet (Phase 3).
 - **Profile** screen — name/email edit, password change, avatar upload, single
   & global sign-out.
 - **Authentication** — full email/password + Google OAuth sign-in, password
@@ -103,15 +114,19 @@ From the PRD:
 | Failed login attempts                  | ✅ Postgres | `FailedLogin`                                      |
 | Audit events                           | ✅ Postgres | `AuthEvent`                                        |
 | Profile pictures                       | ✅ Vercel Blob (prod) / `public/uploads/avatars` (dev) | `lib/auth/picture-storage.ts` |
+| **Accounts**                            | ✅ Postgres | `Account` model (soft-deleted via `archivedAt`) — `lib/accounts.ts` |
+| **Account balance history**             | ✅ Postgres | `AccountBalanceEvent` — append-only, one row per create + per balance change; not surfaced in UI yet (Phase 3 graph) |
 | **Categories**                         | ❌ Mock     | `lib/mock-data.ts` → seeded into React Context     |
 | **Transactions**                       | ❌ Mock     | same                                               |
 | **Budgets**                            | ❌ Mock     | same                                               |
 | **Alert dismissals**                   | ❌ In-memory | React state in `AppProvider`                       |
 
-The intended end state is full persistence for the financial-data side. **The
-financial-data persistence layer is the next major piece of work.** When
-working on budget/transaction/category code today, assume state resets on every
-page reload — `AppProvider` re-seeds from `MOCK_TRANSACTIONS` and
+Net Worth Phase 1 is the first real financial-data persistence in the app —
+see "Architecture: Accounts / Net Worth" below. Categories/Transactions/Budgets
+remain mock; migrating them (likely alongside the Monarch CSV import, Phase 2)
+is still the next major piece of work. When working on budget/transaction/
+category code today, assume state resets on every page reload —
+`AppProvider` re-seeds from `MOCK_TRANSACTIONS` and
 `MOCK_BUDGETS`.
 
 ---
@@ -152,6 +167,7 @@ app/
     layout.tsx             Calls getSession() — DB-backed gate; redirects to /login
     page.tsx               Monthly Review (SummaryCards + MonthlyReviewWidget)
     transactions/page.tsx  Transactions list + filters + add form
+    net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres)
     profile/page.tsx       Account / password / picture / sessions
   (auth)/                  Unauthed route group
     layout.tsx
@@ -167,6 +183,9 @@ app/
     profile/change-password/route.ts
     profile/picture/route.ts
     profile/__tests__/                Integration tests for /api/profile/*
+    accounts/route.ts                 GET (list) + POST (create) — real Postgres
+    accounts/[id]/route.ts            PATCH (update) + DELETE (soft-delete/archive)
+    accounts/__tests__/                Integration tests for /api/accounts/*
     cron/sweep-sessions/route.ts      Daily — expired sessions + reset tokens
     cron/sweep-audit-events/route.ts  Weekly — audit log retention
 components/
@@ -176,14 +195,19 @@ components/
   BudgetEditModal.tsx, CashflowCard.tsx
   AlertsButton.tsx, AlertBanner.tsx, AlertPanel.tsx
   TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx
+  NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
+  AccountRow.tsx, AccountEditModal.tsx
   *.test.tsx                          RTL unit tests colocated with each component
   __tests__/test-utils.tsx            renderWithApp + category fixtures
   auth/
     AuthCard.tsx, AuthFormError.tsx, AvatarFallback.tsx,
     GoogleSignInButton.tsx, PasswordStrengthHint.tsx, ProfilePictureUploader.tsx
 lib/
-  types.ts                 Domain types — Category, Transaction, Budget, etc.
+  types.ts                 Domain types — Category, Transaction, Budget, Account, etc.
   budget-utils.ts          Pure business logic — period bounds, spend calc, alerts, projections
+  account-utils.ts         Pure business logic — bucket/type taxonomy, net-worth math
+  account-validation.ts    Hand-rolled validators + body parsers for /api/accounts
+  accounts.ts              Prisma query layer for Account/AccountBalanceEvent (server-only)
   app-context.tsx          React Context provider seeded from mock-data
   mock-data.ts             Seed categories, transactions, budgets
   use-alert-state.ts       Derives currently-active alerts (used by sidebar bell + widget)
@@ -191,13 +215,14 @@ lib/
   prisma.ts                PrismaClient singleton (avoids dev hot-reload leaks)
   auth/                    See "Auth subsystem" below
 prisma/
-  schema.prisma
+  schema.prisma            Auth models + Account/AccountBalanceEvent (db-push managed, no migration file)
   migrations/20260430043115_init_auth/migration.sql
 proxy.ts                   Next.js middleware (re-exported from middleware.ts)
 proxy.test.ts              Unit tests for proxy
 middleware.ts              `export { proxy as default, config } from "./proxy"`
-e2e/                       Playwright tests + worker-scoped auth fixture
+e2e/                       Playwright tests + worker-scoped auth fixture (incl. sw_csrf cookie)
 docs/saffron-wealth-monthly-budget-prd.md   Monthly Budget PRD + Implementation Log
+docs/saffron-wealth-net-worth-phase1-plan.md   Net Worth Phase 1 plan (Accounts + page)
 scripts/fetch-blocklist.mjs   Refreshes lib/auth/blocklist-data.ts
 .githooks/pre-push         Runs lint + typecheck + unit tests before every push
 .github/workflows/ci.yml   GitHub Actions: lint, build, unit, e2e (Playwright)
@@ -290,6 +315,62 @@ Only `monthly` is exposed in the UI today, but **all helpers in
 
 `getHistoricalAverage` only implements `monthly` today — extending it is one
 of the obvious "easy second slice" opportunities.
+
+### Architecture: Accounts / Net Worth (`lib/accounts.ts`, `lib/account-utils.ts`)
+
+Net worth is **only ever computed from accounts** — `computeNetWorth` in
+`lib/account-utils.ts` never touches `transactions`. This keeps Net Worth
+decoupled from the mock budget/transaction system; it's the one place in the
+app with real per-user Postgres persistence for financial data.
+
+**Two-level taxonomy.** Every `Account.type` (a fixed string enum enforced in
+the app layer, not a DB enum — mirrors `CategoryType`/`BudgetPeriod`) belongs to
+exactly one `AccountBucket`: `cash`, `investments`, `retirement`,
+`real_estate`, `debt`. Only the `debt` bucket is a liability
+(`isLiability(bucket)`); everything else is an asset. `computeNetWorth` sums
+assets, sums liabilities, and subtracts — liabilities are stored as a positive
+"amount owed" (a $5k card balance is `5000`, not `-5000`).
+
+**Soft-delete, not hard-delete.** "Deleting" an account (`archiveAccount` in
+`lib/accounts.ts`, called by `DELETE /api/accounts/[id]`) sets `archivedAt`
+rather than removing the row. `listAccounts` filters `archivedAt: null`.
+Balance history is preserved so a future net-worth-over-time graph can still
+reflect an account that's since been archived. This convention was recovered
+from an earlier, uncommitted persistence experiment found live in the dev
+database (which used `archivedAt` on `Account`/`Category`) — adopted
+deliberately to stay consistent with that prior design.
+
+**Balance history is append-only and silent.** `AccountBalanceEvent` gets one
+row when an account is created (opening balance) and one more **only when a
+`PATCH` actually changes `balance`** — editing name/type/institution alone
+does not append a row. Nothing in the UI reads this table yet; it exists
+purely so Phase 3 (the net-worth-over-time graph) has real history to chart
+instead of starting from zero. `AccountBalanceEvent.userId` is denormalized
+(not just derived via `accountId`) to support per-user history queries without
+a join, and to keep a future pivot to `SetNull`-on-delete (if the graph needs
+to show since-deleted accounts) a config change rather than a migration.
+
+**Money: `Decimal(14,2)` in Postgres, `number` on the wire.** `lib/accounts.ts`
+converts every `Decimal` to a JS `number` via `.toNumber()` before it leaves
+the query layer (`Prisma.Decimal` otherwise serializes to a JSON *string*,
+which would silently break `.toFixed()` call sites). This keeps `Account`
+consistent with the rest of the app's dollars-as-`number` money model, while
+storing balances exactly (no float rounding) with far more headroom than the
+`amountCents` `Int` convention from the same earlier experiment would have
+allowed for large values like real estate or retirement balances.
+
+**No `AppProvider` involvement.** Unlike budgets/transactions/categories,
+accounts are **not** seeded into or read from the mock `AppProvider` context.
+`app/(app)/net-worth/page.tsx` is a Server Component that calls `listAccounts`
+directly and hands the result to the client component `NetWorthClient`, which
+owns local state and mutates via `/api/accounts` — the same self-contained
+persisted-page pattern as `app/(app)/profile/page.tsx`.
+
+**Schema changes are applied via `db push`, not migrations.** The dev database
+has no `_prisma_migrations` tracking (CI also runs `prisma db push`), so the
+`Account`/`AccountBalanceEvent` models were added by editing
+`prisma/schema.prisma` and running `db:push` directly — there is no
+corresponding file under `prisma/migrations/`.
 
 ### Auth subsystem (`lib/auth/`)
 
@@ -463,6 +544,21 @@ Testing gotchas (learned the hard way — repeat at your peril):
 - **`prepare` script in `package.json`** installs the git hooks pointer
   automatically on `npm install`. New contributors get pre-push checks
   without any extra step.
+- **The dev database has no `_prisma_migrations` table.** Schema changes are
+  applied with `prisma db push`, not `prisma migrate dev` — the one existing
+  migration file under `prisma/migrations/` was never actually tracked as
+  applied. Follow the same convention for new schema changes (see
+  `package.json`'s `db:push` script); don't run `migrate dev`, which would try
+  to initialize migration tracking against a database that doesn't have it.
+- **Before adding a Prisma model, check the live dev DB for tables that aren't
+  in `schema.prisma`.** During the Net Worth Phase 1 build, the dev DB turned
+  out to contain an uncommitted, abandoned financial-persistence experiment
+  (`Account`/`Category`/`Budget`/`Transaction` tables using `amountCents` +
+  `archivedAt` conventions) that predated any code referencing it. It was
+  cleaned up (dropped, except the `archivedAt` soft-delete convention, which
+  was intentionally adopted for the new `Account` model). If you hit an
+  unexpected table again, treat it the same way: inspect before touching, and
+  ask before dropping anything with real user data.
 
 ### Environment variables
 
@@ -505,11 +601,16 @@ A few likely places that need a touch:
   component reads `useApp()`; plain `render` from RTL otherwise. If color
   or styling encodes meaningful state, add a `data-state` (or similarly
   semantic `data-*`) attribute and assert on it.
-- **Persisting budgets/transactions/categories for real?** Add Prisma models
-  (probably `Account`, `Category`, `Transaction`, `Budget` scoped to `userId`),
-  update `AppProvider` to hydrate from the server, convert mutations to
-  Server Actions or API routes. The shape of `Transaction`, `Budget`,
-  `Category` in `lib/types.ts` is what to mirror in the schema.
+- **Persisting budgets/transactions/categories for real?** `Account` now shows
+  the pattern to follow: Prisma model scoped to `userId` (+ `archivedAt` for
+  soft-delete), a server-only query module (`lib/accounts.ts`), hand-rolled
+  validation (`lib/account-validation.ts`), and REST-ish API routes under
+  `app/api/`. Add `Category`, `Transaction`, `Budget` the same way, then update
+  `AppProvider` to hydrate from the server and convert mutations to API routes
+  (or Server Actions). The shape of `Transaction`, `Budget`, `Category` in
+  `lib/types.ts` is what to mirror in the schema. This is Phase 2 of the Net
+  Worth work (Monarch CSV import) — see
+  `docs/saffron-wealth-net-worth-phase1-plan.md`.
 
 ### Quick reference
 

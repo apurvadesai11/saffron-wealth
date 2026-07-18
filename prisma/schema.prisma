@@ -23,11 +23,13 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  sessions       Session[]
-  oauthAccounts  OAuthAccount[]
-  resetTokens    PasswordResetToken[]
-  failedLogins   FailedLogin[]
-  authEvents     AuthEvent[]
+  sessions             Session[]
+  oauthAccounts        OAuthAccount[]
+  resetTokens          PasswordResetToken[]
+  failedLogins         FailedLogin[]
+  authEvents           AuthEvent[]
+  accounts             Account[]
+  accountBalanceEvents AccountBalanceEvent[]
 
   @@index([emailNormalized])
 }
@@ -103,4 +105,49 @@ model AuthEvent {
 
   @@index([userId, createdAt])
   @@index([type, createdAt])
+}
+
+// A financial account contributing to net worth. `type` is one of the
+// AccountType union (enforced in the app layer, not a DB enum — mirrors how
+// CategoryType/BudgetPeriod are TS unions, so new types need no migration).
+// `balance` is always positive; liabilities represent the amount owed and are
+// subtracted during net-worth aggregation (see lib/account-utils.ts).
+// Soft-deleted via `archivedAt` (matches the app's established convention):
+// an archived account is hidden from net worth but its balance history is kept
+// so a future net-worth-over-time graph can still reflect it.
+model Account {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  type        String
+  institution String?
+  balance     Decimal   @db.Decimal(14, 2)
+  balanceAsOf DateTime  @default(now())
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceHistory AccountBalanceEvent[]
+
+  @@index([userId])
+}
+
+// Append-only log of every balance value an account has held. Written on create
+// (opening balance) and whenever the balance actually changes. No graph consumes
+// this yet — it exists so a future net-worth-over-time chart has real history.
+// `userId` is denormalized to support per-user history queries and a possible
+// future pivot to soft-delete without a data migration.
+model AccountBalanceEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  accountId  String
+  balance    Decimal  @db.Decimal(14, 2)
+  recordedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId, recordedAt])
 }

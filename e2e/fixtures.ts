@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { test as base, type BrowserContext } from "@playwright/test";
 import { prisma } from "../lib/prisma";
 import { createSession, revokeAllSessionsForUser } from "../lib/auth/sessions";
+import { CSRF_COOKIE_NAME } from "../lib/auth/csrf-shared";
 
 // A real authenticated user, created once per Playwright worker. The raw
 // session token is returned (the Session row stores only its SHA-256 hash) so
@@ -51,6 +53,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   // Per-test browser context with the real session cookie pre-set. Most smoke
   // tests should use `page` from this fixture (it inherits this context).
   context: async ({ context, authedUser }, use) => {
+    // Real logins get the sw_csrf double-submit cookie from proxy.ts on the
+    // way through auth pages; this fixture skips that flow, so any test that
+    // performs a real mutation (POST/PATCH/DELETE) needs the cookie seeded
+    // here. Must be readable by client JS (httpOnly: false) — the client
+    // reads it via readCsrfCookie() and echoes it back as the x-csrf-token
+    // header for the double-submit check in validateCsrfFromRequest.
+    const csrfToken = randomBytes(32).toString("base64url");
     await context.addCookies([
       {
         name: "sw_session",
@@ -59,6 +68,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         path: "/",
         sameSite: "Lax",
         httpOnly: true,
+      },
+      {
+        name: CSRF_COOKIE_NAME,
+        value: csrfToken,
+        domain: "localhost",
+        path: "/",
+        sameSite: "Strict",
+        httpOnly: false,
       },
     ]);
     await use(context);

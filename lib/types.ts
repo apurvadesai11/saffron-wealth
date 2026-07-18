@@ -86,3 +86,57 @@ export interface BudgetProgress {
   // true when budgetAmount === 0; UI shows "Hidden from Budgets" label instead of bar
   isHidden: boolean;
 }
+
+// ── Net Worth / Accounts ──────────────────────────────────────────────────
+// Two-level account taxonomy. The top-level bucket determines whether an
+// account adds to (asset) or subtracts from (liability) net worth — only the
+// `debt` bucket is a liability. The concrete type→bucket mapping and the
+// net-worth math live in lib/account-utils.ts.
+export type AccountBucket = 'cash' | 'investments' | 'retirement' | 'real_estate' | 'debt';
+
+export type AccountType =
+  | 'cash'
+  | 'brokerage' | 'rsu' | 'espp' | 'hsa'
+  | 'traditional_ira' | 'roth_ira' | '401k' | 'roth_401k'
+  | 'property'
+  | 'credit_card' | 'loan_mortgage';
+
+// Client-facing (serialized) account shape. The DB stores `balance` as a
+// Decimal; the query layer converts it to a JS number and timestamps to ISO
+// strings so the wire shape matches the rest of the app's money model.
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  institution: string | null;
+  balance: number;      // dollars; positive — liabilities are the amount owed
+  balanceAsOf: string;  // ISO — updated only when the balance changes
+  createdAt: string;    // ISO
+  updatedAt: string;    // ISO
+}
+
+export interface NetWorthSummary {
+  totalAssets: number;
+  totalLiabilities: number;
+  netWorth: number;
+}
+
+// Accounts grouped under their bucket for display on the Net Worth page.
+export interface AccountBucketGroup {
+  bucket: AccountBucket;
+  label: string;
+  accounts: Account[];
+  bucketTotal: number;
+}
+
+// Write shapes shared by the validation module, the query layer, and the client.
+// Kept here (pure types) so neither has to import the server-only query module.
+export interface AccountInput {
+  name: string;
+  type: AccountType;
+  institution: string | null;
+  balance: number;
+}
+
+// PATCH allows any subset of the create fields (but never an empty patch).
+export type AccountPatch = Partial<AccountInput>;
