@@ -259,7 +259,7 @@ Add `papaparse` and `@types/papaparse` as real dependencies (`npm install`).
 
 Export:
 
-- `parseCsv<T>(text: string): { rows: Record<string,string>[]; header: string[] }` — wraps
+- `parseCsv(text: string): { rows: Record<string,string>[]; header: string[] }` — wraps
   `Papa.parse` with `{ header: true, skipEmptyLines: true }`. Trims the BOM if present
   (the real files are UTF-8; be defensive about `utf-8-sig`).
 - `validateHeader(header: string[], required: string[]): void` — throws a `CsvHeaderError`

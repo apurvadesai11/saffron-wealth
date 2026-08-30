@@ -43,3 +43,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Real financial exports — NEVER commit these. Personal data must not enter
+# source control; this repo is public. Small synthetic test fixtures under
+# **/__tests__/fixtures/ are the only CSVs allowed, and are whitelisted below.
+*.csv
+Monarch_*
+/data/
+!**/__tests__/fixtures/*.csv
