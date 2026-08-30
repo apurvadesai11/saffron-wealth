@@ -1,252 +1,556 @@
-# Saffron Wealth — Net Worth Tracker, Phases 2b & 3 Plan
+# Saffron Wealth — Net Worth Tracker, Phases 2b & 3 Plan (v2)
 
-**Status:** Planned, not yet built. **Phase 2a is shipped** (branch `feat/net-worth-accounts`,
-uncommitted at time of writing) — see `docs/saffron-wealth-net-worth-phase1-plan.md` for Phase 1
-and the "Phase 2a" section below for what Phase 2a actually delivered. This document covers the
-two remaining phases and is decision-complete (no open questions) — ready to build.
+**Status:** Ready to build. Phases 1 and 2a are shipped and committed on branch
+`feat/net-worth-accounts` (`ffd7eb9`, `ff67a38`).
+
+**v2 supersedes v1.** v1's file-schema section was written from a June 2026 export that is no
+longer on disk, and both of its schema assumptions turned out to be wrong. v2's "Validated file
+facts" section below was measured against the user's **actual** current exports with a real CSV
+parser. Where v1 and v2 disagree, v2 is correct. The material corrections:
+
+| v1 assumed | Reality |
+|---|---|
+| Transaction export has 9 columns | **11** — adds `Reviewed` and `Id` |
+| Dedup via `sha256(date\|amount\|account\|merchant\|statement)` | **`Id` is a stable unique Monarch PK** — use it |
+| Balance history is **per-account**, 2 cols (`Date, Balance`), uploaded per account | **One global file**, 3 cols (`Date, Balance, Account`) |
+| Balance history covers ~16 accounts | **35** — 19 of which never appear in transactions |
+| Balance history is sparse | **Daily** — 34,248 rows |
+| Series carry-forward = "most recent event ≤ D" | **Bug.** Carries closed accounts forever; see Ruling 3 |
 
 ---
 
 ## Context
 
-The full Net Worth vision: upload Monarch history → derive accounts/categories/transactions →
-chart net worth over time. Phases 1 and 2a are done. What's left:
+The full Net Worth vision: import Monarch history → derive accounts/categories/transactions →
+chart net worth over time. Phases 1 and 2a are done. What remains:
 
-- **Phase 2b — Monarch CSV transaction import.** A CSV upload on the Transactions page that
-  parses a real Monarch export, upserts accounts + categories by name, and imports transactions
-  into the Phase 2a tables.
-- **Phase 3 — Net-worth-over-time graph.** A per-account Monarch **balance-history** import to
-  backfill `AccountBalanceEvent`, plus a hand-rolled SVG line chart on the Net Worth page with
+- **Phase 2b — Monarch transaction import.** CSV upload on the Transactions page that parses the
+  real export, upserts accounts + categories by name, and imports transactions into the Phase 2a
+  tables.
+- **Phase 3 — Net-worth-over-time graph.** A global balance-history import that backfills
+  `AccountBalanceEvent`, plus a hand-rolled SVG line chart on the Net Worth page with
   3M/6M/YTD/1Y/3Y/5Y/10Y/MAX range filters.
 
-Phases are independent (the graph doesn't need the transaction import) but are still built and
-reviewed one at a time.
-
-### Recap: Phase 2a (shipped)
-
-Categories, Transactions, and Budgets are real Postgres now (`Category`, `Transaction`, `Budget`
-models — soft-delete via `archivedAt` where applicable, `Decimal(14,2)` money). `AppProvider`
-hydrates from the DB via `app/(app)/layout.tsx`; mutations (`addTransaction`, `deleteTransaction`,
-`saveBudgets`) are async and hit real API routes. `CategoryType` is `'expense' | 'income' |
-'transfer'` — `'transfer'` is excluded from every sum in `lib/budget-utils.ts` automatically via
-strict equality checks, no special-casing needed elsewhere. `Transaction.id` is a string cuid.
-`Transaction` already has `accountId`, `merchant`, `notes`, and `externalHash` columns
-(`@@unique([userId, externalHash])`) — unused by Phase 2a's manual-entry path (all `null`), but
-in place so Phase 2b needs no further migration.
-
-### Monarch export schema — validated against the user's real file
-
-Verified empirically against `…/Finance/Transactions_June_2026.csv` (7,314 rows), not just docs:
-
-- **Transaction export = 9 columns:** `Date, Merchant, Category, Account, Original Statement,
-  Notes, Amount, Tags, Owner`. `Owner` is undocumented by Monarch; in this file it was
-  single-valued and `Tags` was empty — both ignorable for a single-user app, but the parser
-  should tolerate the legacy 8-column export (no `Owner`) too.
-- **Date = `YYYY-MM-DD`** (matches `Transaction.date`). Parse defensively anyway — format could
-  drift or differ for other users/exports.
-- **Amount = single signed decimal**, expense negative / income positive, no parentheses observed.
-  → `type = amount < 0 ? 'expense' : 'income'`, store `abs(amount)`.
-- **`Account` and `Category` are plain name strings** — no type, no institution column. Import
-  upserts both by name.
-- **Categories observed in the real file (52 total)** include `Transfer` (590 rows, both signs —
-  confirms paired-row transfers), `Credit Card Payment`, `Balance Adjustments`, `Uncategorized`,
-  plus normal spending categories (Groceries, Restaurants, Mortgage, ...).
-- **Quoted fields contain commas** — confirmed. A naive `split(',')` breaks; a real CSV parser
-  (RFC 4180 aware) is required.
-- **16 distinct accounts** in the real file.
-- **Balance-history export (Phase 3)** is a *separate* Monarch feature: per-account, `Date,
-  Balance` (`YYYY-MM-DD`), **liabilities negative**, duplicate dates rejected by Monarch itself,
-  no account column (one file per account, uploaded per-account on the Net Worth page).
-
-**Implementation step 0 for both phases:** re-validate the header against whatever file is
-actually uploaded and fail loudly on mismatch — don't assume the schema never drifts.
+The two imports are independent code paths, but **Phase 3's import should be run first** by the
+user in practice: it is the only source for the 19 investment/retirement accounts, and it supplies
+the balance sign that makes account-type guessing reliable (Ruling 4). Neither import may *depend*
+on the other having run — each must work standalone against an empty database.
 
 ---
 
-## Decisions (confirmed with the user this session — no longer open)
+## Validated file facts
 
-1. **Transfer-type categories:** `Transfer`, `Balance Adjustments`, **and `Credit Card
-   Payment`** are all excluded from income/expense (imported with `type: 'transfer'`).
-   All three represent money moving between the user's own accounts or a data correction,
-   not real income or spending — counting a card payment as an expense would double-count
-   it alongside the original purchase transactions that ran up the balance. Category-type
-   inference (dominant transaction sign) is skipped for all three; they're routed to
-   `type: 'transfer'` directly by name match.
-2. **Auto-created account type:** best-guess from the account name via keyword matching (see
-   Phase 2b transform section), falling back to `cash` when nothing matches. The user still
-   reviews/corrects on the Net Worth page — this only reduces how much of the 16-account
-   cleanup is needed.
-3. **CSV parser: `papaparse`.** This is a deliberate, acknowledged exception to the app's
-   no-dependency house style (no Zod, hand-rolled auth, hand-rolled chart) — CSV correctness
-   (quoted fields, embedded newlines/commas, escaped quotes) is a well-known "don't reinvent
-   this" problem for financial data import specifically, unlike, say, a line chart. Add
-   `papaparse` + `@types/papaparse` as real dependencies when building Phase 2b.
-4. **Import UX: preview, then confirm.** Given the file is ~7,300 rows, upload → parse →
-   show a summary (new transactions, new accounts, new categories, duplicates skipped, date
-   range) → user confirms → commit. Not one-shot.
+Measured against the user's real exports on 2026-08-30 with Python's `csv` module (not `split(',')`).
+Files live outside the repo, in Google Drive:
 
-### Still a judgment call (not asked directly — flagged here, default stated)
+```
+<a local folder outside this repo — path deliberately not recorded>
+    Monarch_Transactions_<month>.csv
+    Monarch_Balances_<month>.csv
+```
 
-- **Negative balances in the Phase 3 balance-history import:** Monarch's export could show a
-  historical dip (e.g. a brief overdraft or margin balance). Default: **allow negative values
-  in imported `AccountBalanceEvent` rows** (clamping would misrepresent the actual historical
-  net worth on the graph), but keep Phase 1's existing rule that an account's *current*
-  `balance` field can't go negative — if the most recent imported point is negative, clamp
-  the account's live balance to 0 and surface a note rather than silently mismatching the
-  last chart point against the summary card. Revisit if this actually comes up in the user's
-  data (rare in practice).
+**Never copy these into the repo.** `*.csv` is not gitignored. Test fixtures are small synthetic
+files and belong in the repo; real exports do not.
 
----
+### `Monarch_Transactions_<month>.csv`
 
-## Phase 2b — Monarch CSV transaction import
+- **7,576 data rows**, dates **2019-11-18 → 2026-08-30**.
+- **11 columns:** `Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags,
+  Owner, Reviewed, Id`
+- `Id` — **non-empty on all 7,576 rows, all 7,576 distinct.** A stable Monarch primary key.
+- `Reviewed` — values `''` or `'Reviewed'`. Ignore.
+- `Owner` — always `'Shared'`. Ignore.
+- `Tags` — empty on every row. Ignore.
+- `Date` — `YYYY-MM-DD` on every row.
+- `Amount` — plain signed decimal on every row; no `$`, no thousands commas, no parentheses.
+  6,259 negative (expense), 1,317 positive (income). Keep the defensive strip anyway — it is
+  three lines and other exports may differ.
+- **16 distinct accounts**, all of which also appear in the balance file.
+- **53 distinct categories.** All three transfer-like categories are present and confirm v1's
+  Decision 1: `Transfer` (603 rows), `Credit Card Payment` (419), `Balance Adjustments` (9).
+- **Quoted fields containing commas confirmed** — e.g. `Mortgage, Lakeside Home` and
+  `1200 MAPLE STREET (Orig. $500,000.00) (...1111)`. A real CSV parser is mandatory.
 
-**Goal:** "Import from Monarch" on the Transactions page that ingests a transaction export into
-the Phase 2a tables, sourcing accounts + categories from the file.
+### `Monarch_Balances_<month>.csv`
 
-### Pipeline
-
-1. **Upload** — button on `app/(app)/transactions/page.tsx` → multipart POST to
-   `app/api/transactions/import/route.ts` (mirror `app/api/profile/picture/route.ts`:
-   `runtime = "nodejs"`, size cap, CSRF, `req.formData()`).
-2. **Parse** — `lib/csv.ts` wraps `papaparse` (header row → objects, `skipEmptyLines: true`).
-3. **Validate header** — expect the 9 known columns; tolerate the legacy 8 (no `Owner`);
-   require at minimum Date/Account/Amount/Category. Fail loudly with a clear message (and
-   the actual header found) on mismatch.
-4. **Transform each row:**
-   - `date`: parse `YYYY-MM-DD` defensively (reuse the UTC-safe helpers from `lib/transactions.ts`,
-     or extract them to a shared spot if needed).
-   - `amount`: signed → `type = amount < 0 ? 'expense' : 'income'`, store `abs`. Defensively
-     strip `$`/`,`/parentheses in case a different export variant uses them.
-   - **Transfer routing:** if `Category` (case-insensitive) is `Transfer`, `Balance
-     Adjustments`, or `Credit Card Payment` → `type = 'transfer'` regardless of sign,
-     excluded from income/expense math. This set is a named constant (e.g.
-     `TRANSFER_LIKE_CATEGORIES`) so adding another one later is a one-line change, not a
-     code change.
-   - **Upsert Category** by `(userId, name)`. For non-transfer categories, infer `type` from
-     the category's dominant transaction sign across the import batch (tie/unknown →
-     `expense`); auto-assign `color` round-robin from a fixed palette. `Transfer`/`Balance
-     Adjustments`/`Credit Card Payment` categories get `type: 'transfer'` directly (skip
-     sign inference).
-   - **Upsert Account** by `(userId, name)`. New accounts: guess `type` from the name via
-     keyword matching (case-insensitive substring), e.g. `"roth 401k"` → `roth_401k` (check
-     before plain `"401k"`), `"401k"`/`"401(k)"` → `401k`, `"roth ira"` → `roth_ira`,
-     `"ira"` → `traditional_ira`, `"hsa"` → `hsa`, `"espp"` → `espp`, `"rsu"` → `rsu`,
-     `"mortgage"` → `loan_mortgage`, `"loan"` → `loan_mortgage`, `"credit card"`/card-network
-     names → `credit_card`, `"brokerage"`/`"invest"` → `brokerage`, `"property"`/`"home"`/
-     `"house"`/`"real estate"` → `property`, else → `cash`. Balance starts at 0 (the import is
-     transaction history, not a balance snapshot — the user sets the real current balance on
-     the Net Worth page; Phase 3's *separate* balance-history import is what actually backfills
-     balances). Existing accounts matched by name are left alone (type/balance untouched).
-   - **Dedup:** `externalHash = sha256(date|abs(amount)|account|merchant|originalStatement)`.
-     `createMany({ skipDuplicates: true })` against the existing
-     `@@unique([userId, externalHash])` constraint, so re-importing an overlapping date range
-     is safe and idempotent.
-   - Ignore `Owner`, `Tags`; keep `merchant` (from `Merchant`), `notes` (from `Notes`).
-5. **Preview → confirm:** parsing (steps 2–4, minus the actual DB writes) returns a summary —
-   new transaction count, new accounts (with guessed types) needing review, new categories,
-   duplicates that will be skipped, date range covered. User confirms; the commit runs
-   steps 4's writes in a batched `$transaction` (categories/accounts upserted first, then
-   transactions).
-
-### Tests
-
-- `lib/csv.test.ts` — quoted fields, embedded commas, the 9-col + legacy-8-col headers,
-  malformed header rejection.
-- Transform unit tests — sign→type, `abs`, `Transfer`/`Balance Adjustments`/`Credit Card
-  Payment` routing to `'transfer'`, dedup-hash stability, category-type inference,
-  account-type keyword guessing (one case per keyword pattern).
-- API integration — import a small fixture CSV → correct rows/accounts/categories with expected
-  types; re-import the same file → all rows skipped as duplicates, counts reflect that.
-- E2E — upload a tiny fixture, see the preview summary, confirm, see the imported rows.
-- **Real-data verification step** (not an automated test): actually import the user's
-  `Transactions_June_2026.csv` in dev and manually verify account list, category list,
-  transaction count, that a second import of the same file changes nothing, and that
-  `Transfer`/`Balance Adjustments`/`Credit Card Payment` don't move the Monthly Review
-  income/expense totals.
+- **34,248 data rows**, dates **2020-07-01 → 2026-08-30**.
+- **3 columns:** `Date, Balance, Account` — one global file, *not* one file per account.
+- **35 distinct accounts.** 16 overlap the transaction file **with byte-identical names** (zero
+  mismatches), so name-keyed upsert is safe. The other **19 appear only here** and are the
+  net-worth-dominant ones: `ACME, INC. 401(K) PLAN`, `GLOBEX, INC. 401(K) PLAN (...2222)`,
+  `Traditional IRA (...3333)`, `Brokerage (...4444)`, `ACME STOCK PURCHASE (...5555)`,
+  `INDIVIDUAL - Globex RSU (...6666)`, `ACME RESTRICTED UNIT (...*****7777)`, two HSAs,
+  four historical brokerage/stock-plan accounts, and assorted closed accounts.
+- **Daily granularity** — for the longest-running account, 2,251 of 2,252 inter-row gaps are
+  exactly 1 day.
+- **Liabilities are negative** — the mortgage sits at `-500,000.00`. Confirms v1's `abs()` rule
+  for debt-bucket accounts.
+- **Zero duplicate `(Account, Date)` pairs** in the real file. Dedup on that key still required
+  for safe re-import.
+- **23 accounts run to the final date; 12 stop early**, and 6 of those stop at a **non-zero**
+  balance — including `Mortgage, Lakeside Home` at `-450,000.00` (2023-10-31) and
+  `Stock Plan (ACM) -2525` at `+131,000.00` (2023-09-04). This is what breaks v1's carry-forward
+  rule. See Ruling 3.
+- Two rows are **not accounts at all**: `Individual innetwork medical deductible` and
+  `Individual innetwork medical outofpocket` are Monarch insurance-progress trackers. See Ruling 5.
 
 ---
 
-## Phase 3 — Net-worth-over-time graph
+## Decisions
 
-**Goal:** the chart originally envisioned for the Net Worth page, fed by real history.
+### Carried forward from v1 (unchanged, and confirmed by the real data)
 
-### Balance-history import (the data source)
+1. **Transfer-like categories.** `Transfer`, `Balance Adjustments`, and `Credit Card Payment` all
+   import as `type: 'transfer'`, excluded from income/expense math. Counting a card payment as an
+   expense would double-count it against the purchases that ran up the balance. Category-type
+   sign-inference is skipped for these three — they are routed by name match. Held in a named
+   constant `TRANSFER_LIKE_CATEGORIES` so adding a fourth is a data change, not a code change.
+2. **`papaparse` for CSV.** A deliberate, acknowledged exception to the app's no-dependency house
+   style. CSV correctness (quoted fields, embedded commas/newlines, escaped quotes) is a
+   well-known "don't reinvent this" problem, and the real file exercises exactly those cases.
+   This exception does **not** extend to charting — see Global Constraint 6.
+3. **Import UX: preview, then confirm.** 7,576 rows is too many to commit blind. Upload → parse →
+   summary (new transactions, new accounts with guessed types, new categories, duplicates to be
+   skipped, date range) → user confirms → commit.
 
-- Per-account upload on the Net Worth page (Monarch "Download balance history": `Date,
-  Balance`, one file per account, uploaded from that account's row/edit view) →
-  `app/api/accounts/[id]/balance-history/route.ts`.
-- Reuse `lib/csv.ts` (papaparse). Transform: Monarch liability balances are **negative**; this
-  app's debt-bucket accounts store **positive amount-owed** → for debt accounts store
-  `abs(balance)`; asset accounts store as-is (see the negative-balance judgment call above).
-  Create `AccountBalanceEvent` rows; **dedup by `(accountId, date)`** (Monarch itself rejects
-  duplicate dates on its side, but re-imports of an overlapping range should still be safe
-  here). Set the account's current `balance`/`balanceAsOf` to the latest imported row (clamped
-  to 0 if negative, per the judgment call).
+### New rulings from schema validation (2026-08-30)
 
-### Net-worth series computation (`lib/net-worth-history.ts`, pure + unit-tested)
+4. **Ruling 1 — dedup on Monarch's `Id`, not a content hash.** Store `externalHash = "mid:<Id>"`
+   when the `Id` column is present and non-empty; fall back to
+   `"sha:" + sha256(date|abs(amount)|account|merchant|originalStatement)` when it is absent. The
+   prefix keeps the two key-spaces from ever colliding and self-documents which was used.
+   *Why:* `Id` is stable across exports; the composite hash keys on `merchant`, which Monarch users
+   routinely rename — a rename would silently re-import the row as new.
+   *Cost if wrong:* if a future export reuses `Id`s across accounts, duplicates get skipped
+   incorrectly. Mitigated by `@@unique([userId, externalHash])` being per-user already.
 
-- Input: all `AccountBalanceEvent`s for the user + each account's bucket (for sign).
-- For each account, balance at date `D` = most recent event `≤ D` (carry-forward); `0` before
-  its first event. At each sample date, sum signed balances (assets +, debt −) → one net-worth
-  point.
-- Return the full series (MAX); the client slices by range with `useMemo`.
-- Heavily unit-tested: carry-forward correctness, accounts appearing partway through the
-  series, debt sign, empty history, single-point history.
+5. **Ruling 2 — validate the header by required-columns-present, ignore extras.** Require
+   `Date`, `Amount`, `Account`, `Category`; treat `Merchant`, `Original Statement`, `Notes`, `Id`
+   as optional-but-used; ignore any other column. Fail loudly (echoing the actual header found)
+   only when a *required* column is missing.
+   *Why:* v1's "expect exactly 9, tolerate 8" would have rejected the user's real 11-column file.
+   Monarch has added columns twice; it will again.
+   *Cost if wrong:* a genuinely malformed file with the right four headers gets further into the
+   pipeline before failing. Row-level validation still catches it.
 
-### Chart (`components/NetWorthChart.tsx`, hand-rolled SVG — no dependency)
+6. **Ruling 3 — an account contributes to the net-worth series only within
+   `[firstEventDate, lastEventDate]`, and closed accounts import as archived.** Outside that
+   window an account contributes **0**. Any account whose last balance event predates the file's
+   max date is created with `archivedAt` set.
+   *Why:* v1's unbounded carry-forward would put a phantom $450k mortgage and ~$150k of stale
+   stock-plan balances into today's net worth, making the chart's "today" contradict the summary
+   card — which v1's own verification step requires to match. Every *active* account exports
+   daily, so "last event older than the file max" is a highly reliable closure signal. Phase 1's
+   `archivedAt` soft-delete already excludes these from `listAccounts` while preserving their
+   history for the graph — which is precisely why it was built that way.
+   *Cost if wrong:* an account that is genuinely open but stopped syncing in Monarch drops out of
+   net worth and lands archived. Visible and one click to fix in the UI, and re-importing a fresh
+   export corrects it automatically.
 
-A single line + range toggles + hover tooltip, hand-rolled (no charting library) — the
-research behind this (recorded from the original brainstorm): Recharts would add ~130KB
-gzipped and React-19 peer-dependency friction to draw one line; this app already hand-rolls
-its other data viz (budget bars, spending-by-category bars) and has a strong house-style bias
-against new dependencies for anything with a clean, testable, self-contained implementation.
-(Note this is the *opposite* conclusion from the CSV-parser decision above — charting is
-subjective/interactive and cheap to hand-roll well; CSV correctness is objective/well-specified
-and risky to get subtly wrong with real financial data. Both calls were made on their own
-merits, not from a blanket dependency policy.)
+7. **Ruling 4 — guess asset-vs-liability from the balance sign, then refine the type by keyword.**
+   Sign first, keywords second (full ordered table in Task 5).
+   *Why:* the mortgage is named `1200 MAPLE STREET (Orig. $500,000.00) (...1111)` — no
+   debt keyword anywhere in it — while the *property* it secures is named `1200 maple`. Names
+   alone cannot separate them; the sign can, trivially and always.
+   *Cost if wrong:* a credit card at a $0 or credited balance on its first event could be read as
+   an asset. Bounded: the user reviews guessed types in the preview step before committing.
 
-- Scales map `{date, value}` → SVG coordinates; one `<path>` line; `ResizeObserver` for
-  responsive width.
-- Range buttons (3M/6M/YTD/1Y/3Y/5Y/10Y/MAX) set a state key →
-  `series.filter(p => p.date >= cutoff)`.
-- Hover: transparent overlay `<rect>`; pointer-X → nearest index → vertical guide + focus dot
-  + a Tailwind tooltip; `Intl.NumberFormat`/`DateTimeFormat` for labels.
-- `data-*` hooks for tests (styling encodes meaning, per house style).
-- Rendered on `/net-worth` above the summary cards. The page (RSC) computes the series
-  server-side from `lib/net-worth-history.ts` and passes it down — read-only, derived, no
-  client-side recomputation of the raw event log.
+8. **Ruling 5 — skip the two medical trackers; import everything else.** A named denylist
+   `NON_ACCOUNT_NAMES` containing exactly `Individual innetwork medical deductible` and
+   `Individual innetwork medical outofpocket` (case-insensitive, exact match).
+   *Why:* they are insurance deductible/out-of-pocket progress counters, not balances, and would
+   inflate assets. The other oddly-named rows (`Account`, `******3030`, `OMNICORP RSU`) are real
+   accounts that all end at or near $0, so they are harmless to import and the user can archive
+   them in the UI.
+   *Cost if wrong:* a future export names a real account one of those two strings. Vanishingly
+   unlikely, and the denylist is one line to amend.
 
-### Tests
+### Rulings from the pre-flight cross-task scan (2026-08-30)
 
-- `lib/net-worth-history.test.ts` — the series math (the load-bearing part: carry-forward,
-  multi-account sums, sign handling).
-- Balance-history import — parser reuse, debt-sign transform, per-date dedup, integration test.
-- `NetWorthChart` component test — assert on computed geometry/derived values and range
-  filtering (happy-dom can't do real SVG layout or pointer hit-testing, so don't try to assert
-  pixel positions).
-- E2E — import a small balance-history fixture, toggle a range, assert the chart and its
-  points update.
+9. **Ruling 6 — `terrace` is not a property keyword.** The scan found that with `terrace` in the
+   asset keyword list, a *transactions-first* import (Task 3, which has no balance sign) would type
+   `1200 MAPLE STREET (Orig. $500,000.00) (...1111)` — the **mortgage** — as `property`, an
+   asset. Task 5 would then decline to correct it (its "never overwrite a user-corrected type"
+   rule), leaving an $500k liability counted as an $500k asset: a $1.0M net-worth error.
+   *Why:* the keyword was a guess at one specific street name and buys nothing — the property
+   account `1200 maple` is already an accepted miss below.
+   *Cost if wrong:* a genuinely property-named account guesses as `cash`; one click to fix.
+
+10. **Ruling 7 — Task 5 overwrites the type when the balance sign disagrees with the stored
+    bucket.** If an existing account's bucket is an asset but its imported final balance is
+    negative (or its bucket is `debt` but the final balance is positive), re-guess the type with
+    the sign and overwrite. When the signs agree, never overwrite.
+    *Why:* the institution's sign is ground truth; a keyword guess is not. This is the general
+    safety net behind Ruling 6's specific fix.
+    *Cost if wrong:* a user who deliberately typed a negative-balance account as an asset gets
+    overridden on re-import. Judged far less likely than the mistype it prevents.
+
+11. **Ruling 8 — `AccountBalanceEvent` needs a real `asOf` date column, and it must NOT be
+    uniquely constrained with `accountId`.** The live schema has only
+    `recordedAt DateTime @default(now())` — a write timestamp, not a balance-as-of date. Both plan
+    versions assumed a `date` field that does not exist. Add
+    `asOf DateTime @db.Date @default(now())` via `db:push` (the default backfills existing Phase 1
+    rows correctly — a manually entered balance *was* as-of its entry date) and keep `recordedAt`
+    as the audit trail. **Dedup in application code** (query the affected accounts' existing
+    `(accountId, asOf)` pairs into a Set, filter before insert), not with `@@unique`.
+    *Why a constraint is wrong:* Phase 1 legitimately appends a row on every balance change, so a
+    user editing one account's balance twice in a day would violate `@@unique([accountId, asOf])`
+    and get a 500 on a previously working action. Application-level dedup gets idempotent
+    re-import without regressing Phase 1.
+    *Cost if wrong:* a concurrent double-import could race past the Set check and duplicate rows.
+    Single-user app, sequential imports behind a confirm step — accepted.
+
+12. **Ruling 9 — same-`asOf` events tiebreak on `recordedAt` descending.** Because Ruling 8
+    permits multiple events per `(accountId, asOf)`, Task 6's "most recent event ≤ D" is ambiguous.
+    The latest-written value for a date wins.
+    *Cost if wrong:* an ordering flip on a same-day double edit; sub-dollar impact.
+
+### Known, accepted imperfection
+
+`1200 maple` (the property asset, positive balance, no keyword match) will be guessed as
+`cash` rather than `property`. Left as-is: the preview step exists so the user corrects guesses
+before committing, and hard-coding a street name into the keyword table would be worse — and per
+Ruling 6, actively harmful.
 
 ---
 
-## Verification (per phase)
+## Global Constraints
 
-- **2b:** unit tests for parser + transform + dedup + account-type guessing; integration
-  import of a fixture CSV (including a duplicate-skip re-run); then the real-data smoke import
-  of `Transactions_June_2026.csv` described above.
-- **3:** series-math unit tests; import a real per-account balance-history file → the chart
-  shows a multi-year line; range toggles slice correctly; net worth "today" matches the
-  summary card computed independently by `lib/account-utils.ts`.
-- Both phases: `npm run lint` + `typecheck` clean; DB-clean checks after test runs (no leftover
-  rows) — same discipline as Phases 1 and 2a.
+These bind every task. Violations are review findings.
 
-## Critical files
+1. **Hand-rolled validation.** No Zod. Match `lib/auth/validation.ts`,
+   `lib/transaction-validation.ts`, `lib/account-validation.ts`.
+2. **Money.** `Decimal(14,2)` at rest in Postgres; converted to JS `number` via `.toNumber()`
+   before leaving the query layer. `Prisma.Decimal` serializes to a JSON *string* and would
+   silently break `.toFixed()` call sites. Liabilities store a **positive amount owed**.
+3. **Query layers are server-only.** New DB access goes in `lib/*.ts` alongside
+   `lib/{accounts,transactions,budgets,categories}.ts`, never in a component.
+4. **Every mutating API route** calls `validateCsrfFromRequest(req)` first and is wrapped in a
+   top-level `try`/`catch`. Multipart upload routes additionally set `runtime = "nodejs"` and a
+   byte cap — mirror `app/api/profile/picture/route.ts`.
+5. **Schema changes via `npm run db:push`**, never `prisma migrate dev`. The dev DB has no
+   `_prisma_migrations` table.
+6. **`papaparse` is the only new dependency permitted** (plus `@types/papaparse`). The chart is
+   hand-rolled SVG — no Recharts, no charting library. Rationale in Decision 2 / Task 7.
+7. **Tailwind classes appear as full verbatim strings.** Tailwind 3 purges anything assembled at
+   runtime. Store color classes in constant maps as complete strings.
+8. **`data-*` attributes where styling is the signal.** Tests assert on the attribute, not the
+   class string. Precedent: `BudgetProgressBar`, `BudgetCategoryRow`, `AlertBanner`.
+9. **Dates.** `YYYY-MM-DD` strings parse via the UTC-safe helpers in `lib/transactions.ts` for
+   storage, and `parseLocalDate` from `lib/budget-utils.ts` for display. Never
+   `new Date("YYYY-MM-DD")` — it parses as UTC midnight and shifts the day in negative timezones.
+10. **Tests colocated.** `lib/foo.ts` → `lib/foo.test.ts`; `components/Foo.tsx` →
+    `components/Foo.test.tsx`. API routes get `__tests__/` with their own `helpers.ts`
+    (`seedUser`/`seedSession`/`makeRequest`), cloned per directory, not shared.
+11. **Every API test file includes a cross-user isolation test** — seed two users, assert user A
+    cannot read or mutate user B's rows.
+12. **Comments explain WHY, not WHAT.** Tone reference: `lib/auth/exponential-backoff.ts:11-12`,
+    `proxy.ts:3-12`.
+13. **`npm run lint`, `npm run typecheck`, and `npm test` must all pass** before a task reports
+    DONE. State the actual command output in the report.
 
-- **2b:** `lib/csv.ts` (+ test, wraps `papaparse`); `app/api/transactions/import/route.ts`; a
-  transform/validation module (+ tests) covering sign→type, transfer routing, dedup-hash,
-  category-type inference, account-type guessing; import UI (upload button + preview/confirm
-  step) on `app/(app)/transactions/page.tsx`; `package.json` (+`papaparse`, `@types/papaparse`).
-- **3:** `app/api/accounts/[id]/balance-history/route.ts`; `lib/net-worth-history.ts` (+ test);
-  `components/NetWorthChart.tsx` (+ test); `app/(app)/net-worth/page.tsx` (render the chart);
-  balance-history upload UI added to `components/NetWorthClient.tsx` (or a per-account
-  sub-component).
+---
+
+## Task 1 — `lib/csv.ts`: papaparse wrapper + header validation
+
+**Files:** `lib/csv.ts` (new), `lib/csv.test.ts` (new), `package.json`
+
+Add `papaparse` and `@types/papaparse` as real dependencies (`npm install`).
+
+Export:
+
+- `parseCsv<T>(text: string): { rows: Record<string,string>[]; header: string[] }` — wraps
+  `Papa.parse` with `{ header: true, skipEmptyLines: true }`. Trims the BOM if present
+  (the real files are UTF-8; be defensive about `utf-8-sig`).
+- `validateHeader(header: string[], required: string[]): void` — throws a `CsvHeaderError`
+  (exported) whose message names the missing columns **and echoes the actual header found**.
+  Comparison is case-insensitive and whitespace-trimmed. Extra columns are ignored (Ruling 2).
+
+**Tests (`lib/csv.test.ts`):**
+- Quoted field containing a comma parses as one value (use `Mortgage, Lakeside Home`).
+- Quoted field containing an escaped quote.
+- Embedded newline inside a quoted field.
+- The real 11-column transaction header validates against the 4 required columns.
+- A legacy 8-column header (no `Owner`/`Reviewed`/`Id`) also validates.
+- A header missing `Amount` throws `CsvHeaderError`, and the message contains both `Amount` and
+  the actual header string.
+- BOM-prefixed first header cell still matches.
+- `skipEmptyLines` — trailing blank line produces no row.
+
+---
+
+## Task 2 — `lib/monarch-transform.ts`: row → domain transforms
+
+**Files:** `lib/monarch-transform.ts` (new), `lib/monarch-transform.test.ts` (new)
+
+Pure functions, no DB, no I/O. This is the load-bearing logic for both imports.
+
+Export:
+
+- `TRANSFER_LIKE_CATEGORIES` — `['transfer', 'balance adjustments', 'credit card payment']`
+  (lowercase; compare case-insensitively after trim).
+- `NON_ACCOUNT_NAMES` — the two medical trackers from Ruling 5.
+- `parseAmount(raw: string): number` — signed decimal; defensively strips `$`, thousands commas,
+  and wrapping parentheses (parens ⇒ negative). Throws on unparseable input.
+- `classifyTransaction(categoryName, amount)` → `{ type: 'expense'|'income'|'transfer', amount: number }`
+  where the returned amount is `Math.abs`. Transfer-like category names win over sign (Ruling/Decision 1).
+- `inferCategoryType(categoryName, amountsForThatCategory: number[])` →
+  `'expense'|'income'|'transfer'`. Transfer-like names return `'transfer'` without inspecting
+  amounts. Otherwise the dominant sign across the batch wins; a tie or an empty array returns
+  `'expense'`.
+- `buildExternalHash({ id, date, amount, account, merchant, originalStatement })` → string.
+  Returns `` `mid:${id}` `` when `id` is a non-empty string; otherwise
+  `` `sha:${sha256(...)}` `` over `date|abs(amount)|account|merchant|originalStatement` joined
+  with `|` (Ruling 1). Use `node:crypto`.
+- `guessAccountType(name: string, balance?: number): AccountType` — Ruling 4. Algorithm:
+  1. If `balance !== undefined && balance < 0` → **liability branch:** name contains
+     `'orig. $'` (Monarch's loan marker) or `'mortgage'` or `'loan'` → `'loan_mortgage'`;
+     else → `'credit_card'`.
+  2. Otherwise **asset branch** — first match wins, in this exact order (the order matters:
+     `roth 401k` must beat `401k`, `health savings` must beat `savings`, `rsu` must beat
+     `individual`):
+
+     | # | name contains (lowercased) | → type |
+     |---|---|---|
+     | 1 | `roth 401`, `roth401` | `roth_401k` |
+     | 2 | `401(k)`, `401k` | `401k` |
+     | 3 | `roth ira` | `roth_ira` |
+     | 4 | `traditional ira` | `traditional_ira` |
+     | 5 | `ira` | `traditional_ira` |
+     | 6 | `hsa`, `health savings` | `hsa` |
+     | 7 | `restricted unit`, `rsu` | `rsu` |
+     | 8 | `stock plan`, `stock purchase`, `espp` | `espp` |
+     | 9 | `brokerage`, `individual`, `invest` | `brokerage` |
+     | 10 | `property`, `real estate`, `house` | `property` |
+     | 11 | `credit card`, `sapphire`, `visa`, `discover`, `bankamericard`, `mastercard`, `amex`, `american express`, `citi`, `circle card`, `red card` | `credit_card` |
+     | 12 | `checking`, `banking`, `savings`, `cash` | `cash` |
+     | 13 | *(no match)* | `cash` |
+
+  3. When `balance` is undefined (transaction-only accounts), run the asset branch but let rule 11
+     produce `credit_card` as it naturally does.
+
+**Tests:** one case per keyword row above (13+ cases), plus: negative balance + `Orig. $` →
+`loan_mortgage`; negative balance + `Sapphire Preferred` → `credit_card`; positive balance +
+`ACME, INC. 401(K) PLAN` → `401k`; `INDIVIDUAL - Globex RSU` → `rsu` (not `brokerage`);
+`Health savings investments - HSA` → `hsa` (not `cash`); `Advantage Savings` → `cash`;
+`1200 maple` → `cash` (documented accepted miss — assert it so a future change is deliberate);
+all three transfer-like names route to `'transfer'` on both signs; `parseAmount` on
+`-200.00`, `$1,234.56`, `(45.00)`; `buildExternalHash` prefers `mid:` and is stable across calls.
+
+---
+
+## Task 3 — `POST /api/transactions/import`: preview + commit
+
+**Files:** `app/api/transactions/import/route.ts` (new),
+`app/api/transactions/__tests__/import.test.ts` (new), `lib/transactions.ts` (extend),
+`lib/categories.ts` (extend), `lib/accounts.ts` (extend)
+
+`runtime = "nodejs"`. CSRF-validated. Multipart `req.formData()`. **10 MB cap** (the real file is
+976 KB; the cap is a guard, not a target). Top-level try/catch.
+
+Two modes on one route, switched by a `mode` field in the form data:
+
+- `mode=preview` — parse + transform, **no writes**. Returns
+  `{ ok: true, summary: { totalRows, newTransactions, duplicateRows, newAccounts: [{name, guessedType}], newCategories: [{name, inferredType}], dateRange: {from, to} } }`.
+- `mode=commit` — same pipeline, then writes inside a single `prisma.$transaction`:
+  1. Upsert categories by `(userId, name)`, assigning `type` from `inferCategoryType` and a
+     `color` round-robin from a fixed palette.
+  2. Upsert accounts by `(userId, name)` with `guessAccountType(name)` (no balance available
+     here — balance stays `0`; Phase 3's import or the user sets the real one).
+     **Existing accounts matched by name are left untouched** — never overwrite a type or balance
+     the user has already corrected.
+  3. `createMany({ data, skipDuplicates: true })` for transactions, relying on
+     `@@unique([userId, externalHash])`.
+  Returns the same summary shape plus `{ imported, skipped }`.
+
+Category-type inference needs the whole batch, so transform in two passes: collect amounts per
+category name, then build rows.
+
+**Tests:** a small synthetic fixture CSV (commit it under `app/api/transactions/__tests__/fixtures/`)
+exercising quoted commas, one transfer row, one income row, one expense row, and one row that
+duplicates another. Assert: preview writes nothing; commit creates the expected
+transactions/accounts/categories with expected types; **re-committing the same file imports 0 and
+skips all**; missing-required-column file returns a 400 naming the column; oversized body rejected;
+absent/invalid CSRF rejected; **cross-user isolation** (user A's import creates nothing visible to
+user B).
+
+---
+
+## Task 4 — Import UI on the Transactions page
+
+**Files:** `components/MonarchImportModal.tsx` (new), `components/MonarchImportModal.test.tsx`
+(new), `app/(app)/transactions/page.tsx` (extend), `e2e/monarch-import.spec.ts` (new)
+
+- "Import from Monarch" button on the Transactions page opens the modal.
+- File picker (`accept=".csv,text/csv"`) → `mode=preview` POST → render the summary: counts, date
+  range, a table of new accounts with their guessed types, new categories with inferred types, and
+  the duplicate-skip count.
+- "Confirm import" → `mode=commit` → success state showing `imported`/`skipped`, then refresh the
+  page data. "Cancel" closes without writing.
+- Loading and error states. Errors surface the API message verbatim (the header-mismatch message is
+  the useful one).
+- Follow the `readCsrfCookie()` + `CSRF_HEADER_NAME` fetch pattern from `NetWorthClient.tsx`.
+- `data-*` hooks for test assertions per Global Constraint 8.
+
+**Tests:** component test with a mocked `fetch` covering preview → confirm → success, and the error
+path. E2E uploading a tiny fixture via `setInputFiles`, asserting the preview summary appears, then
+confirming and asserting the imported rows render.
+
+---
+
+## Task 5 — `POST /api/accounts/balance-history`: global balance import
+
+**Files:** `app/api/accounts/balance-history/route.ts` (new),
+`app/api/accounts/__tests__/balance-history.test.ts` (new), `lib/accounts.ts` (extend)
+
+Note the route path: **global, not `[id]`-scoped** — the export is one file covering all accounts
+(v1 had this wrong). `runtime = "nodejs"`, CSRF, 20 MB cap (real file is 1.7 MB), top-level
+try/catch. Same `mode=preview` / `mode=commit` shape as Task 3.
+
+Required columns: `Date`, `Balance`, `Account`.
+
+Pipeline:
+
+1. Drop rows whose `Account` is in `NON_ACCOUNT_NAMES` (Ruling 5). Count them for the summary.
+2. Group rows by account name. For each: `firstDate`, `lastDate`, and the final balance.
+3. `fileMaxDate` = max `Date` across all retained rows.
+4. Per account, upsert by `(userId, name)`:
+   - `type` = `guessAccountType(name, finalBalanceSigned)` (Ruling 4 — sign available here).
+   - `balance` = `Math.abs(finalBalance)` for debt-bucket accounts, else `finalBalance` clamped
+     to `0` if negative (Phase 1's rule that a live asset balance is non-negative).
+   - `balanceAsOf` = that account's `lastDate`.
+   - `archivedAt` = set (import timestamp) when `lastDate < fileMaxDate`, else `null` (Ruling 3).
+   - **Existing accounts:** update `balance`/`balanceAsOf` from the import. Do **not** overwrite a
+     `type` the user may have corrected — *except* when the balance sign disagrees with the stored
+     type's bucket (asset bucket + negative final balance, or `debt` bucket + positive final
+     balance), in which case re-guess with the sign and overwrite (Ruling 7).
+5. **Schema prerequisite (Ruling 8):** add `asOf DateTime @db.Date @default(now())` to
+   `AccountBalanceEvent` in `prisma/schema.prisma` and apply with `npm run db:push`. Keep
+   `recordedAt` as the audit timestamp. Add `@@index([accountId, asOf])`. Do **not** add
+   `@@unique([accountId, asOf])` — it would break Phase 1's legitimate same-day double balance edit.
+6. Insert `AccountBalanceEvent` rows for every retained CSV row: `asOf` = the CSV `Date`;
+   `balance` stored as `Math.abs(raw)` for debt-bucket accounts, raw value otherwise (negative
+   asset balances are allowed in history — clamping would misrepresent the real historical net
+   worth). `userId` denormalized. **Dedup in application code:** load existing `(accountId, asOf)`
+   pairs for the affected accounts into a `Set`, filter the batch against it before insert.
+7. Batch the inserts — 34,248 rows must not be 34,248 round trips. Chunk `createMany` at ~5,000.
+
+Preview summary: `{ accountsFound, newAccounts: [{name, guessedType, archived}], existingAccounts, eventRows, skippedNonAccountRows, dateRange }`.
+
+**Tests:** synthetic fixture with 3 accounts — one asset running to the file max, one debt
+(negative balances), one closed early at a non-zero balance. Assert: debt balances stored positive;
+`asOf` matches the CSV `Date` (not the insert time); the early-stopping account is created
+**archived**; a medical-tracker row is skipped and counted; re-import writes zero new events
+(application-level dedup); `balanceAsOf` matches each account's last date; an existing account's
+user-corrected `type` survives re-import when the sign agrees; an existing asset-typed account
+whose imported final balance is negative **is** re-typed (Ruling 7); a Phase 1-style same-day
+double balance edit still succeeds (Ruling 8 regression test); chunking handles >5,000 rows; CSRF;
+cross-user isolation.
+
+---
+
+## Task 6 — `lib/net-worth-history.ts`: the series math
+
+**Files:** `lib/net-worth-history.ts` (new), `lib/net-worth-history.test.ts` (new)
+
+Pure, no DB. **This is the highest-risk logic in Phase 3** — Ruling 3 lives here.
+
+```ts
+export interface NetWorthPoint { date: string; value: number }
+
+export function computeNetWorthSeries(
+  events: { accountId: string; asOf: string; balance: number; recordedAt: string }[],
+  accounts: { id: string; type: AccountType }[],
+): NetWorthPoint[]
+```
+
+Algorithm:
+
+1. Group events by `accountId`, sort each group by `asOf` ascending, tiebreaking equal `asOf` by
+   `recordedAt` ascending so the latest-written value for a date is the one carried (Ruling 9).
+2. Per account record `firstDate` and `lastDate` (min/max `asOf`) — its **contribution window**.
+3. Sample dates = the sorted unique union of every event `asOf`.
+4. For each sample date `D`, per account: `0` when `D < firstDate` **or `D > lastDate`**
+   (Ruling 3); otherwise the balance of the most recent event `≤ D` (carry-forward *within* the
+   window only).
+5. Signed contribution: `isLiability(getBucketForType(type)) ? -balance : balance` — reusing
+   `lib/account-utils.ts`, not reimplementing the taxonomy.
+6. Sum per date → one `NetWorthPoint`. Return the full MAX series; the client slices by range.
+
+Performance: 2,252 sample dates × 35 accounts. Walk each account's events with a moving index
+rather than re-scanning per date — an O(dates × accounts) sweep, not O(dates × events).
+
+**Tests:** carry-forward inside the window; **zero after `lastDate`** (the Ruling 3 regression
+test — assert a closed account with a non-zero final balance contributes nothing to a later date);
+zero before `firstDate`; an account appearing partway through; debt sign subtracts; a debt account
+closing raises net worth; empty event list → `[]`; single event → one point; two accounts with
+disjoint windows; sample-date union is sorted and deduplicated; **two events sharing one `asOf`
+resolve to the later `recordedAt`** (Ruling 9).
+
+---
+
+## Task 7 — `components/NetWorthChart.tsx`: hand-rolled SVG line chart
+
+**Files:** `components/NetWorthChart.tsx` (new), `components/NetWorthChart.test.tsx` (new)
+
+No charting library (Global Constraint 6). The reasoning, recorded so it isn't relitigated:
+Recharts would add ~130 KB gzipped plus React-19 peer friction to draw one line; this app already
+hand-rolls its other data viz (budget bars). This is the *opposite* call from `papaparse`, and
+deliberately so — charting is subjective, interactive, and cheap to hand-roll well; CSV
+correctness is objective, well-specified, and risky to get subtly wrong on financial data.
+
+- Props: `series: NetWorthPoint[]`.
+- Range toggles `3M | 6M | YTD | 1Y | 3Y | 5Y | 10Y | MAX` → state key → `useMemo` filter
+  `series.filter(p => p.date >= cutoff)`. Cutoffs computed from the series' **last date**, not
+  `Date.now()`, so the chart is deterministic and testable.
+- Scales map `{date, value}` → SVG coords. `ResizeObserver` for responsive width.
+- One `<path>`. Y domain includes 0 when the series crosses it.
+- Hover: transparent overlay `<rect>`; pointer-X → nearest index → vertical guide + focus dot +
+  Tailwind tooltip. `Intl.NumberFormat` / `Intl.DateTimeFormat` for labels.
+- Empty/single-point series render an explicit empty state, not a broken path.
+- `data-*` hooks: `data-range` on the active toggle, `data-point-count` on the chart root.
+
+**Tests:** happy-dom cannot do SVG layout or pointer hit-testing — **assert on derived values and
+geometry math, never pixel positions.** Cover: range filtering changes `data-point-count`
+correctly for each toggle; the active toggle carries `data-range`; empty series renders the empty
+state; single-point series does not throw; the generated path `d` string has one command per
+filtered point.
+
+---
+
+## Task 8 — Wire the chart and the upload into the Net Worth page
+
+**Files:** `app/(app)/net-worth/page.tsx` (extend), `components/NetWorthClient.tsx` (extend),
+`components/BalanceHistoryImportModal.tsx` (new, or fold into `NetWorthClient`),
+`e2e/net-worth-history.spec.ts` (new)
+
+- The page is an RSC: fetch the user's `AccountBalanceEvent` rows + accounts, call
+  `computeNetWorthSeries` **server-side**, pass the series down. The chart is read-only derived
+  data — no client-side recomputation of the raw event log.
+- Render `NetWorthChart` above the summary cards.
+- "Import balance history" button → modal → preview/confirm against Task 5's route, same pattern
+  as Task 4.
+- After a successful import, refresh so chart + summary cards both update.
+
+**Tests:** E2E — import a small balance-history fixture, assert the chart appears, toggle a range,
+assert `data-point-count` changes. Then the cross-check that matters: **net worth "today" from the
+chart's last point equals the summary card** computed independently by `lib/account-utils.ts`.
+
+---
+
+## Verification
+
+Per task: `npm run lint`, `npm run typecheck`, `npm test` clean; new tests actually assert
+behaviour (no `expect(true)`).
+
+End of Phase 2b: import the real `Monarch_Transactions_<month>.csv` in dev. Verify 16 accounts,
+53 categories, ~7,576 transactions; a second import of the same file changes nothing; and
+`Transfer` / `Balance Adjustments` / `Credit Card Payment` do **not** move the Monthly Review
+income/expense totals.
+
+End of Phase 3: import the real `Monarch_Balances_<month>.csv` in dev. Verify 33 accounts
+created (35 minus the 2 medical trackers), 12 of them archived; the chart draws a ~6-year line;
+range toggles slice correctly; and the chart's final point matches the Net Worth summary card —
+specifically that the Lakeside mortgage and the ZUO stock plans are **absent** from today's number.
+
+Both phases: no leftover test rows in the dev DB after the suites run.
