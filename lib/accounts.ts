@@ -1,8 +1,9 @@
 // Server-only query layer for accounts. Every function is scoped to a userId
 // and treats {id, userId} as the ownership check — a mismatched id resolves to
 // null/false rather than throwing, so callers can map that straight to 404.
-import { Prisma, type Account as PrismaAccount } from "@prisma/client";
+import { Prisma, type PrismaClient, type Account as PrismaAccount } from "@prisma/client";
 import { prisma } from "./prisma";
+import { guessAccountType } from "./monarch-transform";
 import type { Account, AccountInput, AccountPatch } from "./types";
 
 function mapAccount(row: PrismaAccount): Account {
@@ -101,4 +102,54 @@ export async function archiveAccount(userId: string, id: string): Promise<boolea
     data: { archivedAt: new Date() },
   });
   return result.count === 1;
+}
+
+// Accepts either the singleton client or a $transaction callback's client —
+// the Monarch import (Phase 2b) needs the latter so account creation shares
+// one transaction with the category writes before it and the transaction
+// writes after it.
+export type AccountDbClient = PrismaClient | Prisma.TransactionClient;
+
+// Resolves every name to an account id, matching by (userId, name) — Account
+// has no DB-level unique constraint on that pair (unlike Category), so the
+// match is enforced here in application code. Read-only unless `write` is
+// true, mirroring lib/categories.ts's resolveCategoryIds so preview and
+// commit share one code path and can never disagree about what's "new".
+//
+// A matched existing account is NEVER updated: the import has no balance to
+// offer (a transaction export carries no balances), so overwriting a type
+// the user already corrected would be strictly worse than leaving it alone.
+export async function resolveAccountIds(
+  userId: string,
+  names: string[],
+  client: AccountDbClient = prisma,
+  write: boolean = false,
+): Promise<{ idByName: Map<string, string>; newNames: Set<string> }> {
+  const existing = names.length
+    ? await client.account.findMany({
+        where: { userId, name: { in: names } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const idByName = new Map(existing.map((a) => [a.name, a.id]));
+  const newNames = new Set(names.filter((n) => !idByName.has(n)));
+
+  if (write) {
+    for (const name of names) {
+      if (!newNames.has(name)) continue;
+      const zero = new Prisma.Decimal(0);
+      const created = await client.account.create({
+        data: { userId, name, type: guessAccountType(name), balance: zero },
+      });
+      // Mirrors createAccount's opening-balance event above, so an account
+      // that only ever appears in a transaction import still has a starting
+      // point for a future net-worth-over-time graph.
+      await client.accountBalanceEvent.create({
+        data: { userId, accountId: created.id, balance: zero },
+      });
+      idByName.set(name, created.id);
+    }
+  }
+
+  return { idByName, newNames };
 }
