@@ -7,8 +7,6 @@
 
 import Papa from "papaparse";
 
-const BOM = "\uFEFF";
-
 export class CsvHeaderError extends Error {
   constructor(message: string) {
     super(message);
@@ -16,14 +14,12 @@ export class CsvHeaderError extends Error {
   }
 }
 
-export function parseCsv<T>(text: string): { rows: Record<string, string>[]; header: string[] } {
-  // Some spreadsheet tools save "UTF-8 with BOM" (utf-8-sig). Left alone, the
-  // BOM fuses onto the first header cell (e.g. the literal text "Date"
-  // prefixed with U+FEFF) and every downstream header comparison against
-  // "Date" silently fails.
-  const withoutBom = text.startsWith(BOM) ? text.slice(BOM.length) : text;
-
-  const result = Papa.parse<Record<string, string>>(withoutBom, {
+export function parseCsv(text: string): { rows: Record<string, string>[]; header: string[] } {
+  // papaparse strips a leading UTF-8 BOM internally before parsing (its own
+  // stripBom()), so a BOM-prefixed export still yields a clean first header
+  // cell without us doing anything here — see the BOM-prefixed test in
+  // lib/csv.test.ts, which pins that guarantee.
+  const result = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
   });

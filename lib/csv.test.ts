@@ -23,7 +23,12 @@ describe("parseCsv", () => {
     expect(rows[0].Notes).toBe("Line one\nLine two");
   });
 
-  it("strips a leading BOM so the first header cell still matches", () => {
+  // parseCsv does no BOM stripping itself — papaparse owns that internally.
+  // This pins the observable contract two downstream importers depend on
+  // (the first header cell must compare equal to "Date"), so a future
+  // papaparse version that drops its own stripBom() fails loudly here
+  // instead of silently breaking header validation.
+  it("still yields a first header cell of exactly Date when the input is BOM-prefixed", () => {
     const csv = "\uFEFFDate,Amount\n2026-01-01,100\n";
     const { header, rows } = parseCsv(csv);
     expect(header[0]).toBe("Date");
