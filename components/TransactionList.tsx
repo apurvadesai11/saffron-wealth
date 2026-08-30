@@ -34,7 +34,9 @@ export default function TransactionList({ transactions }: Props) {
               {t.type === "income" ? "+" : "-"}${t.amount.toFixed(2)}
             </span>
             <button
-              onClick={() => deleteTransaction(t.id)}
+              onClick={() => {
+                deleteTransaction(t.id).catch(e => console.error("Failed to delete transaction", e));
+              }}
               className="text-gray-300 hover:text-red-400 transition-colors text-xs"
               aria-label={`Delete ${t.description}`}
             >

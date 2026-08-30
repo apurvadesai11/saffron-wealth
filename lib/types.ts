@@ -3,7 +3,12 @@
 // added in a future release without a schema migration.
 export type BudgetPeriod = 'monthly' | 'quarterly' | 'semi-annual' | 'annual';
 
-export type CategoryType = 'expense' | 'income';
+// 'transfer' exists so a Monarch-imported transfer-between-accounts row (and
+// its category) can be modeled without being mistaken for income or expense —
+// every sum in lib/budget-utils.ts filters by strict equality on 'income'/
+// 'expense', so a 'transfer' value is excluded automatically, no extra
+// filtering needed.
+export type CategoryType = 'expense' | 'income' | 'transfer';
 
 export interface Category {
   id: string;
@@ -13,12 +18,17 @@ export interface Category {
 }
 
 export interface Transaction {
-  id: number;
+  id: string;
   description: string;
   amount: number;
   categoryId: string;
   type: CategoryType;
   date: string; // "YYYY-MM-DD"
+  // Which account the money moved in/out of. Optional because pre-import
+  // (manually added) transactions aren't tied to a specific Account.
+  accountId?: string | null;
+  merchant?: string | null;
+  notes?: string | null;
 }
 
 export interface Budget {

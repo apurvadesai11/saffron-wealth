@@ -30,6 +30,9 @@ model User {
   authEvents           AuthEvent[]
   accounts             Account[]
   accountBalanceEvents AccountBalanceEvent[]
+  categories           Category[]
+  transactions         Transaction[]
+  budgets              Budget[]
 
   @@index([emailNormalized])
 }
@@ -129,6 +132,7 @@ model Account {
 
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   balanceHistory AccountBalanceEvent[]
+  transactions   Transaction[]
 
   @@index([userId])
 }
@@ -150,4 +154,84 @@ model AccountBalanceEvent {
 
   @@index([userId])
   @@index([accountId, recordedAt])
+}
+
+// Income/expense (and 'transfer', for Monarch-imported transfer rows —
+// lib/budget-utils.ts excludes it from every sum via strict type equality)
+// category. `sortOrder` gives bulk-seeded default categories (created in the
+// same request, sometimes the same millisecond) a stable display order
+// without relying on `createdAt` tie-breaking.
+// `@@unique([userId, name])` lets the Monarch import (Phase 2b) upsert a
+// category by name instead of tracking Monarch's own category ids.
+// Soft-deleted via `archivedAt`, matching `Account`.
+model Category {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  type       String
+  color      String
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// `accountId` is nullable because manually-added transactions (this phase's
+// UI) aren't tied to a specific Account — only Monarch-imported rows (Phase
+// 2b) will set it. `type` mirrors CategoryType ('income' | 'expense' |
+// 'transfer'); a transfer's amount is still stored positive, direction is
+// carried by `type` alone, same convention as income/expense.
+// `externalHash` + `@@unique([userId, externalHash])` is the Phase 2b import
+// dedup key (sha256 of date|amount|account|merchant|original statement) —
+// null for manually-added transactions, which is why the unique constraint
+// must tolerate multiple nulls (Postgres treats distinct NULLs as non-equal,
+// so this is safe without a partial index).
+model Transaction {
+  id            String   @id @default(cuid())
+  userId        String
+  accountId     String?
+  categoryId    String
+  description   String
+  merchant      String?
+  notes         String?
+  amount        Decimal  @db.Decimal(14, 2)
+  type          String
+  date          DateTime @db.Date
+  externalHash  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, externalHash])
+  @@index([userId, date])
+}
+
+// `amount === 0` is a valid sentinel meaning "hidden from budgets" (mirrors
+// the mock Budget model). `@@unique([userId, categoryId, period])` is both
+// the natural key the UI already looks budgets up by and the upsert target
+// for saving one or many budgets at once.
+model Budget {
+  id         String       @id @default(cuid())
+  userId     String
+  categoryId String
+  amount     Decimal      @db.Decimal(14, 2)
+  period     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId, period])
+  @@index([userId])
 }

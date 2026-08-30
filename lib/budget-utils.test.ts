@@ -245,6 +245,12 @@ describe("buildBudgetProgressList", () => {
     expect(salary.categoryType).toBe("income");
     expect(salary.barColor).toBe("green"); // 100% received
   });
+
+  it("a Monarch-imported 'transfer' category is excluded (no budget is ever set for it, same as any other unbudgeted category)", () => {
+    const transferCategory: Category = { id: "transfer", name: "Transfer", type: "transfer", color: "bg-gray-300" };
+    const result = buildBudgetProgressList([...MOCK_CATEGORIES, transferCategory], MOCK_BUDGETS, MOCK_TRANSACTIONS, FEB_14_2026);
+    expect(result.find(p => p.categoryId === "transfer")).toBeUndefined();
+  });
 });
 
 describe("getPendingAlerts", () => {
@@ -372,6 +378,23 @@ describe("getCashflowProjection", () => {
     const result = getCashflowProjection([], sparse, MOCK_CATEGORIES, new Date(2026, 1, 1));
     expect(result.budgetedExpenses).toBe(1600);
     expect(result.budgetedIncome).toBe(0);
+  });
+
+  it("excludes a 'transfer' category from both budgetedIncome and budgetedExpenses, even if it somehow had a budget", () => {
+    const transferCategory: Category = { id: "transfer", name: "Transfer", type: "transfer", color: "bg-gray-300" };
+    const withTransferBudget: Budget[] = [
+      ...budgets,
+      { categoryId: "transfer", amount: 999999, period: "monthly" },
+    ];
+    const result = getCashflowProjection(
+      MOCK_TRANSACTIONS,
+      withTransferBudget,
+      [...MOCK_CATEGORIES, transferCategory],
+      FEB_14_2026,
+    );
+    // Same totals as the plain budgets case — the transfer budget never enters either sum.
+    expect(result.budgetedIncome).toBe(4500 + 800);
+    expect(result.budgetedExpenses).toBe(1600 + 400);
   });
 });
 

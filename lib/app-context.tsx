@@ -10,14 +10,19 @@ import {
 } from "react";
 import { Category, Transaction, Budget } from "./types";
 import { MOCK_CATEGORIES, MOCK_TRANSACTIONS, MOCK_BUDGETS } from "./mock-data";
+import { readCsrfCookie } from "./auth/csrf-client";
+import { CSRF_HEADER_NAME } from "./auth/csrf-shared";
 
 interface AppContextValue {
   categories: Category[];
   transactions: Transaction[];
   budgets: Budget[];
-  setBudgets: Dispatch<SetStateAction<Budget[]>>;
-  addTransaction: (t: Omit<Transaction, "id">) => void;
-  deleteTransaction: (id: number) => void;
+  // Always a batch (one entry for a manual edit, many for "Auto-Set All") so
+  // there's a single upsert call and a single source of truth for the
+  // resulting list — mirrors PUT /api/budgets.
+  saveBudgets: (entries: Budget[]) => Promise<void>;
+  addTransaction: (t: Omit<Transaction, "id">) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
   // Lifted so the sidebar AlertsButton and the MonthlyReviewWidget share state
   dismissedKeys: Set<string>;
   setDismissedKeys: Dispatch<SetStateAction<Set<string>>>;
@@ -25,16 +30,23 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-let nextId = 1000; // start above mock IDs to avoid collisions
+let localId = 0; // offline-mode id counter (tests only — see AppProviderProps.offline)
 
 interface AppProviderProps {
   children: ReactNode;
-  // Optional seed overrides for tests. Production callers omit these and get
-  // the MOCK_* defaults; component tests can inject deterministic fixtures
-  // without poking at module-scoped mock data.
+  // Real data from Postgres, fetched server-side by app/(app)/layout.tsx and
+  // passed down. Also doubles as test-fixture injection: component tests call
+  // renderWithApp() with these instead of touching module-scoped mock data.
+  // Omitted only when neither applies, which falls back to MOCK_* — that
+  // path is a safety net for stray test callers, never exercised in
+  // production (the (app) layout always passes real, possibly empty, arrays).
   seedCategories?: Category[];
   seedTransactions?: Transaction[];
   seedBudgets?: Budget[];
+  // Test-only: mutate local state directly instead of calling the API, so
+  // component tests can assert on the result synchronously without mocking
+  // fetch. Always true via renderWithApp; production never sets this.
+  offline?: boolean;
 }
 
 export function AppProvider({
@@ -42,6 +54,7 @@ export function AppProvider({
   seedCategories,
   seedTransactions,
   seedBudgets,
+  offline = false,
 }: AppProviderProps) {
   const [transactions, setTransactions] = useState<Transaction[]>(
     seedTransactions ?? MOCK_TRANSACTIONS,
@@ -50,12 +63,67 @@ export function AppProvider({
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const categories = seedCategories ?? MOCK_CATEGORIES;
 
-  function addTransaction(t: Omit<Transaction, "id">) {
-    setTransactions(prev => [{ ...t, id: ++nextId }, ...prev]);
+  async function addTransaction(t: Omit<Transaction, "id">) {
+    if (offline) {
+      setTransactions(prev => [{ ...t, id: `local-${++localId}` }, ...prev]);
+      return;
+    }
+    const csrf = readCsrfCookie() ?? "";
+    const res = await fetch("/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [CSRF_HEADER_NAME]: csrf },
+      body: JSON.stringify(t),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error?.message ?? "Failed to add transaction.");
+    }
+    setTransactions(prev => [data.data.transaction as Transaction, ...prev]);
   }
 
-  function deleteTransaction(id: number) {
+  async function deleteTransaction(id: string) {
+    if (offline) {
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      return;
+    }
+    const csrf = readCsrfCookie() ?? "";
+    const res = await fetch(`/api/transactions/${id}`, {
+      method: "DELETE",
+      headers: { [CSRF_HEADER_NAME]: csrf },
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error?.message ?? "Failed to delete transaction.");
+    }
     setTransactions(prev => prev.filter(t => t.id !== id));
+  }
+
+  async function saveBudgets(entries: Budget[]) {
+    if (offline) {
+      setBudgets(prev => {
+        const next = [...prev];
+        for (const entry of entries) {
+          const idx = next.findIndex(
+            b => b.categoryId === entry.categoryId && b.period === entry.period,
+          );
+          if (idx >= 0) next[idx] = entry;
+          else next.push(entry);
+        }
+        return next;
+      });
+      return;
+    }
+    const csrf = readCsrfCookie() ?? "";
+    const res = await fetch("/api/budgets", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", [CSRF_HEADER_NAME]: csrf },
+      body: JSON.stringify({ entries }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error?.message ?? "Failed to save budgets.");
+    }
+    setBudgets(data.data.budgets as Budget[]);
   }
 
   return (
@@ -63,7 +131,7 @@ export function AppProvider({
       categories,
       transactions,
       budgets,
-      setBudgets,
+      saveBudgets,
       addTransaction,
       deleteTransaction,
       dismissedKeys,

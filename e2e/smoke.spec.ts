@@ -90,6 +90,23 @@ test.describe("Transactions: add + filter", () => {
     await expect(page.getByText("-$4.25")).toBeVisible();
   });
 
+  test("a new transaction survives a full page reload (real Postgres persistence, Phase 2a)", async ({ page }) => {
+    await page.goto("/transactions");
+    await page.getByRole("button", { name: "+ Add Transaction" }).click();
+
+    await page.getByLabel("Description").fill("Persistence check");
+    await page.getByLabel("Amount").fill("12.34");
+    await page.getByRole("button", { name: "Save Transaction" }).click();
+    await expect(page.getByText("Persistence check")).toBeVisible();
+
+    // Unlike the old in-memory mock (which reset on every load), this must
+    // still be there after a real reload — proof the write actually landed
+    // in Postgres rather than only in React state.
+    await page.reload();
+    await expect(page.getByText("Persistence check")).toBeVisible();
+    await expect(page.getByText("-$12.34")).toBeVisible();
+  });
+
   test("filters by search text (description match)", async ({ page }) => {
     await page.goto("/transactions");
     await page.getByLabel("Search").fill("Netflix");

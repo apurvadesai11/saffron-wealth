@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TransactionForm from "./TransactionForm";
 import {
@@ -14,12 +14,16 @@ const CATS = [CAT_GROCERIES, CAT_RENT, CAT_SALARY];
 // happy-dom doesn't always fire form `submit` from a button click, so we
 // dispatch the form's submit event directly. Same effect as Enter / button
 // click in a real browser, but bypasses the happy-dom inconsistency.
-function submitForm() {
+// handleSubmit is async (it awaits addTransaction), so this must be awaited
+// through async act() to flush the state update before assertions run.
+async function submitForm() {
   const form = screen
     .getByRole("button", { name: /Save Transaction/i })
     .closest("form");
   if (!form) throw new Error("Form not found");
-  fireEvent.submit(form);
+  await act(async () => {
+    fireEvent.submit(form);
+  });
 }
 
 describe("TransactionForm", () => {
@@ -44,7 +48,7 @@ describe("TransactionForm", () => {
 
     await userEvent.type(screen.getByLabelText("Description"), "Coffee");
     await userEvent.type(screen.getByLabelText("Amount ($)"), "4.50");
-    submitForm();
+    await submitForm();
 
     expect(onSubmitted).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Description")).toHaveValue("");
@@ -61,7 +65,7 @@ describe("TransactionForm", () => {
     await userEvent.type(screen.getByLabelText("Description"), "Bogus");
     // 0 fails the explicit handleSubmit guard (parsedAmount <= 0).
     await userEvent.type(screen.getByLabelText("Amount ($)"), "0");
-    submitForm();
+    await submitForm();
 
     expect(onSubmitted).not.toHaveBeenCalled();
   });
@@ -73,7 +77,7 @@ describe("TransactionForm", () => {
       transactions: [],
     });
     await userEvent.type(screen.getByLabelText("Description"), "Bogus");
-    submitForm();
+    await submitForm();
     expect(onSubmitted).not.toHaveBeenCalled();
   });
 });

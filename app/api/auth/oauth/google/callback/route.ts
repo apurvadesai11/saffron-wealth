@@ -14,6 +14,7 @@ import { createSession } from "@/lib/auth/sessions";
 import { setSessionCookie } from "@/lib/auth/session-cookie";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
+import { seedDefaultCategories } from "@/lib/categories";
 
 function redirectErr(req: NextRequest, code: string) {
   return NextResponse.redirect(new URL(`/login?oauth=${code}`, req.url));
@@ -168,6 +169,7 @@ export async function GET(req: NextRequest) {
     const session = await createSession(userId, ua, ip);
 
     await Promise.all([
+      isNewUser ? seedDefaultCategories(userId) : Promise.resolve(),
       isNewUser
         ? recordAuthEvent({
             type: "signup",
