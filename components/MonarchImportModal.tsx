@@ -2,23 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AccountType, CategoryType } from "@/lib/types";
+import type { CategoryType } from "@/lib/types";
+// Type-only, so this pulls in nothing at runtime — a real `import` would
+// bring in lib/transaction-import.ts's Prisma-adjacent value imports, but
+// `import type` is erased entirely at compile time. Importing the real type
+// (rather than hand-duplicating its shape here) means a server-side rename
+// or added field becomes a compile error here instead of silent drift.
+import type { ImportSummary } from "@/lib/transaction-import";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/account-utils";
 import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
-
-// Mirrors the shape POST /api/transactions/import returns for mode=preview
-// (lib/transaction-import.ts's ImportSummary) — kept local rather than
-// imported from that server-only module so this client component doesn't
-// pull in Prisma-adjacent code via its import graph.
-interface ImportSummary {
-  totalRows: number;
-  newTransactions: number;
-  duplicateRows: number;
-  newAccounts: { name: string; guessedType: AccountType }[];
-  newCategories: { name: string; inferredType: CategoryType }[];
-  dateRange: { from: string; to: string };
-}
 
 interface ImportResult {
   imported: number;
@@ -96,7 +89,7 @@ export default function MonarchImportModal({ onClose }: Props) {
         setStep("pick");
         return;
       }
-      setSummary(data.summary as ImportSummary);
+      setSummary(data.summary);
       setStep("preview");
     } catch {
       setError("Network error.");

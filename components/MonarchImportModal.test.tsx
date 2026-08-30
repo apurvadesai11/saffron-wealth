@@ -54,12 +54,16 @@ afterEach(() => {
 
 describe("MonarchImportModal — preview → confirm → success", () => {
   it("previews the file, shows the summary, then confirms and shows the success state", async () => {
+    // imported/skipped are deliberately different from PREVIEW_SUMMARY's
+    // newTransactions/duplicateRows (4/1) so this test actually proves the
+    // success state reads data.imported/data.skipped from the commit
+    // response, not the preview summary's counts.
     const fetchMock = vi
       .fn()
       // mode=preview
       .mockResolvedValueOnce(jsonResponse({ ok: true, summary: PREVIEW_SUMMARY }))
       // mode=commit
-      .mockResolvedValueOnce(jsonResponse({ ok: true, summary: PREVIEW_SUMMARY, imported: 4, skipped: 1 }));
+      .mockResolvedValueOnce(jsonResponse({ ok: true, summary: PREVIEW_SUMMARY, imported: 3, skipped: 2 }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<MonarchImportModal onClose={vi.fn()} />);
@@ -88,7 +92,12 @@ describe("MonarchImportModal — preview → confirm → success", () => {
       expect(screen.getByRole("dialog")).toHaveAttribute("data-import-step", "success");
     });
     expect(screen.getByText(/Imported/)).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
+    // "3" (imported) and "2" (skipped) — not "4"/"1", which would mean the
+    // component read the preview summary's counts instead of the commit
+    // response's.
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.queryByText("4")).not.toBeInTheDocument();
     expect(screen.getByText(/skipped/)).toBeInTheDocument();
 
     const secondCallBody = fetchMock.mock.calls[1][1].body as FormData;

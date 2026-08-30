@@ -3,7 +3,7 @@
 import {
   createContext,
   useContext,
-  useEffect,
+  useRef,
   useState,
   Dispatch,
   SetStateAction,
@@ -66,24 +66,60 @@ export function AppProvider({
 
   // useState's initializer only runs on mount, so a later re-render carrying
   // a fresh seed prop (e.g. app/(app)/layout.tsx re-fetching after
-  // router.refresh()) would otherwise be silently ignored here — unlike
-  // `categories` above, which is a plain binding and picks up new props for
-  // free. The Monarch import (Phase 2b) is the first mutation that creates
-  // rows the client has no per-row response to merge locally, so it leans on
-  // this refresh path instead. Guarded on the seed reference itself, not a
-  // fixed interval, so it only fires when the server layout actually
-  // re-ran — normal client-side navigation between (app) routes reuses the
-  // same layout instance and never touches this.
-  useEffect(() => {
-    if (seedTransactions) setTransactions(seedTransactions);
-  }, [seedTransactions]);
-  useEffect(() => {
-    if (seedBudgets) setBudgets(seedBudgets);
-  }, [seedBudgets]);
+  // router.refresh() — the Monarch import's commit calls it because a bulk
+  // write has no per-row response to merge locally, and app/(app)/profile/
+  // page.tsx already calls it after every profile save and picture upload)
+  // would otherwise be silently ignored here — unlike `categories` above,
+  // which is a plain binding and picks up new props for free. Guarded on the
+  // seed reference itself, not a fixed interval, so it only fires when the
+  // server layout actually re-ran — normal client-side navigation between
+  // (app) routes reuses the same layout instance and never touches this.
+  //
+  // A naive "just adopt the new seed" version of this has a real race:
+  // router.refresh() snapshots the DB at some point during its round trip.
+  // If a *newer* local mutation (e.g. deleting a transaction) completes
+  // after that snapshot was taken but before the refreshed props land,
+  // blindly adopting the seed resurrects whatever the newer mutation just
+  // removed. `*MutationVersionRef` is bumped by every local mutation
+  // (add/delete/save, online or offline); `*SyncedVersionRef` records the
+  // mutation version as of the last seed we accepted or skipped. If they
+  // still match when a new seed arrives, nothing local has raced ahead of
+  // it and it's safe to adopt; if they don't, the seed is treated as
+  // possibly stale and skipped — the more-recent local truth wins, and the
+  // seed's own new information (e.g. freshly imported rows) simply waits
+  // for the next clean refresh instead. That's a narrow trade-off, but far
+  // safer than ever re-materializing something the user just deleted.
+  //
+  // Adjusting state directly during render (React's documented pattern for
+  // deriving state from a changed prop) rather than in a useEffect applies
+  // the new value before the first paint, instead of painting the old state
+  // and correcting it a frame later.
+  const [prevSeedTransactions, setPrevSeedTransactions] = useState(seedTransactions);
+  const [prevSeedBudgets, setPrevSeedBudgets] = useState(seedBudgets);
+  const txMutationVersionRef = useRef(0);
+  const txSyncedVersionRef = useRef(0);
+  const budgetMutationVersionRef = useRef(0);
+  const budgetSyncedVersionRef = useRef(0);
+
+  if (seedTransactions !== prevSeedTransactions) {
+    setPrevSeedTransactions(seedTransactions);
+    if (seedTransactions && txMutationVersionRef.current === txSyncedVersionRef.current) {
+      setTransactions(seedTransactions);
+    }
+    txSyncedVersionRef.current = txMutationVersionRef.current;
+  }
+  if (seedBudgets !== prevSeedBudgets) {
+    setPrevSeedBudgets(seedBudgets);
+    if (seedBudgets && budgetMutationVersionRef.current === budgetSyncedVersionRef.current) {
+      setBudgets(seedBudgets);
+    }
+    budgetSyncedVersionRef.current = budgetMutationVersionRef.current;
+  }
 
   async function addTransaction(t: Omit<Transaction, "id">) {
     if (offline) {
       setTransactions(prev => [{ ...t, id: `local-${++localId}` }, ...prev]);
+      txMutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -97,11 +133,13 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to add transaction.");
     }
     setTransactions(prev => [data.data.transaction as Transaction, ...prev]);
+    txMutationVersionRef.current++;
   }
 
   async function deleteTransaction(id: string) {
     if (offline) {
       setTransactions(prev => prev.filter(t => t.id !== id));
+      txMutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -114,6 +152,7 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to delete transaction.");
     }
     setTransactions(prev => prev.filter(t => t.id !== id));
+    txMutationVersionRef.current++;
   }
 
   async function saveBudgets(entries: Budget[]) {
@@ -129,6 +168,7 @@ export function AppProvider({
         }
         return next;
       });
+      budgetMutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -142,6 +182,7 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to save budgets.");
     }
     setBudgets(data.data.budgets as Budget[]);
+    budgetMutationVersionRef.current++;
   }
 
   return (
