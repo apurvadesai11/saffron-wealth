@@ -142,11 +142,22 @@ model Account {
 // this yet — it exists so a future net-worth-over-time chart has real history.
 // `userId` is denormalized to support per-user history queries and a possible
 // future pivot to soft-delete without a data migration.
+//
+// `asOf` (Phase 3, Task 5) is the calendar date the balance is true as of —
+// for Phase 1's create/edit paths that's just "now" (the @default), but the
+// balance-history import sets it to the CSV's own Date so history isn't
+// dated by when the import ran. `recordedAt` stays the audit/insert
+// timestamp; Task 6 tiebreaks same-`asOf` events by it. Deliberately NO
+// `@@unique([accountId, asOf])` — Phase 1 legitimately writes more than one
+// event for the same account on the same calendar day (editing a balance
+// twice in one sitting), so uniqueness has to be enforced in application
+// code (the import's dedup Set), not the schema.
 model AccountBalanceEvent {
   id         String   @id @default(cuid())
   userId     String
   accountId  String
   balance    Decimal  @db.Decimal(14, 2)
+  asOf       DateTime @db.Date @default(now())
   recordedAt DateTime @default(now())
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -154,6 +165,7 @@ model AccountBalanceEvent {
 
   @@index([userId])
   @@index([accountId, recordedAt])
+  @@index([accountId, asOf])
 }
 
 // Income/expense (and 'transfer', for Monarch-imported transfer rows —
