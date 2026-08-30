@@ -527,10 +527,23 @@ filtered point.
 - The page is an RSC: fetch the user's `AccountBalanceEvent` rows + accounts, call
   `computeNetWorthSeries` **server-side**, pass the series down. The chart is read-only derived
   data — no client-side recomputation of the raw event log.
+- **Volume matters here.** A real balance-history import writes ~34,000 events for ~33 accounts.
+  Loading every event on every Net Worth page render, purely to derive ~2,250 chart points, is the
+  obvious performance trap. Select only `accountId`, `asOf`, `balance`, `recordedAt` (never
+  `SELECT *`), order in the database rather than in JS, and confirm the `[accountId, asOf]` index
+  from Task 5 is actually used. If a measurement shows this is too slow, say so in the report
+  rather than silently adding a cache — a pre-aggregated snapshot table is a legitimate follow-up
+  but is out of scope for this task.
 - Render `NetWorthChart` above the summary cards.
 - "Import balance history" button → modal → preview/confirm against Task 5's route, same pattern
   as Task 4.
-- After a successful import, refresh so chart + summary cards both update.
+- After a successful import, chart + summary cards must both update. **Note the difference from
+  Task 4:** the Net Worth page does *not* go through `AppProvider` — `NetWorthClient` owns its own
+  state and mutates via `/api/accounts` (the self-contained persisted-page pattern). So none of
+  Task 4's seed-sync / `beginRefresh` machinery applies here; follow `NetWorthClient`'s existing
+  add/edit/delete pattern of updating local state from the mutation response, and only reach for
+  `router.refresh()` if the derived series genuinely cannot be updated locally — in which case say
+  why in the report.
 
 **Tests:** E2E — import a small balance-history fixture, assert the chart appears, toggle a range,
 assert `data-point-count` changes. Then the cross-check that matters: **net worth "today" from the
