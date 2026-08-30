@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   Dispatch,
   SetStateAction,
@@ -62,6 +63,23 @@ export function AppProvider({
   const [budgets, setBudgets] = useState<Budget[]>(seedBudgets ?? MOCK_BUDGETS);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const categories = seedCategories ?? MOCK_CATEGORIES;
+
+  // useState's initializer only runs on mount, so a later re-render carrying
+  // a fresh seed prop (e.g. app/(app)/layout.tsx re-fetching after
+  // router.refresh()) would otherwise be silently ignored here — unlike
+  // `categories` above, which is a plain binding and picks up new props for
+  // free. The Monarch import (Phase 2b) is the first mutation that creates
+  // rows the client has no per-row response to merge locally, so it leans on
+  // this refresh path instead. Guarded on the seed reference itself, not a
+  // fixed interval, so it only fires when the server layout actually
+  // re-ran — normal client-side navigation between (app) routes reuses the
+  // same layout instance and never touches this.
+  useEffect(() => {
+    if (seedTransactions) setTransactions(seedTransactions);
+  }, [seedTransactions]);
+  useEffect(() => {
+    if (seedBudgets) setBudgets(seedBudgets);
+  }, [seedBudgets]);
 
   async function addTransaction(t: Omit<Transaction, "id">) {
     if (offline) {
