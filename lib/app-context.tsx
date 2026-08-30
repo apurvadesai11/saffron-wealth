@@ -24,6 +24,15 @@ interface AppContextValue {
   saveBudgets: (entries: Budget[]) => Promise<void>;
   addTransaction: (t: Omit<Transaction, "id">) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  // Call immediately before router.refresh() whenever a caller needs the
+  // eventual fresh seed adopted even if a local mutation happened earlier in
+  // the session (see the long comment above the seed-sync block below for
+  // why this exists — the provider can't infer "refresh requested now" on
+  // its own). Optional for any caller that doesn't need that guarantee;
+  // skipping it just means that caller's refresh behaves like a plain,
+  // unguarded adopt (today's profile-page saves, which don't touch
+  // transactions/budgets at all, don't need to call this).
+  beginRefresh: () => void;
   // Lifted so the sidebar AlertsButton and the MonthlyReviewWidget share state
   dismissedKeys: Set<string>;
   setDismissedKeys: Dispatch<SetStateAction<Set<string>>>;
@@ -67,59 +76,86 @@ export function AppProvider({
   // useState's initializer only runs on mount, so a later re-render carrying
   // a fresh seed prop (e.g. app/(app)/layout.tsx re-fetching after
   // router.refresh() — the Monarch import's commit calls it because a bulk
-  // write has no per-row response to merge locally, and app/(app)/profile/
-  // page.tsx already calls it after every profile save and picture upload)
-  // would otherwise be silently ignored here — unlike `categories` above,
-  // which is a plain binding and picks up new props for free. Guarded on the
-  // seed reference itself, not a fixed interval, so it only fires when the
-  // server layout actually re-ran — normal client-side navigation between
-  // (app) routes reuses the same layout instance and never touches this.
+  // write has no per-row response to merge locally) would otherwise be
+  // silently ignored here — unlike `categories` above, which is a plain
+  // binding and picks up new props for free. Guarded on the seed reference
+  // itself, not a fixed interval, so it only fires when the server layout
+  // actually re-ran — normal client-side navigation between (app) routes
+  // reuses the same layout instance and, as far as this file's callers go
+  // today, shouldn't touch this; app/(app)/profile/page.tsx's two
+  // router.refresh() calls are the one other trigger, and both immediately
+  // navigate to /login, unmounting this provider before it matters.
   //
   // A naive "just adopt the new seed" version of this has a real race:
   // router.refresh() snapshots the DB at some point during its round trip.
   // If a *newer* local mutation (e.g. deleting a transaction) completes
   // after that snapshot was taken but before the refreshed props land,
   // blindly adopting the seed resurrects whatever the newer mutation just
-  // removed. `*MutationVersionRef` is bumped by every local mutation
-  // (add/delete/save, online or offline); `*SyncedVersionRef` records the
-  // mutation version as of the last seed we accepted or skipped. If they
-  // still match when a new seed arrives, nothing local has raced ahead of
-  // it and it's safe to adopt; if they don't, the seed is treated as
-  // possibly stale and skipped — the more-recent local truth wins, and the
-  // seed's own new information (e.g. freshly imported rows) simply waits
-  // for the next clean refresh instead. That's a narrow trade-off, but far
-  // safer than ever re-materializing something the user just deleted.
+  // removed. The fix needs to know the mutation count as of the moment the
+  // refresh was *requested* — not as of the last seed change, which was the
+  // bug in an earlier version of this guard: a mutation from minutes
+  // earlier in the session (this provider lives at the (app) layout level
+  // and survives navigation) would permanently look like a "race" against
+  // every later refresh, even ones that postdate it by a mile, silently
+  // dropping their data forever.
   //
-  // Adjusting state directly during render (React's documented pattern for
-  // deriving state from a changed prop) rather than in a useEffect applies
-  // the new value before the first paint, instead of painting the old state
-  // and correcting it a frame later.
+  // `mutationVersionRef` is bumped by every local mutation (add/delete tx,
+  // save budgets; online or offline). `beginRefresh()` — called by a
+  // consumer immediately before it calls router.refresh() — snapshots that
+  // counter into `pendingRefreshBaseline` state. When a new seed arrives:
+  //   - no snapshot pending (`null`, the default) → adopt unconditionally.
+  //     A caller that never calls beginRefresh() gets exactly the old
+  //     unguarded behavior, so profile-page-style refreshes (which never
+  //     touch financial data) can't be permanently locked out of adoption
+  //     by an unrelated mutation just because they didn't opt in.
+  //   - snapshot pending and unchanged → nothing raced the requested
+  //     refresh; adopt.
+  //   - snapshot pending and changed → something mutated after the refresh
+  //     was requested; skip. The seed's own new information (e.g. freshly
+  //     imported rows) waits for the next clean refresh instead — a narrow
+  //     trade-off, but far safer than resurrecting something just deleted.
+  // The snapshot is consumed (reset to null) the moment a seed change is
+  // evaluated, whether adopted or skipped, so it can never latch and block
+  // some later, unrelated refresh.
+  //
+  // Both the "consumed" reset and the previous-seed trackers live in
+  // useState, not a plain ref: a ref write made during render is not rolled
+  // back if that render attempt is discarded (an interrupted transition —
+  // router.refresh() runs at transition priority — or a Suspense/error
+  // retry), so a discarded attempt could permanently consume the snapshot
+  // before the "real" committed attempt ever sees it. State updates queued
+  // during render don't have that problem — this is also, incidentally,
+  // React's documented pattern for deriving state from a changed prop,
+  // applying the new value before the first paint instead of painting the
+  // old state and correcting it a frame later.
   const [prevSeedTransactions, setPrevSeedTransactions] = useState(seedTransactions);
   const [prevSeedBudgets, setPrevSeedBudgets] = useState(seedBudgets);
-  const txMutationVersionRef = useRef(0);
-  const txSyncedVersionRef = useRef(0);
-  const budgetMutationVersionRef = useRef(0);
-  const budgetSyncedVersionRef = useRef(0);
+  const [pendingRefreshBaseline, setPendingRefreshBaseline] = useState<number | null>(null);
+  const mutationVersionRef = useRef(0);
 
-  if (seedTransactions !== prevSeedTransactions) {
-    setPrevSeedTransactions(seedTransactions);
-    if (seedTransactions && txMutationVersionRef.current === txSyncedVersionRef.current) {
-      setTransactions(seedTransactions);
-    }
-    txSyncedVersionRef.current = txMutationVersionRef.current;
+  function beginRefresh() {
+    setPendingRefreshBaseline(mutationVersionRef.current);
   }
-  if (seedBudgets !== prevSeedBudgets) {
-    setPrevSeedBudgets(seedBudgets);
-    if (seedBudgets && budgetMutationVersionRef.current === budgetSyncedVersionRef.current) {
-      setBudgets(seedBudgets);
+
+  const seedTransactionsChanged = seedTransactions !== prevSeedTransactions;
+  const seedBudgetsChanged = seedBudgets !== prevSeedBudgets;
+  if (seedTransactionsChanged) setPrevSeedTransactions(seedTransactions);
+  if (seedBudgetsChanged) setPrevSeedBudgets(seedBudgets);
+
+  if (seedTransactionsChanged || seedBudgetsChanged) {
+    const safeToAdopt =
+      pendingRefreshBaseline === null || mutationVersionRef.current === pendingRefreshBaseline;
+    if (safeToAdopt) {
+      if (seedTransactionsChanged && seedTransactions) setTransactions(seedTransactions);
+      if (seedBudgetsChanged && seedBudgets) setBudgets(seedBudgets);
     }
-    budgetSyncedVersionRef.current = budgetMutationVersionRef.current;
+    if (pendingRefreshBaseline !== null) setPendingRefreshBaseline(null);
   }
 
   async function addTransaction(t: Omit<Transaction, "id">) {
     if (offline) {
       setTransactions(prev => [{ ...t, id: `local-${++localId}` }, ...prev]);
-      txMutationVersionRef.current++;
+      mutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -133,13 +169,13 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to add transaction.");
     }
     setTransactions(prev => [data.data.transaction as Transaction, ...prev]);
-    txMutationVersionRef.current++;
+    mutationVersionRef.current++;
   }
 
   async function deleteTransaction(id: string) {
     if (offline) {
       setTransactions(prev => prev.filter(t => t.id !== id));
-      txMutationVersionRef.current++;
+      mutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -152,7 +188,7 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to delete transaction.");
     }
     setTransactions(prev => prev.filter(t => t.id !== id));
-    txMutationVersionRef.current++;
+    mutationVersionRef.current++;
   }
 
   async function saveBudgets(entries: Budget[]) {
@@ -168,7 +204,7 @@ export function AppProvider({
         }
         return next;
       });
-      budgetMutationVersionRef.current++;
+      mutationVersionRef.current++;
       return;
     }
     const csrf = readCsrfCookie() ?? "";
@@ -182,7 +218,7 @@ export function AppProvider({
       throw new Error(data?.error?.message ?? "Failed to save budgets.");
     }
     setBudgets(data.data.budgets as Budget[]);
-    budgetMutationVersionRef.current++;
+    mutationVersionRef.current++;
   }
 
   return (
@@ -193,6 +229,7 @@ export function AppProvider({
       saveBudgets,
       addTransaction,
       deleteTransaction,
+      beginRefresh,
       dismissedKeys,
       setDismissedKeys,
     }}>

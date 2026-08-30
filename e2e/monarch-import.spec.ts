@@ -11,10 +11,19 @@ const FIXTURE_PATH = join(
   "app/api/transactions/__tests__/fixtures/monarch-transactions-sample.csv",
 );
 
-// Only one test in this file imports the fixture, deliberately — the worker's
-// authed user persists across tests (see net-worth.spec.ts's note on real
-// Postgres state), and re-committing the same file a second time would only
-// find duplicates, which is a different scenario than this one.
+// A second, disjoint fixture (distinct externalHash from the first, so this
+// test's import is never treated as a duplicate) — needed because the
+// regression test below needs an import whose rows are genuinely new, on
+// top of the worker's own already-committed history from the first test.
+const FIXTURE_PATH_2 = join(
+  process.cwd(),
+  "app/api/transactions/__tests__/fixtures/monarch-transactions-sample-2.csv",
+);
+
+// Each test imports a different fixture, deliberately — the worker's authed
+// user persists across tests (see net-worth.spec.ts's note on real Postgres
+// state), and re-committing the same file a second time would only find
+// duplicates, which is a different scenario than either test here.
 test.describe("Monarch import", () => {
   test("previews a CSV, confirms the import, and the imported rows appear", async ({ page }) => {
     await page.goto("/transactions");
@@ -50,5 +59,39 @@ test.describe("Monarch import", () => {
     await expect(page.getByText("Fresh Grocer")).toBeVisible();
     await expect(page.getByText("Initech Payroll")).toBeVisible();
     await expect(page.getByText("City Cab Co")).toBeVisible();
+  });
+
+  // Reproduces the exact shape the guard in lib/app-context.tsx exists to
+  // handle: a local mutation (unrelated to the import) that happened BEFORE
+  // the import was even opened, not one that races the refresh. A guard that
+  // compares the mutation count against "last seed change" instead of
+  // "when this refresh was requested" treats that earlier, unrelated add as
+  // a race and drops the import's own data — the regression a prior fix
+  // round introduced and this test is here to catch.
+  test("a transaction added before opening the import still lets the import's own rows appear", async ({ page }) => {
+    await page.goto("/transactions");
+
+    const description = `Pre-import add ${Date.now()}`;
+    await page.getByRole("button", { name: "+ Add Transaction" }).click();
+    await page.getByLabel("Description").fill(description);
+    await page.getByLabel("Amount").fill("7.50");
+    await page.getByRole("button", { name: "Save Transaction" }).click();
+    await expect(page.getByText(description)).toBeVisible();
+
+    await page.getByRole("button", { name: "Import from Monarch" }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Monarch transactions CSV").setInputFiles(FIXTURE_PATH_2);
+    await expect(modal).toHaveAttribute("data-import-step", "preview");
+
+    await modal.getByRole("button", { name: "Confirm import" }).click();
+    await expect(modal).toHaveAttribute("data-import-step", "success");
+    await modal.getByRole("button", { name: "Done" }).click();
+    await expect(modal).not.toBeVisible();
+
+    // The import's own new data must actually appear post-refresh — not
+    // just the earlier, already-visible local add.
+    await expect(page.getByText("Second Coffee Co")).toBeVisible();
+    // And the earlier, unrelated mutation must still be there too.
+    await expect(page.getByText(description)).toBeVisible();
   });
 });

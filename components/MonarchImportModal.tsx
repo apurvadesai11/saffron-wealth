@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useApp } from "@/lib/app-context";
 import type { CategoryType } from "@/lib/types";
 // Type-only, so this pulls in nothing at runtime — a real `import` would
 // bring in lib/transaction-import.ts's Prisma-adjacent value imports, but
@@ -35,6 +36,7 @@ interface Props {
 
 export default function MonarchImportModal({ onClose }: Props) {
   const router = useRouter();
+  const { beginRefresh } = useApp();
   const [step, setStep] = useState<Step>("pick");
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -125,8 +127,13 @@ export default function MonarchImportModal({ onClose }: Props) {
       // AppProvider seeds transactions/categories/budgets once from
       // app/(app)/layout.tsx and only mutates them locally afterward (see
       // lib/app-context.tsx) — a batch import has no per-row response to
-      // merge in the way addTransaction does, so re-run the layout instead
-      // and let the provider's seed-sync effect adopt the fresh data.
+      // merge in the way addTransaction does, so re-run the layout instead.
+      // beginRefresh() must be called immediately before router.refresh():
+      // it snapshots the current mutation count so the provider can tell
+      // whether some other local edit races ahead of this specific refresh
+      // (in which case it skips adopting the resulting seed) versus merely
+      // happened earlier in the session (in which case it still adopts).
+      beginRefresh();
       router.refresh();
     } catch {
       setError("Network error.");

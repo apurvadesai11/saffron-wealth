@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MonarchImportModal from "./MonarchImportModal";
+import { renderWithApp } from "./__tests__/test-utils";
 
-// This component talks to /api/transactions/import directly (it doesn't read
-// useApp()), so a mocked fetch is the whole test surface — no renderWithApp
-// needed. next/navigation's useRouter must still be mocked since the
-// component calls router.refresh() after a successful commit.
+// The import call itself talks to /api/transactions/import directly (a
+// mocked fetch is the whole test surface for that), but the component also
+// reads useApp() for beginRefresh() (see lib/app-context.tsx), so it needs a
+// real AppProvider ancestor — renderWithApp, not plain render. next/
+// navigation's useRouter must still be mocked since the component calls
+// router.refresh() after a successful commit.
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -66,7 +69,7 @@ describe("MonarchImportModal — preview → confirm → success", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true, summary: PREVIEW_SUMMARY, imported: 3, skipped: 2 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MonarchImportModal onClose={vi.fn()} />);
+    renderWithApp(<MonarchImportModal onClose={vi.fn()} />);
 
     const input = screen.getByLabelText("Monarch transactions CSV");
     await pickFile(input, csvFile());
@@ -115,7 +118,7 @@ describe("MonarchImportModal — preview → confirm → success", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const onClose = vi.fn();
-    render(<MonarchImportModal onClose={onClose} />);
+    renderWithApp(<MonarchImportModal onClose={onClose} />);
 
     await pickFile(screen.getByLabelText("Monarch transactions CSV"), csvFile());
     await waitFor(() => screen.getByRole("button", { name: "Confirm import" }));
@@ -135,7 +138,7 @@ describe("MonarchImportModal — error path", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MonarchImportModal onClose={vi.fn()} />);
+    renderWithApp(<MonarchImportModal onClose={vi.fn()} />);
     await pickFile(screen.getByLabelText("Monarch transactions CSV"), csvFile());
 
     await waitFor(() => {
@@ -154,7 +157,7 @@ describe("MonarchImportModal — error path", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MonarchImportModal onClose={vi.fn()} />);
+    renderWithApp(<MonarchImportModal onClose={vi.fn()} />);
     await pickFile(screen.getByLabelText("Monarch transactions CSV"), csvFile());
     await waitFor(() => screen.getByRole("button", { name: "Confirm import" }));
 
@@ -173,7 +176,7 @@ describe("MonarchImportModal — error path", () => {
     const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<MonarchImportModal onClose={vi.fn()} />);
+    renderWithApp(<MonarchImportModal onClose={vi.fn()} />);
     await pickFile(screen.getByLabelText("Monarch transactions CSV"), csvFile());
 
     await waitFor(() => {
