@@ -177,7 +177,6 @@ export async function resolveAccountIds(
 
 export interface BalanceHistoryAccountGroup {
   name: string;
-  firstDate: string; // "YYYY-MM-DD"
   lastDate: string; // "YYYY-MM-DD" — the CSV's last row for this account
   finalBalanceSigned: number; // raw signed balance on lastDate, before abs/clamp
 }
@@ -212,10 +211,18 @@ export async function upsertAccountsFromBalanceHistory(
   write: boolean = false,
 ): Promise<ResolvedBalanceHistoryAccount[]> {
   const names = groups.map((g) => g.name);
+  // orderBy makes the "most recently created" tiebreak below deterministic.
+  // createdAt alone isn't enough — it's @default(now()), and `now()` is
+  // constant within a transaction (the same hazard CLAUDE.md documents for
+  // Category.sortOrder), so two accounts created in the same transaction
+  // would otherwise tie and fall back to whatever order Postgres happened
+  // to return. id is a cuid, which is monotonically increasing at creation
+  // time, so it's a safe final tiebreaker.
   const existingRows = names.length
     ? await client.account.findMany({
         where: { userId, name: { in: names } },
         select: { id: true, name: true, type: true, archivedAt: true, createdAt: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       })
     : [];
 
@@ -255,16 +262,22 @@ export async function upsertAccountsFromBalanceHistory(
     // has stopped reporting — Monarch exports daily for every genuinely
     // active account, so this is a reliable "closed" signal. Soft-archive
     // rather than delete so its history still feeds a future graph.
-    const archived = group.lastDate < fileMaxDate;
+    const archivedByThisImport = group.lastDate < fileMaxDate;
     const balanceAsOf = dateStringToUtcDate(group.lastDate);
-    const archivedAtValue = archived ? importedAt : null;
 
     if (!existing) {
       // A live asset balance is never negative (Phase 1's rule); a debt
-      // balance is always stored as the positive amount owed.
+      // balance is always stored as the positive amount owed. This is
+      // DELIBERATELY different from how AccountBalanceEvent.balance is
+      // computed for debt accounts in lib/balance-history-import.ts (negated,
+      // not abs'd, and never clamped) — Account.balance is Phase 1's live,
+      // non-negative "amount owed today" invariant, not a historical record.
       const balance = guessedIsDebt
         ? Math.abs(group.finalBalanceSigned)
         : Math.max(group.finalBalanceSigned, 0);
+      // No prior row, so there's no existing archivedAt to protect —
+      // this import's own verdict is authoritative for a brand-new account.
+      const archivedAtValue = archivedByThisImport ? importedAt : null;
       let accountId: string | null = null;
       if (write) {
         const created = await client.account.create({
@@ -279,7 +292,13 @@ export async function upsertAccountsFromBalanceHistory(
         });
         accountId = created.id;
       }
-      results.push({ name: group.name, accountId, isNew: true, finalType: guessedType, archived });
+      results.push({
+        name: group.name,
+        accountId,
+        isNew: true,
+        finalType: guessedType,
+        archived: archivedAtValue !== null,
+      });
       continue;
     }
 
@@ -292,6 +311,19 @@ export async function upsertAccountsFromBalanceHistory(
       ? Math.abs(group.finalBalanceSigned)
       : Math.max(group.finalBalanceSigned, 0);
 
+    // Monotone archiving: this import may ADD an archivedAt (an account
+    // whose data newly says "closed"), but must never CLEAR one that's
+    // already set. Ruling 3's archival is an inference from data absence;
+    // an already-set archivedAt might instead be an explicit user delete
+    // (DELETE /api/accounts/[id]), and an inference must never silently
+    // override an explicit action — a re-import resurrecting a balance the
+    // user deliberately removed is the same class of trust violation as
+    // Task 4's resurrected-transaction bug. "Monotone" rather than "never
+    // touch on update" specifically so Ruling 3 still fires going forward:
+    // an account that closes BETWEEN two imports still gets archived by the
+    // second one, it just can never be un-archived by a later one.
+    const archivedAtValue = existing.archivedAt ?? (archivedByThisImport ? importedAt : null);
+
     if (write) {
       await client.account.update({
         where: { id: existing.id },
@@ -303,7 +335,13 @@ export async function upsertAccountsFromBalanceHistory(
         },
       });
     }
-    results.push({ name: group.name, accountId: existing.id, isNew: false, finalType, archived });
+    results.push({
+      name: group.name,
+      accountId: existing.id,
+      isNew: false,
+      finalType,
+      archived: archivedAtValue !== null,
+    });
   }
 
   return results;

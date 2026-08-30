@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createAccount, updateAccount } from "@/lib/accounts";
+import { createAccount, updateAccount, archiveAccount } from "@/lib/accounts";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const mocks = vi.hoisted(() => ({ sessionToken: null as string | null }));
@@ -43,6 +43,8 @@ const EXPECTED_FRESH_SUMMARY = {
   ],
   existingAccounts: 0,
   eventRows: 8,
+  newEventRows: 8,
+  duplicateEventRows: 0,
   skippedNonAccountRows: 1,
   dateRange: { from: "2026-01-01", to: "2026-01-03" },
 };
@@ -203,6 +205,11 @@ describe("POST /api/accounts/balance-history", () => {
     const brokerage = accounts.find((a) => a.name === "Legacy Brokerage")!;
     expect(brokerage.type).toBe("brokerage");
     expect(brokerage.balance.toNumber()).toBe(5200);
+    // balanceAsOf must be THIS account's own last date (01-02), not the
+    // file's max date (01-03) — checking.balanceAsOf alone wouldn't catch a
+    // bug that writes fileMaxDate everywhere, since Everyday Checking's own
+    // last date happens to equal it.
+    expect(brokerage.balanceAsOf.toISOString().slice(0, 10)).toBe("2026-01-02");
     // Closed early (last row 01-02, file max 01-03): imports archived.
     expect(brokerage.archivedAt).not.toBeNull();
 
@@ -230,12 +237,25 @@ describe("POST /api/accounts/balance-history", () => {
     expect(checkingEvents.map((e) => e.balance.toNumber())).toEqual([-50, 1000, 1200]);
   });
 
-  it("re-committing the same file inserts zero new events (application-level dedup)", async () => {
+  it("re-committing the same file inserts zero new events, and the re-import PREVIEW is honest about it (application-level dedup)", async () => {
     const user = await signIn();
     userId = user.id;
 
     const first = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
     expect((await first.json()).eventsInserted).toBe(8);
+
+    // The preview BEFORE re-committing must already reflect the dedup
+    // effect — a naive preview that reports the raw retained-row count as
+    // "new" would show 8 new rows here when the true number is 0 (this is
+    // exactly the "re-export full history in month 2" scenario).
+    const preview = await POST(multipartRequest({ mode: "preview", csrf: "csrf" }));
+    const previewBody = await preview.json();
+    expect(previewBody.summary.eventRows).toBe(8);
+    expect(previewBody.summary.newEventRows).toBe(0);
+    expect(previewBody.summary.duplicateEventRows).toBe(8);
+    expect(previewBody.eventsInserted).toBeUndefined();
+    // Preview must not have written anything.
+    expect(await prisma.accountBalanceEvent.count({ where: { userId } })).toBe(8);
 
     const second = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
     expect(second.status).toBe(200);
@@ -243,10 +263,36 @@ describe("POST /api/accounts/balance-history", () => {
     expect(secondBody.eventsInserted).toBe(0);
     expect(secondBody.summary.existingAccounts).toBe(3);
     expect(secondBody.summary.newAccounts).toEqual([]);
+    expect(secondBody.summary.newEventRows).toBe(0);
+    expect(secondBody.summary.duplicateEventRows).toBe(8);
 
     // Row count must be unchanged — dedup, not double-insert.
     expect(await prisma.accountBalanceEvent.count({ where: { userId } })).toBe(8);
     expect(await prisma.account.count({ where: { userId } })).toBe(3);
+  });
+
+  it("in-file same-account-same-day duplicate rows collapse to one event (last-wins), not two", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    const csv = "Date,Balance,Account\n2026-05-01,100.00,Repeat Test\n2026-05-01,200.00,Repeat Test\n";
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf", fileText: csv }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Both raw rows are retained (neither dropped nor skipped), but they
+    // collapse to a single event candidate — eventRows (the raw retained
+    // count) and eventsInserted (post-in-file-dedup) can legitimately
+    // differ. Without the in-file dedup, eventsInserted would be 2: nothing
+    // stops both from landing, since (accountId, asOf) has no unique
+    // constraint (Ruling 8).
+    expect(body.summary.eventRows).toBe(2);
+    expect(body.eventsInserted).toBe(1);
+
+    const account = await prisma.account.findFirst({ where: { userId, name: "Repeat Test" } });
+    const events = await prisma.accountBalanceEvent.findMany({ where: { accountId: account!.id } });
+    expect(events).toHaveLength(1);
+    // Last-in-file value wins, not the first.
+    expect(events[0].balance.toNumber()).toBe(200);
   });
 
   it("an existing account's user-corrected type survives re-import when the sign agrees", async () => {
@@ -295,6 +341,101 @@ describe("POST /api/accounts/balance-history", () => {
     // negative balance and the (non-mortgage-shaped) name as credit_card.
     expect(account?.type).toBe("credit_card");
     expect(account?.balance.toNumber()).toBe(800);
+  });
+
+  it("an existing debt-typed account whose imported final balance is positive is re-typed (Ruling 7, other direction)", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    await createAccount(userId, {
+      name: "Sunset Rewards",
+      type: "credit_card", // debt bucket
+      institution: null,
+      balance: 0,
+    });
+
+    // Now reports a positive final balance (e.g. paid off and overpaid),
+    // disagreeing with its stored debt-bucket type.
+    const csv = "Date,Balance,Account\n2026-03-01,300.00,Sunset Rewards\n";
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf", fileText: csv }));
+    expect(res.status).toBe(200);
+
+    const account = await prisma.account.findFirst({ where: { userId, name: "Sunset Rewards" } });
+    // Sign disagreement overrides the stored type — re-guessed from the
+    // positive balance and the (no-keyword-matching) name as "cash".
+    expect(account?.type).toBe("cash");
+    expect(account?.balance.toNumber()).toBe(300);
+  });
+
+  it("archivedAt is monotone: an account the user explicitly archived stays archived even if its data still runs to the file max", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    const created = await createAccount(userId, {
+      name: "Everyday Checking",
+      type: "cash",
+      institution: null,
+      balance: 500,
+    });
+    // Simulates DELETE /api/accounts/[id] — an explicit user action.
+    await archiveAccount(userId, created.id);
+
+    // The fixture's "Everyday Checking" rows run all the way to the file
+    // max (2026-01-03) — Ruling 3's own inference would say "still
+    // active," but the user's explicit delete must win and must never be
+    // silently cleared by a later import's data-driven inference.
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
+    expect(res.status).toBe(200);
+
+    const account = await prisma.account.findFirst({ where: { userId, name: "Everyday Checking" } });
+    expect(account?.archivedAt).not.toBeNull();
+  });
+
+  it("archivedAt can still progress forward: an existing active account whose data stops early gets archived", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    await createAccount(userId, {
+      name: "Legacy Brokerage",
+      type: "brokerage",
+      institution: null,
+      balance: 100,
+    });
+    const before = await prisma.account.findFirst({ where: { userId, name: "Legacy Brokerage" } });
+    expect(before?.archivedAt).toBeNull();
+
+    // The fixture's "Legacy Brokerage" rows stop one day before the file
+    // max — monotonicity only blocks CLEARING an archivedAt, so Ruling 3
+    // must still be free to SET one on an existing, currently-active account.
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
+    expect(res.status).toBe(200);
+
+    const after = await prisma.account.findFirst({ where: { userId, name: "Legacy Brokerage" } });
+    expect(after?.archivedAt).not.toBeNull();
+  });
+
+  it("debt event history stores the negated raw balance, not its absolute value — an overpayment day stays negative", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    // "Test Visa Card" always resolves to the credit_card (debt) type via
+    // guessAccountType's keyword match, regardless of which day's sign is
+    // final — isolating the negate-vs-abs behavior from the type guess.
+    const csv =
+      "Date,Balance,Account\n2026-04-01,-500.00,Test Visa Card\n2026-04-02,120.00,Test Visa Card\n";
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf", fileText: csv }));
+    expect(res.status).toBe(200);
+
+    const account = await prisma.account.findFirst({ where: { userId, name: "Test Visa Card" } });
+    expect(account?.type).toBe("credit_card");
+
+    const events = await prisma.accountBalanceEvent.findMany({ where: { accountId: account!.id } });
+    const balanceByDate = new Map(events.map((e) => [e.asOf.toISOString().slice(0, 10), e.balance.toNumber()]));
+    // -500 owed -> stored as +500 (amount owed). +120 (a credit/overpayment)
+    // -> stored as -120, NOT +120 — Math.abs would have collapsed both days
+    // to the same sign, hiding the overpayment as if it were still owed.
+    expect(balanceByDate.get("2026-04-01")).toBe(500);
+    expect(balanceByDate.get("2026-04-02")).toBe(-120);
   });
 
   it("Ruling 8 regression: a same-day double balance edit via updateAccount still succeeds", async () => {

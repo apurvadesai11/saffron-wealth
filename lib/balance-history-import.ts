@@ -10,9 +10,10 @@
 // `runBalanceHistoryImportPipeline` is called identically by both API route
 // modes so preview and commit can never compute a different-shaped summary
 // for the same file: preview passes the plain `prisma` client with
-// `commit: false` (read-only — see the early return below, which happens
-// before any write-shaped call is even reachable), commit passes a
-// `$transaction` callback's client with `commit: true`.
+// `commit: false`, commit passes a `$transaction` callback's client with
+// `commit: true`. The dedup lookup below runs in BOTH modes (it's a read),
+// so preview can honestly report how many rows would actually be new — only
+// the final `createBalanceHistoryEvents` insert is commit-gated.
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { parseAmount, guessAccountType, NON_ACCOUNT_NAMES } from "./monarch-transform";
@@ -62,9 +63,11 @@ interface ParsedRow {
 
 interface AccountAccumulator {
   name: string;
-  firstDate: string;
   lastDate: string;
   finalBalanceSigned: number; // the balance on `lastDate`
+  // One entry per (account, date) pair actually seen — see the in-file dedup
+  // note in the main loop below for why this can be shorter than the number
+  // of raw rows this account contributed.
   rows: { date: string; rawBalance: number }[];
 }
 
@@ -73,6 +76,18 @@ export interface BalanceHistoryImportSummary {
   newAccounts: { name: string; guessedType: AccountType; archived: boolean }[];
   existingAccounts: number;
   eventRows: number;
+  // Split against the DB, not just a raw count, so preview is actually
+  // honest: re-exporting full history in month 2 should preview close to 0
+  // new rows, not the whole file (Task 3's reviewed shape does the same
+  // split for transactions — newTransactions/duplicateRows alongside
+  // totalRows). A brand-new account's rows are always "new" without a DB
+  // round trip, since it has no prior events by construction. Note these
+  // two can sum to slightly less than `eventRows` when the file itself
+  // contains a same-account-same-day repeat (see the in-file dedup note
+  // below) — matching Task 3's own totalRows, which likewise isn't
+  // guaranteed to equal newTransactions + duplicateRows.
+  newEventRows: number;
+  duplicateEventRows: number;
   skippedNonAccountRows: number;
   dateRange: { from: string; to: string };
 }
@@ -120,32 +135,41 @@ export async function runBalanceHistoryImportPipeline(
     parsed.push({ date, accountName, rawBalance });
   }
 
-  // Pass 2: group by account (firstDate/lastDate/finalBalanceSigned feed
-  // Ruling 3's archive check and Ruling 4's sign-aware type guess) while
-  // also keeping every row so its balance can be sign-adjusted for the
-  // event log below, once each account's FINAL resolved type is known.
+  // For each (account, date) pair, remember the index of its LAST
+  // occurrence in `parsed` — a real Monarch export is one row per account
+  // per day, but a hand-edited or re-exported file could carry a revised
+  // value for a day it already reported. Without this, both rows would
+  // become separate event candidates for the exact same (accountId, asOf)
+  // key; since that key has no unique constraint (Ruling 8), both would
+  // insert, land in the same createMany batch, and get an IDENTICAL
+  // recordedAt — leaving Task 6's asOf-tie tiebreak nothing to prefer
+  // between them. Collapsing to the last-in-file value here is the same
+  // last-wins rule already used for `lastDate`/`finalBalanceSigned` below.
+  const lastIndexForKey = new Map<string, number>();
+  parsed.forEach((row, i) => {
+    lastIndexForKey.set(`${row.accountName}|${row.date}`, i);
+  });
+
+  // Pass 2: group by account. `lastDate`/`finalBalanceSigned` feed Ruling
+  // 3's archive check and Ruling 4's sign-aware type guess; `rows` (deduped
+  // per the note above) feeds the event log below, once each account's
+  // FINAL resolved type is known.
   const accountsByName = new Map<string, AccountAccumulator>();
   const accountNamesOrdered: string[] = [];
   let fileMinDate = "";
   let fileMaxDate = "";
 
-  for (const row of parsed) {
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i];
     if (fileMinDate === "" || row.date < fileMinDate) fileMinDate = row.date;
     if (fileMaxDate === "" || row.date > fileMaxDate) fileMaxDate = row.date;
 
     let acc = accountsByName.get(row.accountName);
     if (!acc) {
-      acc = {
-        name: row.accountName,
-        firstDate: row.date,
-        lastDate: row.date,
-        finalBalanceSigned: row.rawBalance,
-        rows: [],
-      };
+      acc = { name: row.accountName, lastDate: row.date, finalBalanceSigned: row.rawBalance, rows: [] };
       accountsByName.set(row.accountName, acc);
       accountNamesOrdered.push(row.accountName);
     }
-    if (row.date < acc.firstDate) acc.firstDate = row.date;
     // >= so that, within a same-day tie for an account's latest date, the
     // last-encountered row in file order wins. Real exports are one row per
     // account per day, so this tiebreak only matters for adversarial or
@@ -154,17 +178,16 @@ export async function runBalanceHistoryImportPipeline(
       acc.lastDate = row.date;
       acc.finalBalanceSigned = row.rawBalance;
     }
-    acc.rows.push({ date: row.date, rawBalance: row.rawBalance });
+    // Only the winning (last-in-file) row for this (account, date) pair
+    // becomes an event candidate.
+    if (lastIndexForKey.get(`${row.accountName}|${row.date}`) === i) {
+      acc.rows.push({ date: row.date, rawBalance: row.rawBalance });
+    }
   }
 
   const groups: BalanceHistoryAccountGroup[] = accountNamesOrdered.map((name) => {
     const acc = accountsByName.get(name)!;
-    return {
-      name: acc.name,
-      firstDate: acc.firstDate,
-      lastDate: acc.lastDate,
-      finalBalanceSigned: acc.finalBalanceSigned,
-    };
+    return { name: acc.name, lastDate: acc.lastDate, finalBalanceSigned: acc.finalBalanceSigned };
   });
 
   // Read-only when !opts.commit — upsertAccountsFromBalanceHistory only
@@ -173,6 +196,70 @@ export async function runBalanceHistoryImportPipeline(
   const resolved = await upsertAccountsFromBalanceHistory(userId, groups, fileMaxDate, client, opts.commit);
   const resolvedByName = new Map(resolved.map((r) => [r.name, r]));
 
+  // Sign-adjust every surviving row using the account's FINAL resolved
+  // type, not just its type going in — a re-typed account (Ruling 7) needs
+  // its whole history stored under the new sign convention, or older rows
+  // would keep the wrong one even though the account itself no longer does.
+  const eventCandidates: { accountId: string | null; asOf: string; balance: number; isNewAccount: boolean }[] = [];
+  for (const name of accountNamesOrdered) {
+    const acc = accountsByName.get(name)!;
+    const res = resolvedByName.get(name)!;
+    const isDebt = isLiability(getBucketForType(res.finalType));
+    for (const row of acc.rows) {
+      eventCandidates.push({
+        accountId: res.accountId,
+        asOf: row.date,
+        // Debt-bucket history is NEGATED, not abs'd: Monarch's raw balance
+        // for a debt account is already signed as "amount owed" (negative
+        // = owed, positive = a credit/overpayment) — negating preserves
+        // that sign exactly, so a rare overpaid-card day correctly becomes
+        // a NEGATIVE amount-owed instead of collapsing to the same
+        // magnitude as an ordinary owed-money day. This is deliberately
+        // asymmetric with Account.balance in lib/accounts.ts, which stays
+        // on its abs+clamp path — see the comment there for why.
+        balance: isDebt ? -row.rawBalance : row.rawBalance,
+        isNewAccount: res.isNew,
+      });
+    }
+  }
+
+  // Dedup against the DB only matters for accounts that already existed
+  // before this import — a brand-new account can't have prior events by
+  // construction, so its rows are new without a lookup. Running this in
+  // BOTH modes (not just commit) is what makes preview honest: existing
+  // accounts already carry a real `accountId` in preview mode too (only a
+  // brand-new account's id is null there), so there's no structural reason
+  // to skip this read on the preview path.
+  const existingAccountIds = [
+    ...new Set(
+      eventCandidates.filter((c) => !c.isNewAccount && c.accountId !== null).map((c) => c.accountId as string),
+    ),
+  ];
+  const existingDays = await findExistingBalanceEventDays(userId, existingAccountIds, client);
+
+  // NOTE for Task 6: this dedup is presence-only, not value-comparing. If a
+  // day already has an event and this import carries a REVISED balance for
+  // that same day, the revision is silently dropped — the existing (stale)
+  // value is what stays in history. There is currently no way to
+  // re-import a corrected historical balance short of deleting the event
+  // row directly.
+  let newEventRows = 0;
+  let duplicateEventRows = 0;
+  const newEvents: { accountId: string; asOf: string; balance: number }[] = [];
+  for (const c of eventCandidates) {
+    const isDuplicate = !c.isNewAccount && c.accountId !== null && existingDays.has(`${c.accountId}|${c.asOf}`);
+    if (isDuplicate) {
+      duplicateEventRows++;
+      continue;
+    }
+    newEventRows++;
+    // accountId is only null for a brand-new account in preview mode, where
+    // nothing gets inserted anyway (guarded by opts.commit below).
+    if (c.accountId !== null) {
+      newEvents.push({ accountId: c.accountId, asOf: c.asOf, balance: c.balance });
+    }
+  }
+
   const summary: BalanceHistoryImportSummary = {
     accountsFound: groups.length,
     newAccounts: resolved
@@ -180,6 +267,8 @@ export async function runBalanceHistoryImportPipeline(
       .map((r) => ({ name: r.name, guessedType: r.finalType, archived: r.archived })),
     existingAccounts: resolved.filter((r) => !r.isNew).length,
     eventRows: parsed.length,
+    newEventRows,
+    duplicateEventRows,
     skippedNonAccountRows,
     dateRange: { from: fileMinDate, to: fileMaxDate },
   };
@@ -187,31 +276,6 @@ export async function runBalanceHistoryImportPipeline(
   if (!opts.commit) {
     return { summary };
   }
-
-  // Sign-adjust every retained row using the account's FINAL resolved type,
-  // not just its type going in — a re-typed account (Ruling 7) needs its
-  // whole history stored under the new sign convention, or older rows would
-  // keep the wrong one even though the account itself no longer does.
-  const eventCandidates: { accountId: string; asOf: string; balance: number }[] = [];
-  for (const name of accountNamesOrdered) {
-    const acc = accountsByName.get(name)!;
-    const res = resolvedByName.get(name)!;
-    // Always set once opts.commit is true: upsertAccountsFromBalanceHistory
-    // only returns a null accountId in its read-only (preview) mode.
-    const accountId = res.accountId!;
-    const isDebt = isLiability(getBucketForType(res.finalType));
-    for (const row of acc.rows) {
-      eventCandidates.push({
-        accountId,
-        asOf: row.date,
-        balance: isDebt ? Math.abs(row.rawBalance) : row.rawBalance,
-      });
-    }
-  }
-
-  const affectedAccountIds = [...new Set(eventCandidates.map((c) => c.accountId))];
-  const existingDays = await findExistingBalanceEventDays(userId, affectedAccountIds, client);
-  const newEvents = eventCandidates.filter((c) => !existingDays.has(`${c.accountId}|${c.asOf}`));
 
   const eventsInserted = await createBalanceHistoryEvents(userId, newEvents, client);
 
