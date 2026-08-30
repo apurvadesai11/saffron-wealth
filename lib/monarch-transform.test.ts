@@ -181,7 +181,7 @@ describe("guessAccountType", () => {
 
   // Named specific cases from the brief, beyond the per-row floor.
   it("negative balance + 'Orig. $' marker -> loan_mortgage", () => {
-    expect(guessAccountType("1200 MAPLE STREET (Orig. $500,000.00) (...1111)", -816964.68)).toBe(
+    expect(guessAccountType("1200 MAPLE STREET (Orig. $500,000.00) (...1111)", -500000.0)).toBe(
       "loan_mortgage",
     );
   });
