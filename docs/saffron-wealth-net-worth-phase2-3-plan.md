@@ -537,6 +537,20 @@ filtered point.
 - Render `NetWorthChart` above the summary cards.
 - "Import balance history" button → modal → preview/confirm against Task 5's route, same pattern
   as Task 4.
+- **Archived-account visibility + restore (added after Task 5's review — this closes a trap the
+  monotone-archiving ruling opened).** Task 5 made `archivedAt` monotone: the import may archive an
+  account whose data went quiet, but may never un-archive one, so that a re-import can't silently
+  reverse a user's delete. The consequence is that there is currently **no un-archive path anywhere
+  in the app** — so if a partial or truncated export causes an account to be archived by inference,
+  it leaves `listAccounts` and net worth *permanently*, and a later correct full export cannot heal
+  it. A silent, unrecoverable understatement of net worth is worse than the problem monotone
+  archiving solved. Therefore: surface archived accounts on the Net Worth page (a collapsed
+  "Archived" group, excluded from the net-worth totals) with a **Restore** action that clears
+  `archivedAt`, plus whatever minimal support `PATCH /api/accounts/[id]` needs to accept it
+  (`lib/account-validation.ts` does not accept `archivedAt` today). Restore is an explicit user
+  action, which is exactly the authority level that Ruling 7's reasoning says may override an
+  inference. Test the round trip: archive → appears under Archived and excluded from totals →
+  restore → back in its bucket and counted again.
 - After a successful import, chart + summary cards must both update. **Note the difference from
   Task 4:** the Net Worth page does *not* go through `AppProvider` — `NetWorthClient` owns its own
   state and mutates via `/api/accounts` (the self-contained persisted-page pattern). So none of
