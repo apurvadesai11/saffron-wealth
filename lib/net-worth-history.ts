@@ -1,0 +1,138 @@
+// Net-worth-over-time series math (Phase 3). Pure — no Prisma, no fetch, no
+// React. Task 8's server-side caller queries AccountBalanceEvent, converts
+// Decimal/Date columns to number/"YYYY-MM-DD" strings, and calls this with
+// plain objects; the client then slices the returned MAX series by range.
+//
+// Ruling 3 — the rule this whole file exists to get right: an account's
+// contribution window is [firstDate, lastDate] taken from ITS OWN events,
+// not "forever after its first event ever happened." Real imported history
+// has accounts that stop reporting while frozen at a large non-zero balance
+// (a mortgage paid off, an ESPP liquidated) — reading "most recent event
+// <= D" with no upper bound would carry that frozen balance into every later
+// sample date, including today, i.e. a phantom mortgage in the CURRENT net
+// worth. Outside the window the contribution is exactly 0; carry-forward
+// (for accounts with sparse events) only ever applies INSIDE the window.
+//
+// Ruling 9 — Task 5's import has no unique constraint on (accountId, asOf):
+// Phase 1 legitimately appends a new event on every balance edit, so a user
+// changing a balance twice in one day is normal, not a data bug. When two
+// events share an asOf, the later recordedAt is the one that should carry.
+
+import { getBucketForType, isLiability } from "./account-utils";
+import type { AccountType } from "./types";
+
+export interface NetWorthPoint {
+  date: string;
+  value: number;
+}
+
+interface BalanceEventInput {
+  accountId: string;
+  asOf: string; // "YYYY-MM-DD"
+  balance: number;
+  recordedAt: string; // ISO — only its ordering matters here, not its value
+}
+
+interface AccountInput {
+  id: string;
+  type: AccountType;
+}
+
+// One account's events reduced to what the sweep needs: the order carry-
+// forward should walk them in, and the window derived from that order.
+interface AccountSeries {
+  liability: boolean;
+  // asOf ascending, tiebroken by recordedAt ascending (Ruling 9) — so for a
+  // repeated asOf, the last entry in this array is the one that should win.
+  events: { asOf: string; balance: number }[];
+  firstDate: string;
+  lastDate: string;
+}
+
+export function computeNetWorthSeries(
+  events: BalanceEventInput[],
+  accounts: AccountInput[],
+): NetWorthPoint[] {
+  if (events.length === 0) return [];
+
+  const typeById = new Map(accounts.map((a) => [a.id, a.type]));
+
+  const eventsByAccount = new Map<string, BalanceEventInput[]>();
+  for (const event of events) {
+    const bucket = eventsByAccount.get(event.accountId);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      eventsByAccount.set(event.accountId, [event]);
+    }
+  }
+
+  const series = new Map<string, AccountSeries>();
+  const sampleDates = new Set<string>();
+
+  for (const [accountId, accountEvents] of eventsByAccount) {
+    const type = typeById.get(accountId);
+    // An event whose account isn't in the roster has no type to key the
+    // asset/liability taxonomy off of — drop it rather than guess a bucket.
+    if (!type) continue;
+
+    // Lexicographic comparison is valid for "YYYY-MM-DD" and avoids building
+    // a Date per event in what's otherwise a hot sort.
+    const sorted = [...accountEvents].sort((a, b) => {
+      if (a.asOf !== b.asOf) return a.asOf < b.asOf ? -1 : 1;
+      if (a.recordedAt !== b.recordedAt) return a.recordedAt < b.recordedAt ? -1 : 1;
+      return 0;
+    });
+
+    for (const e of sorted) sampleDates.add(e.asOf);
+
+    series.set(accountId, {
+      liability: isLiability(getBucketForType(type)),
+      events: sorted.map((e) => ({ asOf: e.asOf, balance: e.balance })),
+      firstDate: sorted[0].asOf,
+      lastDate: sorted[sorted.length - 1].asOf,
+    });
+  }
+
+  const sortedDates = [...sampleDates].sort();
+
+  // Moving index per account, persisted across the date loop below: since
+  // sortedDates is ascending, each account's cursor only ever steps forward
+  // through its own events and never rescans from the start. That makes the
+  // whole sweep O(dates * accounts) with an O(events) amortized cost for the
+  // index advances, instead of O(dates * events) re-scanning per date.
+  const cursor = new Map<string, number>();
+  for (const accountId of series.keys()) cursor.set(accountId, 0);
+
+  const points: NetWorthPoint[] = [];
+  for (const date of sortedDates) {
+    let total = 0;
+
+    for (const [accountId, acct] of series) {
+      if (date < acct.firstDate || date > acct.lastDate) continue; // Ruling 3
+
+      let idx = cursor.get(accountId)!;
+      // Advance while the NEXT event is still on-or-before this date — the
+      // last event stepped onto is the carry-forward value for `date`. When
+      // several events share an asOf (Ruling 9), this walks through all of
+      // them and stops on the last (latest-recordedAt) one.
+      while (idx + 1 < acct.events.length && acct.events[idx + 1].asOf <= date) {
+        idx++;
+      }
+      cursor.set(accountId, idx);
+
+      const balance = acct.events[idx].balance;
+      total += acct.liability ? -balance : balance;
+    }
+
+    // Round once, here, per point — not accumulated across dates (each
+    // point is an independent sum of ~30 account balances, not a running
+    // total), but summing that many Decimal-turned-number values can still
+    // land a fraction of a cent off true due to binary float rounding.
+    // Money is displayed to the cent, so snap back to the cent explicitly
+    // rather than let e.g. 1234567.9999999998 leak into the chart/tooltip.
+    points.push({ date, value: Math.round(total * 100) / 100 });
+  }
+
+  return points;
+}
