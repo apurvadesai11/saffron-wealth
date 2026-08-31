@@ -5,13 +5,27 @@
 //
 // Ruling 3 — the rule this whole file exists to get right: an account's
 // contribution window starts at firstDate (never before it existed) and, for
-// an ARCHIVED account, closes at lastDate too. Real imported history has
-// accounts that stop reporting while frozen at a large non-zero balance (a
-// mortgage paid off, an ESPP liquidated) — reading "most recent event <= D"
-// with no upper bound would carry that frozen balance into every later
-// sample date, including today, i.e. a phantom mortgage in the CURRENT net
-// worth. Task 5 archives exactly those accounts, so gating the upper bound
-// on archivedAt still closes their window and still zeroes them out today.
+// an ARCHIVED account, closes before its archive date too. Real imported
+// history has accounts that stop reporting while frozen at a large non-zero
+// balance (a mortgage paid off, an ESPP liquidated) — reading "most recent
+// event <= D" with no upper bound would carry that frozen balance into every
+// later sample date, including today, i.e. a phantom mortgage in the CURRENT
+// net worth. Task 5 archives exactly those accounts, so gating the upper
+// bound closes their window and zeroes them out today.
+//
+// Amendment (Task 8 review finding): the upper bound is
+// min(lastDate, dayBefore(archivedAt)), not lastDate alone. archiveAccount
+// (lib/accounts.ts) never writes a closing AccountBalanceEvent, so an
+// account created and archived on the SAME calendar day has lastDate equal
+// to its own archive date — "date > lastDate" alone doesn't exclude that
+// day, so the series would still count it on the very day the live summary
+// card (computeNetWorth, via listAccounts) already excludes it
+// unconditionally. Comparing directly against archivedAt's date closes that
+// gap: an archived account contributes on date D iff D >= firstDate && D <=
+// lastDate && D < archivedAtDate. In the ordinary case — an account that
+// stopped reporting well before a later import archived it — archivedAtDate
+// is far later than lastDate, so this min is still just lastDate and the
+// mortgage example above is unchanged.
 //
 // Amendment: an ACTIVE account has no upper bound — its last known balance
 // carries forward to the end of the series. This exists because Phase 1's
@@ -52,10 +66,15 @@ interface AccountInput {
 // forward should walk them in, and the window derived from that order.
 interface AccountSeries {
   liability: boolean;
-  // Gates whether lastDate ever closes the window at all — see the Ruling 3
-  // amendment above. Only whether this is non-null matters; its value (a
-  // timestamp) is never compared against anything.
+  // Gates whether the archive-date upper bound below applies at all — see
+  // the Ruling 3 amendment above.
   archived: boolean;
+  // Date portion ("YYYY-MM-DD") of archivedAt — only meaningful when
+  // `archived` is true. This IS compared against sample dates now (Ruling 3
+  // amendment); an earlier version of this file claimed the timestamp was
+  // "never compared against anything," which was itself the tell that it
+  // carried information the logic below was throwing away.
+  archivedAtDate: string | null;
   // asOf ascending, tiebroken by recordedAt ascending (Ruling 9) — so for a
   // repeated asOf, the last entry in this array is the one that should win.
   events: { asOf: string; balance: number }[];
@@ -107,6 +126,7 @@ export function computeNetWorthSeries(
       // the exact bug this field exists to prevent, by drawing a LOWER line
       // (a real account dropped from "today") rather than throwing.
       archived: account.archivedAt != null,
+      archivedAtDate: account.archivedAt != null ? account.archivedAt.slice(0, 10) : null,
       events: sorted.map((e) => ({ asOf: e.asOf, balance: e.balance })),
       firstDate: sorted[0].asOf,
       lastDate: sorted[sorted.length - 1].asOf,
@@ -129,7 +149,14 @@ export function computeNetWorthSeries(
 
     for (const [accountId, acct] of series) {
       if (date < acct.firstDate) continue; // never existed yet — lower bound is unconditional
-      if (date > acct.lastDate && acct.archived) continue; // Ruling 3: closed accounts stop, active ones carry forward below
+      // Ruling 3 (amended): an archived account's window closes at
+      // min(lastDate, dayBefore(archivedAtDate)) — active accounts have no
+      // upper bound and carry forward below. The archivedAtDate half of
+      // this OR exists specifically for same-day create-then-archive:
+      // archiveAccount never writes a closing event, so lastDate alone can
+      // equal today even though the account is already archived as of
+      // today, which "date > lastDate" alone would fail to exclude.
+      if (acct.archived && (date > acct.lastDate || date >= acct.archivedAtDate!)) continue;
 
       let idx = cursor.get(accountId)!;
       // Advance while the NEXT event is still on-or-before this date — the

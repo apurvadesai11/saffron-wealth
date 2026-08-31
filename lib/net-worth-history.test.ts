@@ -304,6 +304,23 @@ describe("computeNetWorthSeries", () => {
       expect(points.find((p) => p.date === "2026-02-01")?.value).toBe(100);
     });
 
+    // Task 8 review finding: archiveAccount (lib/accounts.ts) never writes a
+    // closing AccountBalanceEvent, so an account created and archived on the
+    // SAME calendar day has lastDate === its own archive date. Pre-fix,
+    // "date > lastDate" alone doesn't exclude that day (equal isn't
+    // greater), so the series would still count it on the very day the live
+    // summary card (computeNetWorth, via listAccounts) already excludes it
+    // unconditionally — a full-balance mismatch between the chart and the
+    // summary card, not the documented one-cent/overpaid-debt caveat.
+    it("an account archived the SAME day it was created contributes nothing on that day", () => {
+      const points = computeNetWorthSeries(
+        [ev("sameDay", "2026-01-01", 500)],
+        // Archived later the same calendar day (different time, same date).
+        [acct("sameDay", "cash", "2026-01-01T18:00:00.000Z")],
+      );
+      expect(points).toEqual([{ date: "2026-01-01", value: 0 }]);
+    });
+
     it("date before firstDate -> 0 regardless of archived state", () => {
       const points = computeNetWorthSeries(
         [

@@ -121,4 +121,54 @@ test.describe("Net Worth — history chart and balance-history import", () => {
     const afterRestore = parseCurrency(await netWorthCard.locator("p.text-2xl").innerText());
     expect(afterRestore).toBeCloseTo(before, 2);
   });
+
+  // Regression test for a review finding: archiveAccount (lib/accounts.ts)
+  // never writes a closing AccountBalanceEvent, so an account created and
+  // archived on the SAME calendar day has its one event (the opening
+  // balance, dated "now" at creation) sharing the same date as archivedAt.
+  // Pre-fix, lib/net-worth-history.ts's upper-bound check ("date >
+  // lastDate") didn't exclude that day, so the chart still counted this
+  // account on today's point while the summary card (which excludes
+  // archived accounts unconditionally) already didn't — a full-dollar
+  // mismatch, not the documented one-cent/overpaid-debt caveat. This test
+  // creates the same-day-archived account itself, rather than depending on
+  // another test's account already being in that state.
+  test("cross-check holds for an account archived the same day it was created", async ({ page }) => {
+    const name = `E2E Same-Day Archive ${Date.now()}`;
+    const balance = 500;
+    await page.goto("/net-worth");
+
+    await page.getByRole("button", { name: "+ Add Account" }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Account name").fill(name);
+    await modal.getByLabel("Type").selectOption("cash");
+    await modal.getByLabel("Balance").fill(String(balance));
+    await modal.getByRole("button", { name: "Add Account" }).click();
+    await expect(modal).not.toBeVisible();
+    await expect(page.getByText(name)).toBeVisible();
+
+    // Archive it immediately — same calendar day as creation.
+    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
+
+    // Add/delete don't refresh the chart locally (only a committed import
+    // does — see NetWorthClient's design note); reload so the series is
+    // recomputed server-side from the fresh Postgres state, including this
+    // account's event and its same-day archivedAt. Without this reload the
+    // chart's `series` prop would still be the one fetched at initial page
+    // load, before this account even existed, and the comparison below
+    // would prove nothing either way.
+    await page.reload();
+
+    const netWorthCard = page.locator("[data-net-worth-sign]");
+    const cardValue = parseCurrency(await netWorthCard.locator("p.text-2xl").innerText());
+
+    const slider = page.getByRole("slider", { name: "Net worth value explorer" });
+    const valueText = await slider.getAttribute("aria-valuetext");
+    const chartValue = parseCurrency(valueText!.split(":")[1]);
+
+    // Pre-fix this would fail by roughly $500 (this account's balance),
+    // not by a rounding cent — see the comment above the test.
+    expect(Math.abs(chartValue - cardValue)).toBeLessThanOrEqual(0.01);
+  });
 });
