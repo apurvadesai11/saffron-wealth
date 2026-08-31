@@ -139,4 +139,26 @@ describe("parseUpdateAccountBody", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toEqual({ institution: null });
   });
+
+  it("accepts archivedAt: null (Restore) as the sole patch field", () => {
+    const r = parseUpdateAccountBody({ archivedAt: null });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ archivedAt: null });
+  });
+
+  it("rejects any non-null archivedAt value — PATCH can only clear it, never set it", () => {
+    const timestamp = parseUpdateAccountBody({ archivedAt: "2026-01-01T00:00:00.000Z" });
+    expect(timestamp.ok).toBe(false);
+    if (!timestamp.ok) expect(timestamp.fieldErrors.archivedAt).toBeTruthy();
+
+    const truthy = parseUpdateAccountBody({ archivedAt: true });
+    expect(truthy.ok).toBe(false);
+    if (!truthy.ok) expect(truthy.fieldErrors.archivedAt).toBeTruthy();
+  });
+
+  it("allows archivedAt: null combined with another field in the same patch", () => {
+    const r = parseUpdateAccountBody({ archivedAt: null, name: "Restored Account" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ archivedAt: null, name: "Restored Account" });
+  });
 });

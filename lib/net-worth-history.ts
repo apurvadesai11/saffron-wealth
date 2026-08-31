@@ -100,7 +100,13 @@ export function computeNetWorthSeries(
 
     series.set(accountId, {
       liability: isLiability(getBucketForType(account.type)),
-      archived: account.archivedAt !== null,
+      // `!= null` (not `!== null`): the caller hand-maps Prisma's Date | null
+      // into this string | null shape, and a runtime `undefined` slipping
+      // through that mapping must still read as "active," not "archived" —
+      // `!== null` would treat undefined as archived and silently reproduce
+      // the exact bug this field exists to prevent, by drawing a LOWER line
+      // (a real account dropped from "today") rather than throwing.
+      archived: account.archivedAt != null,
       events: sorted.map((e) => ({ asOf: e.asOf, balance: e.balance })),
       firstDate: sorted[0].asOf,
       lastDate: sorted[sorted.length - 1].asOf,

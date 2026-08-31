@@ -141,6 +141,80 @@ describe("PATCH /api/accounts/[id]", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).data.account.type).toBe("credit_card");
   });
+
+  // Restore round trip (Phase 3, Task 8): archive → PATCH {archivedAt: null}
+  // clears it. This is the only PATCH shape allowed to touch an already-
+  // archived row — every other PATCH in this file targets an active one.
+  it("restores an archived account by PATCHing archivedAt: null", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const account = await prisma.account.create({
+      data: { userId: user.id, name: "Closed by import", type: "brokerage", balance: 5000, archivedAt: new Date() },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const req = makeRequest({ method: "PATCH", csrfToken: "csrf", body: { archivedAt: null } });
+    const res = await PATCH(req, params(account.id));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.account.id).toBe(account.id);
+
+    const row = await prisma.account.findUnique({ where: { id: account.id } });
+    expect(row?.archivedAt).toBeNull();
+  });
+
+  it("returns 404 restoring an account that isn't archived (nothing to restore)", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const account = await prisma.account.create({
+      data: { userId: user.id, name: "Already active", type: "cash", balance: 100 },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const req = makeRequest({ method: "PATCH", csrfToken: "csrf", body: { archivedAt: null } });
+    const res = await PATCH(req, params(account.id));
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a PATCH that tries to set archivedAt to a non-null value (archiving stays DELETE-only)", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const account = await prisma.account.create({
+      data: { userId: user.id, name: "Cannot archive via PATCH", type: "cash", balance: 100 },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const req = makeRequest({
+      method: "PATCH",
+      csrfToken: "csrf",
+      body: { archivedAt: "2026-01-01T00:00:00.000Z" },
+    });
+    const res = await PATCH(req, params(account.id));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_FAILED");
+
+    const row = await prisma.account.findUnique({ where: { id: account.id } });
+    expect(row?.archivedAt).toBeNull();
+  });
+
+  it("restoring another user's archived account returns 404", async () => {
+    const me = await seedUser();
+    userId = me.id;
+    const other = await seedUser();
+    otherUserId = other.id;
+    const otherAccount = await prisma.account.create({
+      data: { userId: other.id, name: "Not mine", type: "cash", balance: 100, archivedAt: new Date() },
+    });
+    const { rawToken } = await seedSession(me.id);
+    mocks.sessionToken = rawToken;
+
+    const req = makeRequest({ method: "PATCH", csrfToken: "csrf", body: { archivedAt: null } });
+    const res = await PATCH(req, params(otherAccount.id));
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("DELETE /api/accounts/[id]", () => {

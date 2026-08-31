@@ -126,6 +126,17 @@ export function parseUpdateAccountBody(body: unknown): ParseResult<AccountPatch>
   if ("institution" in b) {
     value.institution = readInstitution(b, fieldErrors);
   }
+  // Restore-only: archivedAt may be PATCHed to exactly `null` (clear it) and
+  // nothing else — there is no PATCH-based way to set it, so any other
+  // value is rejected rather than silently ignored. Archiving stays
+  // DELETE-only (archiveAccount).
+  if ("archivedAt" in b) {
+    if (b.archivedAt !== null) {
+      fieldErrors.archivedAt = "archivedAt can only be cleared (set to null) to restore an account.";
+    } else {
+      value.archivedAt = null;
+    }
+  }
 
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
   if (Object.keys(value).length === 0) {

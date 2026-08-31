@@ -149,4 +149,10 @@ export interface AccountInput {
 }
 
 // PATCH allows any subset of the create fields (but never an empty patch).
-export type AccountPatch = Partial<AccountInput>;
+// `archivedAt` is a narrow bolt-on for Restore (Phase 3, Task 8): the ONLY
+// legal value is `null` (clearing it) — there is no PATCH-based way to
+// archive an account, that stays DELETE-only (archiveAccount). Restoring is
+// an explicit user action, which is the authority level the monotone-
+// archiving ruling in lib/accounts.ts reserves for overriding an
+// import-inferred archive.
+export type AccountPatch = Partial<AccountInput> & { archivedAt?: null };

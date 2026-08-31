@@ -40,6 +40,17 @@ export async function listAccounts(userId: string): Promise<Account[]> {
   return rows.map(mapAccount);
 }
 
+// The Restore surface's read side (Phase 3, Task 8): every account
+// archivedAt has been set on, most-recently-archived first, so the Net
+// Worth page can render them in a collapsed group with a way back in.
+export async function listArchivedAccounts(userId: string): Promise<Account[]> {
+  const rows = await prisma.account.findMany({
+    where: { userId, archivedAt: { not: null } },
+    orderBy: { archivedAt: "desc" },
+  });
+  return rows.map(mapAccount);
+}
+
 export async function createAccount(userId: string, input: AccountInput): Promise<Account> {
   const balance = new Prisma.Decimal(input.balance);
   const row = await prisma.$transaction(async (tx) => {
@@ -69,8 +80,15 @@ export async function updateAccount(
   id: string,
   patch: AccountPatch,
 ): Promise<Account | null> {
+  // Restore (Phase 3, Task 8) is the one PATCH shape that must find an
+  // ARCHIVED row — every other edit only ever targets an active one (an
+  // archived account has no other PATCH path; it has to be restored first).
+  // Keeping this as a branch on the existing lookup, rather than a separate
+  // restoreAccount function, means both cases share the exact same
+  // ownership check and Account/AccountBalanceEvent transaction below.
+  const isRestore = patch.archivedAt === null;
   const existing = await prisma.account.findFirst({
-    where: { id, userId, archivedAt: null },
+    where: isRestore ? { id, userId, archivedAt: { not: null } } : { id, userId, archivedAt: null },
   });
   if (!existing) return null;
 
@@ -85,6 +103,7 @@ export async function updateAccount(
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.type !== undefined ? { type: patch.type } : {}),
         ...(patch.institution !== undefined ? { institution: patch.institution } : {}),
+        ...(isRestore ? { archivedAt: null } : {}),
         ...(balanceChanged
           ? { balance: nextBalance, balanceAsOf: new Date() }
           : {}),
@@ -399,4 +418,70 @@ export async function createBalanceHistoryEvents(
     inserted += result.count;
   }
   return inserted;
+}
+
+// ── Net-worth-over-time series (Phase 3, Task 8) ───────────────────────────
+// Feeds lib/net-worth-history.ts's computeNetWorthSeries, which
+// app/(app)/net-worth/page.tsx calls server-side — the raw event log this
+// function returns never reaches the browser, only the derived
+// NetWorthPoint[] does.
+
+export interface AccountSeriesRosterRow {
+  id: string;
+  type: AccountType;
+  archivedAt: string | null;
+}
+
+// EVERY account, archived included — deliberately NOT listAccounts, whose
+// `archivedAt: null` filter would drop an archived account from this roster
+// entirely. computeNetWorthSeries treats a roster miss as "no type to key
+// the asset/liability taxonomy off of" and discards that account's events
+// outright, which would erase a closed account from every PAST chart point
+// too (the years it was genuinely open), not just today's. The summary
+// cards keep using listAccounts; only the chart roster uses this.
+export async function listAccountsForSeries(userId: string): Promise<AccountSeriesRosterRow[]> {
+  const rows = await prisma.account.findMany({
+    where: { userId },
+    select: { id: true, type: true, archivedAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type as AccountType,
+    archivedAt: r.archivedAt ? r.archivedAt.toISOString() : null,
+  }));
+}
+
+export interface BalanceEventSeriesRow {
+  accountId: string;
+  asOf: string; // "YYYY-MM-DD"
+  balance: number;
+  recordedAt: string; // ISO
+}
+
+// Selects only the four columns computeNetWorthSeries reads (never
+// `SELECT *`) and orders in Postgres rather than pulling ~34,000 rows into
+// JS unsorted, per the Task 8 brief's volume note. Measured against a
+// synthetic 33-account/~34,000-event table on this app's dev Postgres:
+// Postgres chooses a scan on the plain `userId` index followed by an
+// in-memory quicksort over the [accountId, asOf] composite index from Task
+// 5 — the single-user WHERE clause already narrows the result set small
+// enough that the planner doesn't need the composite index for this shape
+// of query — but execution stays at single-digit milliseconds even at full
+// realistic volume (~6-16ms server-side; see Task 8's report for the exact
+// EXPLAIN ANALYZE output). computeNetWorthSeries also re-sorts each
+// account's own events after grouping regardless of input order, so this
+// ORDER BY isn't load-bearing for correctness either — it exists purely so
+// the query layer never has to redo that ordering work in JS.
+export async function listBalanceEventsForSeries(userId: string): Promise<BalanceEventSeriesRow[]> {
+  const rows = await prisma.accountBalanceEvent.findMany({
+    where: { userId },
+    select: { accountId: true, asOf: true, balance: true, recordedAt: true },
+    orderBy: [{ accountId: "asc" }, { asOf: "asc" }],
+  });
+  return rows.map((r) => ({
+    accountId: r.accountId,
+    asOf: utcDateToDateString(r.asOf),
+    balance: r.balance.toNumber(),
+    recordedAt: r.recordedAt.toISOString(),
+  }));
 }

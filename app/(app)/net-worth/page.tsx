@@ -1,6 +1,12 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/server";
-import { listAccounts } from "@/lib/accounts";
+import {
+  listAccounts,
+  listArchivedAccounts,
+  listAccountsForSeries,
+  listBalanceEventsForSeries,
+} from "@/lib/accounts";
+import { computeNetWorthSeries } from "@/lib/net-worth-history";
 import NetWorthClient from "@/components/NetWorthClient";
 
 export default async function NetWorthPage() {
@@ -9,7 +15,25 @@ export default async function NetWorthPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const accounts = await listAccounts(session.user.id);
+  const [accounts, archivedAccounts, seriesRoster, seriesEvents] = await Promise.all([
+    listAccounts(session.user.id),
+    listArchivedAccounts(session.user.id),
+    listAccountsForSeries(session.user.id),
+    listBalanceEventsForSeries(session.user.id),
+  ]);
 
-  return <NetWorthClient initialAccounts={accounts} />;
+  // Derived server-side, once, from the raw event log — the chart only ever
+  // receives the finished NetWorthPoint[] as a prop and never recomputes it
+  // client-side. seriesRoster (not `accounts`) is deliberate: it includes
+  // archived accounts, which the series still needs for the years they were
+  // open (see lib/accounts.ts's listAccountsForSeries).
+  const series = computeNetWorthSeries(seriesEvents, seriesRoster);
+
+  return (
+    <NetWorthClient
+      initialAccounts={accounts}
+      initialArchivedAccounts={archivedAccounts}
+      series={series}
+    />
+  );
 }
