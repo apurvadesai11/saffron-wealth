@@ -4,14 +4,23 @@
 // plain objects; the client then slices the returned MAX series by range.
 //
 // Ruling 3 — the rule this whole file exists to get right: an account's
-// contribution window is [firstDate, lastDate] taken from ITS OWN events,
-// not "forever after its first event ever happened." Real imported history
-// has accounts that stop reporting while frozen at a large non-zero balance
-// (a mortgage paid off, an ESPP liquidated) — reading "most recent event
-// <= D" with no upper bound would carry that frozen balance into every later
+// contribution window starts at firstDate (never before it existed) and, for
+// an ARCHIVED account, closes at lastDate too. Real imported history has
+// accounts that stop reporting while frozen at a large non-zero balance (a
+// mortgage paid off, an ESPP liquidated) — reading "most recent event <= D"
+// with no upper bound would carry that frozen balance into every later
 // sample date, including today, i.e. a phantom mortgage in the CURRENT net
-// worth. Outside the window the contribution is exactly 0; carry-forward
-// (for accounts with sparse events) only ever applies INSIDE the window.
+// worth. Task 5 archives exactly those accounts, so gating the upper bound
+// on archivedAt still closes their window and still zeroes them out today.
+//
+// Amendment: an ACTIVE account has no upper bound — its last known balance
+// carries forward to the end of the series. This exists because Phase 1's
+// createAccount writes exactly one opening-balance event, so a hand-entered
+// account's own lastDate is its creation day; closing its window there would
+// make it vanish from every later chart point (including "today") while it
+// still counts in the live summary card. Carry-forward-inside-the-window
+// (for accounts with sparse events) applies regardless of archived state;
+// only the "does the window ever end" question depends on it.
 //
 // Ruling 9 — Task 5's import has no unique constraint on (accountId, asOf):
 // Phase 1 legitimately appends a new event on every balance edit, so a user
@@ -36,12 +45,17 @@ interface BalanceEventInput {
 interface AccountInput {
   id: string;
   type: AccountType;
+  archivedAt: string | null;
 }
 
 // One account's events reduced to what the sweep needs: the order carry-
 // forward should walk them in, and the window derived from that order.
 interface AccountSeries {
   liability: boolean;
+  // Gates whether lastDate ever closes the window at all — see the Ruling 3
+  // amendment above. Only whether this is non-null matters; its value (a
+  // timestamp) is never compared against anything.
+  archived: boolean;
   // asOf ascending, tiebroken by recordedAt ascending (Ruling 9) — so for a
   // repeated asOf, the last entry in this array is the one that should win.
   events: { asOf: string; balance: number }[];
@@ -53,9 +67,7 @@ export function computeNetWorthSeries(
   events: BalanceEventInput[],
   accounts: AccountInput[],
 ): NetWorthPoint[] {
-  if (events.length === 0) return [];
-
-  const typeById = new Map(accounts.map((a) => [a.id, a.type]));
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   const eventsByAccount = new Map<string, BalanceEventInput[]>();
   for (const event of events) {
@@ -71,10 +83,10 @@ export function computeNetWorthSeries(
   const sampleDates = new Set<string>();
 
   for (const [accountId, accountEvents] of eventsByAccount) {
-    const type = typeById.get(accountId);
+    const account = accountById.get(accountId);
     // An event whose account isn't in the roster has no type to key the
     // asset/liability taxonomy off of — drop it rather than guess a bucket.
-    if (!type) continue;
+    if (!account) continue;
 
     // Lexicographic comparison is valid for "YYYY-MM-DD" and avoids building
     // a Date per event in what's otherwise a hot sort.
@@ -87,7 +99,8 @@ export function computeNetWorthSeries(
     for (const e of sorted) sampleDates.add(e.asOf);
 
     series.set(accountId, {
-      liability: isLiability(getBucketForType(type)),
+      liability: isLiability(getBucketForType(account.type)),
+      archived: account.archivedAt !== null,
       events: sorted.map((e) => ({ asOf: e.asOf, balance: e.balance })),
       firstDate: sorted[0].asOf,
       lastDate: sorted[sorted.length - 1].asOf,
@@ -109,7 +122,8 @@ export function computeNetWorthSeries(
     let total = 0;
 
     for (const [accountId, acct] of series) {
-      if (date < acct.firstDate || date > acct.lastDate) continue; // Ruling 3
+      if (date < acct.firstDate) continue; // never existed yet — lower bound is unconditional
+      if (date > acct.lastDate && acct.archived) continue; // Ruling 3: closed accounts stop, active ones carry forward below
 
       let idx = cursor.get(accountId)!;
       // Advance while the NEXT event is still on-or-before this date — the
@@ -131,7 +145,11 @@ export function computeNetWorthSeries(
     // land a fraction of a cent off true due to binary float rounding.
     // Money is displayed to the cent, so snap back to the cent explicitly
     // rather than let e.g. 1234567.9999999998 leak into the chart/tooltip.
-    points.push({ date, value: Math.round(total * 100) / 100 });
+    // `|| 0` specifically: when the true total is $0.00 and the float dust
+    // lands negative (e.g. 0.3 - 0.1 - 0.2), Math.round produces -0, which
+    // Intl.NumberFormat renders as "-$0.00" and which Object.is/toBe treats
+    // as distinct from 0.
+    points.push({ date, value: Math.round(total * 100) / 100 || 0 });
   }
 
   return points;
