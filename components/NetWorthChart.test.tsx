@@ -5,6 +5,7 @@ import NetWorthChart, {
   getCutoffDate,
   filterSeriesByRange,
   computeYDomain,
+  seriesCrossesZero,
   buildPathD,
   nearestIndexForTime,
 } from "./NetWorthChart";
@@ -47,6 +48,25 @@ describe("getCutoffDate", () => {
 
   it("returns null for MAX — no lower bound", () => {
     expect(getCutoffDate("MAX", LAST_DATE)).toBeNull();
+  });
+
+  // Regression coverage: naive `Date.setMonth`/`setFullYear` arithmetic keeps
+  // the original day-of-month and lets JS overflow into the *next* month
+  // when the target month is shorter (e.g. Feb 31 normalizes to Mar 3). A
+  // real net-worth series' last date is normally "today," so this class of
+  // bug silently misfires on roughly a third of all possible last dates —
+  // it just never showed up before because every other fixture in this file
+  // happens to use a day-of-month that exists in every month.
+  it("clamps into the target month's last day for 3M/6M off a 31st, instead of overflowing into March", () => {
+    expect(getCutoffDate("3M", "2026-05-31")).toBe("2026-02-28");
+    expect(getCutoffDate("6M", "2026-08-31")).toBe("2026-02-28");
+  });
+
+  it("clamps a Feb 29 last date to Feb 28 of the target non-leap year for 1Y/3Y/5Y/10Y", () => {
+    expect(getCutoffDate("1Y", "2024-02-29")).toBe("2023-02-28");
+    expect(getCutoffDate("3Y", "2024-02-29")).toBe("2021-02-28");
+    expect(getCutoffDate("5Y", "2024-02-29")).toBe("2019-02-28");
+    expect(getCutoffDate("10Y", "2024-02-29")).toBe("2014-02-28");
   });
 });
 
@@ -107,6 +127,43 @@ describe("computeYDomain", () => {
     expect(Number.isNaN(max)).toBe(false);
     expect(min).toBeLessThan(0);
     expect(max).toBeGreaterThan(0);
+  });
+
+  // The component's series.length === 0 branch returns before rendering
+  // anything that reads `domain`, but its useMemo chain still runs above
+  // that return (hooks can't be conditional) with filtered = [] — so this
+  // guards the specific empty-array call the component actually makes.
+  // Without the explicit length check, Math.min(...[])/Math.max(...[])
+  // (±Infinity) would turn into NaN through the padding subtraction/addition.
+  it("returns a degenerate but non-NaN domain for an empty values array", () => {
+    const [min, max] = computeYDomain([]);
+    expect(Number.isNaN(min)).toBe(false);
+    expect(Number.isNaN(max)).toBe(false);
+  });
+});
+
+describe("seriesCrossesZero", () => {
+  it("is true when the raw data spans negative to positive", () => {
+    expect(seriesCrossesZero([-800000, -50000, 100000, 550000])).toBe(true);
+  });
+
+  it("is false for an all-positive series even when its minimum is small relative to its span", () => {
+    // Regression case: computeYDomain's 8% pad on a $1,000-$100,000 series
+    // pushes the padded floor to -$6,920 — below zero even though every
+    // real data point is positive. crossesZero must not be derived from
+    // that padded domain, or this would incorrectly report a crossing.
+    const values = [1000, 50000, 100000];
+    const [paddedMin] = computeYDomain(values);
+    expect(paddedMin).toBeLessThan(0); // confirms the padding does dip below zero here
+    expect(seriesCrossesZero(values)).toBe(false);
+  });
+
+  it("is false for an all-negative series", () => {
+    expect(seriesCrossesZero([-900000, -850000, -700000])).toBe(false);
+  });
+
+  it("is false for an empty array", () => {
+    expect(seriesCrossesZero([])).toBe(false);
   });
 });
 
@@ -277,6 +334,21 @@ describe("<NetWorthChart /> — negative values and the zero crossing", () => {
     expect(container.querySelector('[data-crosses-zero]')).toHaveAttribute("data-crosses-zero", "false");
     expect(container.querySelector("path")).toBeInTheDocument();
   });
+
+  it("does not mark data-crosses-zero for an all-positive series whose minimum is small relative to its span", () => {
+    // Regression case for deriving crossesZero from the padded domain
+    // instead of the raw data: this series' min (1000) is small enough that
+    // computeYDomain's 8% pad dips its floor below zero, but every actual
+    // point is still positive — the chart must not draw a zero line here.
+    const nearZeroButPositive: NetWorthPoint[] = [
+      { date: "2025-01-01", value: 1000 },
+      { date: "2025-06-01", value: 50000 },
+      { date: "2026-01-01", value: 100000 },
+    ];
+    const { container } = render(<NetWorthChart series={nearZeroButPositive} />);
+    expect(container.querySelector('[data-crosses-zero]')).toHaveAttribute("data-crosses-zero", "false");
+    expect(container.querySelectorAll("svg line")).toHaveLength(0);
+  });
 });
 
 describe("<NetWorthChart /> — hover interaction doesn't crash without real layout", () => {
@@ -287,5 +359,128 @@ describe("<NetWorthChart /> — hover interaction doesn't crash without real lay
       fireEvent.mouseMove(overlay, { clientX: 100, clientY: 50 });
       fireEvent.mouseLeave(overlay);
     }).not.toThrow();
+  });
+});
+
+// role="img" prunes an element's descendants from the accessibility tree,
+// which would have made the axis min/max/date labels — the only non-hover
+// way to read a number off this chart — invisible to screen readers while
+// still visible to sighted users. These tests cover the fix: a static
+// sr-only summary living outside the SVG, and a keyboard-operable slider
+// that drives the same hoverIndex state (and therefore the same tooltip)
+// the mouse does.
+describe("<NetWorthChart /> — accessible without hovering or a mouse", () => {
+  it("exposes a static summary of the chart's values outside the SVG, independent of any hover", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    // Covers the same ground as the visible axis labels: range, point count,
+    // and the first/last point's formatted date + value.
+    const summary = screen.getByText(/^Net worth chart, MAX range, 9 data points\./);
+    expect(summary).toHaveTextContent("2020"); // first point's year
+    expect(summary).toHaveTextContent("2026"); // last point's year
+  });
+
+  it("the slider control defaults its value to the most recent point before any interaction", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(series.length - 1));
+    expect(slider).toHaveAttribute("aria-valuemin", "0");
+    expect(slider).toHaveAttribute("aria-valuemax", String(series.length - 1));
+  });
+
+  it("ArrowLeft/ArrowRight step the focused index without a mouse", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    fireEvent.keyDown(slider, { key: "ArrowLeft" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(series.length - 2));
+
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(series.length - 1));
+  });
+
+  it("ArrowRight does not step past the last index", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(series.length - 1));
+  });
+
+  it("Home/End jump to the first/last visible point", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    fireEvent.keyDown(slider, { key: "Home" });
+    expect(slider).toHaveAttribute("aria-valuenow", "0");
+
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(series.length - 1));
+  });
+
+  it("Home/End re-filter correctly after a range change, matching the narrower point set", async () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    await userEvent.click(screen.getByRole("button", { name: "YTD" }));
+
+    const ytdCount = filterSeriesByRange(series, "YTD").length;
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(slider).toHaveAttribute("aria-valuenow", String(ytdCount - 1));
+  });
+
+  it("updates aria-valuetext to the focused point's formatted date and value", () => {
+    const series = makeSeries();
+    render(<NetWorthChart series={series} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    fireEvent.keyDown(slider, { key: "Home" });
+    expect(slider).toHaveAttribute("aria-valuetext", expect.stringContaining("2020"));
+    expect(slider).toHaveAttribute("aria-valuetext", expect.stringContaining("$800,000"));
+  });
+
+  it("the live region is silent until the control is actually moved, then announces the focused point", () => {
+    const series = makeSeries();
+    const { container } = render(<NetWorthChart series={series} />);
+    const liveRegion = container.querySelector('[aria-live="polite"]')!;
+    expect(liveRegion).toHaveTextContent("");
+
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+    fireEvent.keyDown(slider, { key: "Home" });
+    expect(liveRegion.textContent).not.toBe("");
+    expect(liveRegion.textContent).toContain("2020");
+  });
+
+  it("focusing the slider (Tab) activates the live announcement, same as a native range input revealing its value", () => {
+    // aria-valuenow already defaults to the last index before any
+    // interaction (see the "defaults its value" test above), so this test
+    // asserts the part that actually changes on focus: the live region,
+    // silent until now, starts speaking.
+    const series = makeSeries();
+    const { container } = render(<NetWorthChart series={series} />);
+    const liveRegion = container.querySelector('[aria-live="polite"]')!;
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+
+    expect(liveRegion).toHaveTextContent("");
+    fireEvent.focus(slider);
+    expect(liveRegion.textContent).not.toBe("");
+  });
+
+  it("does not throw when stepping a single-point series by keyboard", () => {
+    const single: NetWorthPoint[] = [{ date: "2026-01-01", value: 100000 }];
+    render(<NetWorthChart series={single} />);
+    const slider = screen.getByRole("slider", { name: "Net worth value explorer" });
+    expect(() => {
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      fireEvent.keyDown(slider, { key: "ArrowLeft" });
+      fireEvent.keyDown(slider, { key: "Home" });
+      fireEvent.keyDown(slider, { key: "End" });
+    }).not.toThrow();
+    expect(slider).toHaveAttribute("aria-valuemax", "0");
   });
 });
