@@ -460,9 +460,26 @@ export interface NetWorthPoint { date: string; value: number }
 
 export function computeNetWorthSeries(
   events: { accountId: string; asOf: string; balance: number; recordedAt: string }[],
-  accounts: { id: string; type: AccountType }[],
+  accounts: { id: string; type: AccountType; archivedAt: string | null }[],
 ): NetWorthPoint[]
 ```
+
+**Amendment (added after Task 6's first review) — `archivedAt`, not `lastDate`, is the closed
+signal.** The original spec closed every account's contribution window at its own last event. That
+is right for an *imported* account (Ruling 3: every active account exports daily, so silence means
+closed) but wrong for a **manually created** one: Phase 1's `createAccount` writes exactly one
+opening balance event, so a hand-entered account's window would be a single day — contributing to
+one point of the chart and **nothing at "today"**, while still counting in the summary card. Since
+hand entry is currently the only way to add an account, that is a visible defect in the primary
+Phase 3 deliverable, not an edge case.
+
+So: the window's **lower** bound is always `firstDate` (an account contributes nothing before it
+existed). The **upper** bound applies **only to archived accounts** — carry an active account's last
+known balance forward to the end of the series. This preserves Ruling 3 exactly, because Task 5
+archives precisely those imported accounts whose data stopped early: the phantom paid-off mortgage
+is archived, so its window still closes and it still contributes zero today. It also makes the
+chart's final point agree with the summary card by construction, since `listAccounts` filters on
+`archivedAt: null` — the same predicate.
 
 Algorithm:
 
@@ -470,9 +487,10 @@ Algorithm:
    `recordedAt` ascending so the latest-written value for a date is the one carried (Ruling 9).
 2. Per account record `firstDate` and `lastDate` (min/max `asOf`) — its **contribution window**.
 3. Sample dates = the sorted unique union of every event `asOf`.
-4. For each sample date `D`, per account: `0` when `D < firstDate` **or `D > lastDate`**
-   (Ruling 3); otherwise the balance of the most recent event `≤ D` (carry-forward *within* the
-   window only).
+4. For each sample date `D`, per account: `0` when `D < firstDate`; also `0` when `D > lastDate`
+   **but only if the account is archived** (Ruling 3, as amended above — an active account carries
+   its last known balance forward to the end of the series). Otherwise the balance of the most
+   recent event `≤ D`.
 5. Signed contribution: `isLiability(getBucketForType(type)) ? -balance : balance` — reusing
    `lib/account-utils.ts`, not reimplementing the taxonomy.
 6. Sum per date → one `NetWorthPoint`. Return the full MAX series; the client slices by range.
@@ -559,9 +577,22 @@ filtered point.
   `router.refresh()` if the derived series genuinely cannot be updated locally — in which case say
   why in the report.
 
+- **The series query must include archived accounts.** `computeNetWorthSeries` needs
+  `{ id, type, archivedAt }` for **every** account, archived ones included, because their history
+  is exactly what the chart must still show for the years they were open. `listAccounts` filters
+  `archivedAt: null` and is therefore the wrong function here — the summary cards keep using it,
+  the chart does not.
+
 **Tests:** E2E — import a small balance-history fixture, assert the chart appears, toggle a range,
 assert `data-point-count` changes. Then the cross-check that matters: **net worth "today" from the
 chart's last point equals the summary card** computed independently by `lib/account-utils.ts`.
+Two caveats on that assertion, both consequences of decisions made earlier and neither a bug to
+"fix" here: compare with a **one-cent tolerance**, because the series rounds per point while
+`computeNetWorth` does not; and expect a genuine divergence on any day where an overpaid debt or a
+negative asset balance is in play, because `Account.balance` uses `abs`+clamp while event history
+uses `-raw` (commented as deliberate at both sites). **If this assertion fails by a large amount,
+do not restore unbounded carry-forward** — that is the precise failure Ruling 3 exists to prevent.
+Report the mismatch instead.
 
 ---
 
