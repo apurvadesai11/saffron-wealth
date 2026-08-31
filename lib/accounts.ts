@@ -169,16 +169,26 @@ export async function resolveAccountIds(
   if (write) {
     for (const name of names) {
       if (!newNames.has(name)) continue;
-      const zero = new Prisma.Decimal(0);
       const created = await client.account.create({
-        data: { userId, name, type: guessAccountType(name), balance: zero },
+        data: {
+          userId,
+          name,
+          type: guessAccountType(name),
+          balance: new Prisma.Decimal(0),
+        },
       });
-      // Mirrors createAccount's opening-balance event above, so an account
-      // that only ever appears in a transaction import still has a starting
-      // point for a future net-worth-over-time graph.
-      await client.accountBalanceEvent.create({
-        data: { userId, accountId: created.id, balance: zero },
-      });
+      // Deliberately NO opening-balance event here, unlike createAccount.
+      // An earlier version wrote a zero-balance event to give the future
+      // net-worth graph "a starting point" — but that graph now exists, and
+      // the event's asOf defaults to today, so for the 16 accounts that
+      // appear in BOTH Monarch exports it poisoned the chart's most-read
+      // point: either the zero won the carry-forward at the last sample date,
+      // or the balance import's real row for that day was dropped as an
+      // (accountId, asOf) duplicate. Presence-only dedup meant it never
+      // healed. A transaction export carries no balances, so the honest
+      // representation is no event at all — computeNetWorthSeries simply
+      // omits an account with no events, and the balance-history import
+      // supplies the real history when it runs.
       idByName.set(name, created.id);
     }
   }
@@ -393,10 +403,17 @@ export interface BalanceHistoryEventRow {
   balance: number; // already sign-adjusted by the caller (see runBalanceHistoryImportPipeline)
 }
 
-// A full Monarch export is ~34,000 rows — one createMany for all of them
-// would be a single oversized statement, and one row at a time would be
-// 34,000 round trips. ~5,000 per call is comfortably inside Postgres's
-// parameter-count limits while keeping the round-trip count in single digits.
+// A full Monarch export is ~34,000 rows, and one row at a time would be
+// 34,000 round trips. ~5,000 per call keeps that in single digits.
+//
+// Note on what this is NOT protecting against: an unchunked createMany would
+// not actually produce one oversized statement — Prisma's query engine splits
+// createMany itself, measured at ~32,760 bind parameters per INSERT (7,600
+// transaction rows became 4 statements in 435ms). So this chunk is
+// belt-and-braces, not load-bearing. It's kept because 5,000 x 6 columns =
+// 30,000 parameters sits just under that engine cap, which makes the
+// statement count predictable rather than an implementation detail of
+// whatever Prisma version is installed.
 const EVENT_INSERT_CHUNK_SIZE = 5000;
 
 export async function createBalanceHistoryEvents(

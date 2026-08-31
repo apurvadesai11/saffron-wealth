@@ -88,7 +88,9 @@ User-visible v1 capabilities:
 - **Net Worth** screen (separate route, persisted) — Total Assets / Total
   Liabilities / Net Worth summary; accounts grouped by bucket (Cash,
   Investments, Retirement, Real Estate, Debt); add / edit (incl. changing
-  type) / delete an account. No graph yet (Phase 3).
+  type) / delete an account. Net-worth-over-time chart (hand-rolled SVG,
+  3M/6M/YTD/1Y/3Y/5Y/10Y/MAX) above the summary cards. Archived accounts
+  shown in a collapsed group, excluded from totals, with a Restore action.
 - **Profile** screen — name/email edit, password change, avatar upload, single
   & global sign-out.
 - **Authentication** — full email/password + Google OAuth sign-in, password
@@ -115,7 +117,7 @@ From the PRD:
 | Audit events                           | ✅ Postgres | `AuthEvent`                                        |
 | Profile pictures                       | ✅ Vercel Blob (prod) / `public/uploads/avatars` (dev) | `lib/auth/picture-storage.ts` |
 | **Accounts**                            | ✅ Postgres | `Account` model (soft-deleted via `archivedAt`) — `lib/accounts.ts` |
-| **Account balance history**             | ✅ Postgres | `AccountBalanceEvent` — append-only, one row per create + per balance change; not surfaced in UI yet (Phase 3 graph) |
+| **Account balance history**             | ✅ Postgres | `AccountBalanceEvent` — append-only; `asOf` (the balance's own date) + `recordedAt` (write time). Backfilled by the Monarch balance-history import; drives the Net Worth chart via `lib/net-worth-history.ts` |
 | **Categories**                         | ✅ Postgres | `Category` (soft-deleted via `archivedAt`) — `lib/categories.ts` |
 | **Transactions**                       | ✅ Postgres | `Transaction` — `lib/transactions.ts`              |
 | **Budgets**                            | ✅ Postgres | `Budget` — `lib/budgets.ts`                        |
@@ -126,9 +128,9 @@ see "Architecture: Accounts / Net Worth" and "Architecture: financial-data
 hydration" below. `MOCK_CATEGORIES` / `MOCK_TRANSACTIONS` / `MOCK_BUDGETS` in
 `lib/mock-data.ts` still exist but are **test-fixture data only** now (used by
 `renderWithApp` and the E2E fixture) — production never falls back to them
-(the `(app)` layout always passes real, possibly empty, arrays). Monarch CSV
-import (Phase 2b) and the net-worth-over-time graph (Phase 3) are the
-remaining, fully-planned phases — see
+(the `(app)` layout always passes real, possibly empty, arrays). Phase 2b
+(Monarch transaction import) and Phase 3 (balance-history import +
+net-worth-over-time chart) are now **shipped** — see
 `docs/saffron-wealth-net-worth-phase2-3-plan.md`.
 
 ---
@@ -238,7 +240,7 @@ middleware.ts              `export { proxy as default, config } from "./proxy"`
 e2e/                       Playwright tests + worker-scoped auth fixture (incl. sw_csrf cookie)
 docs/saffron-wealth-monthly-budget-prd.md   Monthly Budget PRD + Implementation Log
 docs/saffron-wealth-net-worth-phase1-plan.md   Net Worth Phase 1 plan (Accounts + page) — shipped
-docs/saffron-wealth-net-worth-phase2-3-plan.md Phase 2b (Monarch import) + Phase 3 (graph) — planned, not built
+docs/saffron-wealth-net-worth-phase2-3-plan.md Phase 2b (Monarch import) + Phase 3 (graph) — shipped; v2 records the validated export schemas and 15 build-time rulings
 scripts/fetch-blocklist.mjs   Refreshes lib/auth/blocklist-data.ts
 .githooks/pre-push         Runs lint + typecheck + unit tests before every push
 .github/workflows/ci.yml   GitHub Actions: lint, build, unit, e2e (Playwright)
@@ -423,7 +425,7 @@ credential security rather than delegate it.
 | `sessions.ts`                       | Create/read/revoke/rotate sessions. Stores only `SHA-256(rawToken)` in DB. 30-day TTL. Debounces `lastSeenAt` updates to 60s.   |
 | `session-cookie.ts`                 | `setSessionCookie` / `clearSessionCookie` with `HttpOnly`, `Secure` (prod), `SameSite=Strict`.                                  |
 | `password.ts`, `password-rules.ts`  | Argon2id hash/verify; min 12 / max 128 chars; `getDummyHash()` for uniform-timing login failure.                                |
-| `csrf.ts`, `csrf-shared.ts`, `csrf-client.ts` | Double-submit CSRF: non-HttpOnly `sw_csrf` cookie + `x-sw-csrf` header, constant-time compare.                        |
+| `csrf.ts`, `csrf-shared.ts`, `csrf-client.ts` | Double-submit CSRF: non-HttpOnly `sw_csrf` cookie + `x-csrf-token` header (see `CSRF_HEADER_NAME`), constant-time compare.                        |
 | `rate-limit.ts`                     | Sliding-window 5/min via Upstash; in-memory fallback for dev (UNSAFE across serverless instances — set Upstash in prod).        |
 | `exponential-backoff.ts`            | Per-account backoff table `[0,1,2,4,8,16,32,60]` seconds keyed on `emailNormalized`. Uses a `pg_advisory_xact_lock` to close concurrent-bypass race. |
 | `hibp.ts`                           | Pwned Passwords k-anonymity check — sends only first 5 chars of SHA-1, never the full hash or plaintext. Fails open with audit event. |

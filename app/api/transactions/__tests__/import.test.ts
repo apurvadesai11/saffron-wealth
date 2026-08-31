@@ -287,4 +287,31 @@ describe("POST /api/transactions/import", () => {
     expect(await prisma.transaction.count({ where: { userId: userA.id } })).toBe(4);
     expect(await prisma.transaction.count({ where: { userId: userB.id } })).toBe(4);
   });
+
+  it("creates accounts with NO opening balance event, so a later balance-history import owns the chart", async () => {
+    const user = await signIn();
+    userId = user.id;
+
+    const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
+    expect(res.status).toBe(200);
+
+    const accounts = await prisma.account.findMany({ where: { userId } });
+    expect(accounts.length).toBeGreaterThan(0);
+
+    // A transaction export carries no balances. An earlier version wrote a
+    // zero-balance event here "as a starting point for the future graph";
+    // once that graph shipped, the event's asOf (defaulting to today) either
+    // won the carry-forward at the chart's last sample date or caused the
+    // balance import's real row for that day to be dropped as an
+    // (accountId, asOf) duplicate — and presence-only dedup meant it never
+    // healed. This asserts the zero event is gone: it fails with a count of
+    // one event per created account if it ever comes back.
+    expect(
+      await prisma.accountBalanceEvent.count({ where: { userId } }),
+    ).toBe(0);
+
+    // The accounts themselves are still created and linked, so the import's
+    // own job is unaffected.
+    expect(accounts.every((a) => Number(a.balance) === 0)).toBe(true);
+  });
 });
