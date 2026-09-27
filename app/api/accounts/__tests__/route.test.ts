@@ -126,7 +126,7 @@ describe("POST /api/accounts", () => {
     const req = makeRequest({
       method: "POST",
       csrfToken: "csrf",
-      body: { name: "", type: "bogus", balance: -5 },
+      body: { name: "", type: "bogus", balance: "lots" },
     });
     const res = await POST(req);
     expect(res.status).toBe(400);

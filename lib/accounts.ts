@@ -19,6 +19,17 @@ function utcDateToDateString(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// AccountBalanceEvent.balance is the account's signed contribution to net
+// worth, not a magnitude the reader re-signs from the live type (see the
+// sign-convention note at the top of lib/net-worth-history.ts). Account.balance
+// stays in its bucket's natural direction — what you hold for an asset, what
+// you owe for a debt — so the two differ by exactly this negation on the debt
+// side. Both may be negative: an overdrawn checking account and a credited
+// card are real states, and clamping either one silently overstates net worth.
+function contributionFor(type: AccountType, balance: Prisma.Decimal): Prisma.Decimal {
+  return isLiability(getBucketForType(type)) ? balance.negated() : balance;
+}
+
 function mapAccount(row: PrismaAccount): Account {
   return {
     id: row.id,
@@ -67,7 +78,7 @@ export async function createAccount(userId: string, input: AccountInput): Promis
       data: {
         userId,
         accountId: created.id,
-        balance,
+        balance: contributionFor(input.type, balance),
       },
     });
     return created;
@@ -96,6 +107,21 @@ export async function updateAccount(
     patch.balance !== undefined ? new Prisma.Decimal(patch.balance) : undefined;
   const balanceChanged = nextBalance !== undefined && !nextBalance.equals(existing.balance);
 
+  // The type this account will have after the patch — what any new balance
+  // event has to be signed against.
+  const nextType = (patch.type ?? existing.type) as AccountType;
+  // A type change that crosses the asset/liability line is the one edit that
+  // SHOULD reinterpret existing history: the user is asserting the account
+  // was always this kind of thing, so its recorded contributions had the
+  // wrong sign all along. Applying it here, as an explicit write, is what
+  // lets the read path stay type-independent — the alternative (deriving the
+  // sign from the live type at read time) silently flipped the meaning of
+  // every already-written row, including rows a later import skipped as
+  // duplicates and so could never correct.
+  const bucketCrossed =
+    isLiability(getBucketForType(nextType)) !==
+    isLiability(getBucketForType(existing.type as AccountType));
+
   const row = await prisma.$transaction(async (tx) => {
     const updated = await tx.account.update({
       where: { id },
@@ -109,12 +135,19 @@ export async function updateAccount(
           : {}),
       },
     });
+    // Before appending, so a patch that changes both type and balance
+    // doesn't flip the new event it just wrote. One statement rather than
+    // read-modify-write: an account can carry years of daily events, and
+    // negation is something Postgres can do in place.
+    if (bucketCrossed) {
+      await tx.$executeRaw`UPDATE "AccountBalanceEvent" SET balance = -balance WHERE "accountId" = ${id}`;
+    }
     if (balanceChanged) {
       await tx.accountBalanceEvent.create({
         data: {
           userId,
           accountId: id,
-          balance: nextBalance!,
+          balance: contributionFor(nextType, nextBalance!),
         },
       });
     }
@@ -217,21 +250,35 @@ export interface ResolvedBalanceHistoryAccount {
   accountId: string | null;
   isNew: boolean;
   // The type this account will use going forward: freshly guessed for a new
-  // account, re-guessed for an existing one whose sign disagreed (Ruling 7),
-  // or simply the account's existing type when neither of those applies.
+  // account, and for an existing one always the type it already has — the
+  // import never re-types an account the user may have corrected.
   finalType: AccountType;
   archived: boolean;
+  // Set only when an EXISTING account's stored bucket disagrees with the
+  // sign of its imported final balance. Surfaced in the preview so the user
+  // resolves it once, deliberately, instead of the import deciding silently.
+  typeConflict?: { storedType: AccountType; suggestedType: AccountType };
 }
 
 // Resolves each CSV account group to an Account row: creates ones that don't
-// exist, and updates balance/balanceAsOf/archivedAt on ones that do. A
-// user-corrected `type` on an existing account survives re-import UNLESS the
-// imported balance's sign disagrees with that type's bucket (a debt-bucket
-// account with a positive final balance, or an asset-bucket account with a
-// negative one) — the institution's sign is ground truth, a keyword guess is
-// not (Ruling 7). Read-only unless `write` is true, so preview and commit
-// share this exact code path and can never disagree about what's "new" or
-// "archived" (mirrors resolveAccountIds/resolveCategoryIds above).
+// exist, and updates balance/balanceAsOf/archivedAt on ones that do. An
+// existing account's `type` is NEVER overwritten. When its stored bucket
+// disagrees with the sign of the imported final balance, that shows up as a
+// `typeConflict` on the result for the preview to put in front of the user.
+//
+// This replaces Ruling 7 ("the imported sign overrides the stored type"),
+// which was wrong twice over. Its rationale was that the institution's sign
+// is ground truth, but guessAccountType only consults the sign on its
+// negative branch: a card-named account with a credited (positive) balance
+// re-guesses back to credit_card, so the override fired and changed nothing
+// in exactly the case it was meant for. Where it did change something, it
+// overwrote a type the user had deliberately set, and one month of statement
+// credit is not evidence that a credit card is a cash account. The type is a
+// stable property of the account; the sign belongs to the balance.
+//
+// Read-only unless `write` is true, so preview and commit share this exact
+// code path and can never disagree about what's "new" or "archived"
+// (mirrors resolveAccountIds/resolveCategoryIds above).
 export async function upsertAccountsFromBalanceHistory(
   userId: string,
   groups: BalanceHistoryAccountGroup[],
@@ -295,15 +342,16 @@ export async function upsertAccountsFromBalanceHistory(
     const balanceAsOf = dateStringToUtcDate(group.lastDate);
 
     if (!existing) {
-      // A live asset balance is never negative (Phase 1's rule); a debt
-      // balance is always stored as the positive amount owed. This is
-      // DELIBERATELY different from how AccountBalanceEvent.balance is
-      // computed for debt accounts in lib/balance-history-import.ts (negated,
-      // not abs'd, and never clamped) — Account.balance is Phase 1's live,
-      // non-negative "amount owed today" invariant, not a historical record.
+      // Account.balance is the value in its bucket's natural direction: what
+      // you hold for an asset, what you owe for a debt. Both can legitimately
+      // be negative — an overdrawn checking account, and a card carrying a
+      // statement credit — so neither is clamped. Math.abs on the debt side
+      // used to read a $500 credit as $500 owed, disagreeing with the same
+      // account's event history by $1,000; Math.max on the asset side hid an
+      // overdraft and overstated net worth.
       const balance = guessedIsDebt
-        ? Math.abs(group.finalBalanceSigned)
-        : Math.max(group.finalBalanceSigned, 0);
+        ? -group.finalBalanceSigned
+        : group.finalBalanceSigned;
       // No prior row, so there's no existing archivedAt to protect —
       // this import's own verdict is authoritative for a brand-new account.
       const archivedAtValue = archivedByThisImport ? importedAt : null;
@@ -331,14 +379,20 @@ export async function upsertAccountsFromBalanceHistory(
       continue;
     }
 
-    const existingIsDebt = isLiability(getBucketForType(existing.type as AccountType));
+    const storedType = existing.type as AccountType;
+    const existingIsDebt = isLiability(getBucketForType(storedType));
     const signDisagrees =
       (existingIsDebt && group.finalBalanceSigned > 0) || (!existingIsDebt && group.finalBalanceSigned < 0);
-    const finalType = signDisagrees ? guessedType : (existing.type as AccountType);
-    const finalIsDebt = signDisagrees ? guessedIsDebt : existingIsDebt;
-    const balance = finalIsDebt
-      ? Math.abs(group.finalBalanceSigned)
-      : Math.max(group.finalBalanceSigned, 0);
+    // Reported, not acted on. A conflict where the re-guess lands on the
+    // stored type anyway (a card-named account with a credit) is not worth
+    // asking about — there is no alternative to offer.
+    const typeConflict =
+      signDisagrees && guessedType !== storedType
+        ? { storedType, suggestedType: guessedType }
+        : undefined;
+    const balance = existingIsDebt
+      ? -group.finalBalanceSigned
+      : group.finalBalanceSigned;
 
     // Monotone archiving: this import may ADD an archivedAt (an account
     // whose data newly says "closed"), but must never CLEAR one that's
@@ -357,7 +411,6 @@ export async function upsertAccountsFromBalanceHistory(
       await client.account.update({
         where: { id: existing.id },
         data: {
-          type: finalType,
           balance: new Prisma.Decimal(balance),
           balanceAsOf,
           archivedAt: archivedAtValue,
@@ -368,8 +421,9 @@ export async function upsertAccountsFromBalanceHistory(
       name: group.name,
       accountId: existing.id,
       isNew: false,
-      finalType,
+      finalType: storedType,
       archived: archivedAtValue !== null,
+      ...(typeConflict ? { typeConflict } : {}),
     });
   }
 

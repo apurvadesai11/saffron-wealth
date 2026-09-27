@@ -42,11 +42,16 @@ describe("validateBalance", () => {
     expect(validateBalance(NaN)?.field).toBe("balance");
     expect(validateBalance(Infinity)?.field).toBe("balance");
   });
-  it("rejects negative balances", () => {
-    expect(validateBalance(-1)?.field).toBe("balance");
+  // An overdrawn checking account and a card carrying a statement credit are
+  // both real states. Rejecting them forced the value to be clamped somewhere
+  // downstream, and a clamp on the asset side overstates net worth.
+  it("accepts a negative balance", () => {
+    expect(validateBalance(-1)).toBeNull();
+    expect(validateBalance(-500.25)).toBeNull();
   });
-  it("rejects balances beyond the Decimal(14,2) headroom", () => {
+  it("rejects balances beyond the Decimal(14,2) headroom in either direction", () => {
     expect(validateBalance(1e12 + 1)?.field).toBe("balance");
+    expect(validateBalance(-(1e12 + 1))?.field).toBe("balance");
   });
   it("accepts zero and valid positive balances", () => {
     expect(validateBalance(0)).toBeNull();
@@ -73,7 +78,7 @@ describe("parseCreateAccountBody", () => {
   });
 
   it("collects field errors for bad input", () => {
-    const r = parseCreateAccountBody({ name: "", type: "nope", balance: -5 });
+    const r = parseCreateAccountBody({ name: "", type: "nope", balance: "lots" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.fieldErrors.name).toBeTruthy();
@@ -126,7 +131,7 @@ describe("parseUpdateAccountBody", () => {
   });
 
   it("collects field errors for invalid fields", () => {
-    const r = parseUpdateAccountBody({ balance: -1, type: "bogus" });
+    const r = parseUpdateAccountBody({ balance: NaN, type: "bogus" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.fieldErrors.balance).toBeTruthy();

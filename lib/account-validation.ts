@@ -31,12 +31,18 @@ export function validateInstitution(raw: string): FieldError | null {
   return null;
 }
 
+// Negative is allowed in both directions: an asset can be overdrawn and a
+// debt balance (stored as the amount owed) goes negative when the account
+// carries a statement credit. Rejecting them here is what forced the balance
+// import to clamp, and a clamp on the asset side silently overstates net
+// worth. Only the column's magnitude limit is enforced.
 export function validateBalance(raw: unknown): FieldError | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return { field: "balance", message: "Enter a valid amount." };
   }
-  if (raw < 0) return { field: "balance", message: "Balance can't be negative." };
-  if (raw > BALANCE_MAX) return { field: "balance", message: "That amount is too large." };
+  if (Math.abs(raw) > BALANCE_MAX) {
+    return { field: "balance", message: "That amount is too large." };
+  }
   return null;
 }
 

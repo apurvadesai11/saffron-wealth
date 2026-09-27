@@ -1,5 +1,10 @@
 import type { Account } from "@/lib/types";
-import { ACCOUNT_TYPE_LABELS, getBucketForType, isLiability } from "@/lib/account-utils";
+import {
+  ACCOUNT_TYPE_LABELS,
+  describeAccountBalance,
+  getBucketForType,
+  isLiability,
+} from "@/lib/account-utils";
 
 interface Props {
   account: Account;
@@ -9,6 +14,13 @@ interface Props {
 
 export default function AccountRow({ account, onEdit, onDelete }: Props) {
   const liability = isLiability(getBucketForType(account.type));
+  const { text: balanceText, sign: balanceSign } = describeAccountBalance(
+    account.type,
+    account.balance,
+  );
+  // A credited card ADDS to net worth, so it reads in the ordinary colour
+  // rather than the debt red that would imply money owed.
+  const amountClass = balanceSign === "owed" ? "text-red-600" : "text-gray-800";
   // balanceAsOf is a full ISO timestamp; only the date portion is shown.
   const asOfDate = account.balanceAsOf.slice(0, 10);
 
@@ -29,8 +41,11 @@ export default function AccountRow({ account, onEdit, onDelete }: Props) {
         </p>
       </button>
       <div className="flex items-center gap-3 shrink-0">
-        <span className={`text-sm font-semibold ${liability ? "text-red-600" : "text-gray-800"}`}>
-          ${account.balance.toFixed(2)}
+        <span
+          data-balance-sign={balanceSign}
+          className={`text-sm font-semibold ${amountClass}`}
+        >
+          {balanceText}
         </span>
         <button
           onClick={onDelete}

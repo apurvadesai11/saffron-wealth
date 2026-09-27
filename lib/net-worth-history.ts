@@ -36,12 +36,22 @@
 // (for accounts with sparse events) applies regardless of archived state;
 // only the "does the window ever end" question depends on it.
 //
+// Sign convention: AccountBalanceEvent.balance IS the account's signed
+// contribution to net worth on that date — negative reduces it. The writers
+// (createAccount, updateAccount, and the balance-history import) apply the
+// account's bucket once, at write time, when the user's own assertion about
+// what the account is is fresh. This file therefore never consults
+// account.type, and an account that later changes bucket cannot have its
+// existing history retroactively reinterpreted. An earlier version negated
+// by the CURRENT type at read time, which meant a bucket change flipped the
+// meaning of every row already written — including rows a later import
+// skipped as duplicates and so could never correct.
+//
 // Ruling 9 — Task 5's import has no unique constraint on (accountId, asOf):
 // Phase 1 legitimately appends a new event on every balance edit, so a user
 // changing a balance twice in one day is normal, not a data bug. When two
 // events share an asOf, the later recordedAt is the one that should carry.
 
-import { getBucketForType, isLiability } from "./account-utils";
 import type { AccountType } from "./types";
 
 export interface NetWorthPoint {
@@ -65,7 +75,6 @@ interface AccountInput {
 // One account's events reduced to what the sweep needs: the order carry-
 // forward should walk them in, and the window derived from that order.
 interface AccountSeries {
-  liability: boolean;
   // Gates whether the archive-date upper bound below applies at all — see
   // the Ruling 3 amendment above.
   archived: boolean;
@@ -118,7 +127,6 @@ export function computeNetWorthSeries(
     for (const e of sorted) sampleDates.add(e.asOf);
 
     series.set(accountId, {
-      liability: isLiability(getBucketForType(account.type)),
       // `!= null` (not `!== null`): the caller hand-maps Prisma's Date | null
       // into this string | null shape, and a runtime `undefined` slipping
       // through that mapping must still read as "active," not "archived" —
@@ -168,8 +176,7 @@ export function computeNetWorthSeries(
       }
       cursor.set(accountId, idx);
 
-      const balance = acct.events[idx].balance;
-      total += acct.liability ? -balance : balance;
+      total += acct.events[idx].balance;
     }
 
     // Round once, here, per point — not accumulated across dates (each

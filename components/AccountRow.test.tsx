@@ -61,3 +61,42 @@ describe("AccountRow", () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });
+
+// Account.balance can legitimately be negative now: an overdrawn asset, and a
+// debt account carrying a statement credit (a negative amount owed). The
+// balance import used to clamp both away, which read a $500 credit as $500
+// owed and disagreed with the chart by $1,000.
+describe("AccountRow negative balances", () => {
+  it("renders an overdrawn asset with the minus outside the dollar sign", () => {
+    render(<AccountRow account={account({ type: "cash", balance: -50 })} onEdit={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByText("-$50.00")).toBeInTheDocument();
+  });
+
+  // "-$500.00" inside a group labelled Debt is ambiguous: it reads as either
+  // "owes 500" or "is owed 500" depending on which convention you assume.
+  it("labels a credited debt balance as a credit rather than a negative", () => {
+    render(
+      <AccountRow
+        account={account({ type: "credit_card", balance: -500 })}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("$500.00 credit")).toBeInTheDocument();
+  });
+
+  it("shows a credited debt balance in the same colour as an asset, since it adds to net worth", () => {
+    const { container } = render(
+      <AccountRow
+        account={account({ type: "credit_card", balance: -500 })}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const amount = container.querySelector("[data-balance-sign]");
+    expect(amount?.getAttribute("data-balance-sign")).toBe("credit");
+  });
+});

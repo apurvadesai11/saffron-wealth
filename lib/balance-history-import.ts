@@ -17,7 +17,6 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { parseAmount, guessAccountType, NON_ACCOUNT_NAMES } from "./monarch-transform";
-import { getBucketForType, isLiability } from "./account-utils";
 import {
   upsertAccountsFromBalanceHistory,
   findExistingBalanceEventDays,
@@ -89,6 +88,15 @@ export interface BalanceHistoryImportSummary {
   newEventRows: number;
   duplicateEventRows: number;
   skippedNonAccountRows: number;
+  // Existing accounts whose stored bucket disagrees with the sign of their
+  // imported final balance. The import does NOT act on these (it never
+  // re-types an account the user may have set deliberately) — they are here
+  // so the preview can put the choice in front of the user, who fixes it in
+  // the account editor if they agree. Empty on a first import by
+  // construction, since a brand-new account has no stored type to disagree
+  // with. See upsertAccountsFromBalanceHistory for why the old
+  // sign-overrides-type rule was removed.
+  typeConflicts: { name: string; storedType: AccountType; suggestedType: AccountType }[];
   dateRange: { from: string; to: string };
 }
 
@@ -196,28 +204,24 @@ export async function runBalanceHistoryImportPipeline(
   const resolved = await upsertAccountsFromBalanceHistory(userId, groups, fileMaxDate, client, opts.commit);
   const resolvedByName = new Map(resolved.map((r) => [r.name, r]));
 
-  // Sign-adjust every surviving row using the account's FINAL resolved
-  // type, not just its type going in — a re-typed account (Ruling 7) needs
-  // its whole history stored under the new sign convention, or older rows
-  // would keep the wrong one even though the account itself no longer does.
+  // Monarch's raw balance is already the account's signed contribution to
+  // net worth: negative when money is owed, positive when it is held, and
+  // positive on the rare day a card carries a statement credit. That is
+  // exactly what AccountBalanceEvent.balance stores (see the sign-convention
+  // note in lib/net-worth-history.ts), so no per-account transform applies
+  // here at all. An earlier version negated the debt side and the reader
+  // negated it back, which made the stored value depend on the account's
+  // type and let a later bucket change silently reinterpret this history.
   const eventCandidates: { accountId: string | null; asOf: string; balance: number; isNewAccount: boolean }[] = [];
   for (const name of accountNamesOrdered) {
     const acc = accountsByName.get(name)!;
     const res = resolvedByName.get(name)!;
-    const isDebt = isLiability(getBucketForType(res.finalType));
+
     for (const row of acc.rows) {
       eventCandidates.push({
         accountId: res.accountId,
         asOf: row.date,
-        // Debt-bucket history is NEGATED, not abs'd: Monarch's raw balance
-        // for a debt account is already signed as "amount owed" (negative
-        // = owed, positive = a credit/overpayment) — negating preserves
-        // that sign exactly, so a rare overpaid-card day correctly becomes
-        // a NEGATIVE amount-owed instead of collapsing to the same
-        // magnitude as an ordinary owed-money day. This is deliberately
-        // asymmetric with Account.balance in lib/accounts.ts, which stays
-        // on its abs+clamp path — see the comment there for why.
-        balance: isDebt ? -row.rawBalance : row.rawBalance,
+        balance: row.rawBalance,
         isNewAccount: res.isNew,
       });
     }
@@ -270,6 +274,9 @@ export async function runBalanceHistoryImportPipeline(
     newEventRows,
     duplicateEventRows,
     skippedNonAccountRows,
+    typeConflicts: resolved.flatMap((r) =>
+      r.typeConflict ? [{ name: r.name, ...r.typeConflict }] : [],
+    ),
     dateRange: { from: fileMinDate, to: fileMaxDate },
   };
 

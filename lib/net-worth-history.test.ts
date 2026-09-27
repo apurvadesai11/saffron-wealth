@@ -53,11 +53,11 @@ describe("computeNetWorthSeries", () => {
   it("Ruling 3: an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
     // Mirrors the real scenario: a mortgage that stops reporting (paid off /
     // account closed and archived by Task 5's import) while still frozen at
-    // a large balance, per the debt storage convention (stored = -raw, so an
-    // owed $450k mortgage is stored as +450000).
+    // a large balance. Stored as its contribution to net worth, so an owed
+    // $450k mortgage is -450000.
     const points = computeNetWorthSeries(
       [
-        ev("mortgage", "2026-01-01", 450000),
+        ev("mortgage", "2026-01-01", -450000),
         // No further mortgage events — it closed here.
         ev("checking", "2026-01-01", 1000),
         ev("checking", "2026-06-01", 1000),
@@ -108,10 +108,10 @@ describe("computeNetWorthSeries", () => {
 
   it("subtracts a debt account's signed contribution", () => {
     const points = computeNetWorthSeries(
-      [ev("cash1", "2026-01-01", 1000), ev("card", "2026-01-01", 300)],
+      [ev("cash1", "2026-01-01", 1000), ev("card", "2026-01-01", -300)],
       [acct("cash1", "cash"), acct("card", "credit_card")],
     );
-    // 300 stored on a credit_card is "$300 owed" — it must subtract, not add.
+    // -300 is "$300 owed" expressed as its contribution to net worth.
     expect(points).toEqual([{ date: "2026-01-01", value: 700 }]);
   });
 
@@ -122,7 +122,7 @@ describe("computeNetWorthSeries", () => {
         ev("cash1", "2026-02-01", 1000), // unchanged
         // Debt account's only event — its window is exactly this one date,
         // and it's archived, so the window actually closes there.
-        ev("card", "2026-01-01", 500),
+        ev("card", "2026-01-01", -500),
       ],
       [acct("cash1", "cash"), acct("card", "credit_card", "2026-01-02T00:00:00.000Z")],
     );
@@ -221,8 +221,8 @@ describe("computeNetWorthSeries", () => {
     const points = computeNetWorthSeries(
       [
         ev("asset", "2026-01-01", 0.3),
-        ev("debt1", "2026-01-01", 0.1),
-        ev("debt2", "2026-01-01", 0.2),
+        ev("debt1", "2026-01-01", -0.1),
+        ev("debt2", "2026-01-01", -0.2),
       ],
       [
         acct("asset", "cash"),
@@ -238,8 +238,8 @@ describe("computeNetWorthSeries", () => {
   it("drops an event whose accountId isn't in the account roster, contributing nothing and adding no sample date", () => {
     const points = computeNetWorthSeries(
       [
-        // "ghost" has no matching entry in `accounts` below — its type (and
-        // therefore asset/liability sign) is unresolvable.
+        // "ghost" has no matching entry in `accounts` below, so its
+        // contribution window (firstDate/archivedAt) is unresolvable.
         ev("ghost", "2026-05-01", 999999),
         ev("a", "2026-01-01", 100),
       ],
@@ -338,5 +338,42 @@ describe("computeNetWorthSeries", () => {
       // applies unconditionally, unaffected by archived status either way.
       expect(points.find((p) => p.date === "2026-01-01")?.value).toBe(0);
     });
+  });
+});
+
+// Events store the account's SIGNED CONTRIBUTION to net worth (negative =
+// reduces it), not a magnitude the reader re-signs from the account's current
+// type. Reading the sign off the live type meant history was reinterpreted
+// retroactively: an account that changed bucket between two imports had its
+// dedup-skipped older rows silently flipped, and there was no correction path.
+describe("type-independent event sign", () => {
+  it("adds a stored event value as-is on a debt account", () => {
+    const points = computeNetWorthSeries(
+      [ev("cash1", "2026-01-01", 1000), ev("card", "2026-01-01", -300)],
+      [acct("cash1", "cash"), acct("card", "credit_card")],
+    );
+
+    expect(points).toEqual([{ date: "2026-01-01", value: 700 }]);
+  });
+
+  it("represents a credited card as an increase in net worth", () => {
+    // The overpaid-card case: the institution owes the user $500, so the
+    // account's contribution is +500. Re-signing by bucket made this -500,
+    // a $1,000 error against the same account's live summary card.
+    const points = computeNetWorthSeries(
+      [ev("cash1", "2026-01-01", 1000), ev("card", "2026-01-01", 500)],
+      [acct("cash1", "cash"), acct("card", "credit_card")],
+    );
+
+    expect(points).toEqual([{ date: "2026-01-01", value: 1500 }]);
+  });
+
+  it("gives the same series whichever bucket the account currently sits in", () => {
+    const events = [ev("x", "2026-01-01", -450000)];
+
+    const asDebt = computeNetWorthSeries(events, [acct("x", "loan_mortgage")]);
+    const asAsset = computeNetWorthSeries(events, [acct("x", "property")]);
+
+    expect(asAsset).toEqual(asDebt);
   });
 });

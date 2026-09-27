@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createAccount, updateAccount, archiveAccount } from "@/lib/accounts";
+import { createAccount, updateAccount, archiveAccount, listAccounts } from "@/lib/accounts";
+import { computeNetWorth } from "@/lib/account-utils";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const mocks = vi.hoisted(() => ({ sessionToken: null as string | null }));
@@ -46,6 +47,7 @@ const EXPECTED_FRESH_SUMMARY = {
   newEventRows: 8,
   duplicateEventRows: 0,
   skippedNonAccountRows: 1,
+  typeConflicts: [],
   dateRange: { from: "2026-01-01", to: "2026-01-03" },
 };
 
@@ -198,7 +200,7 @@ describe("POST /api/accounts/balance-history", () => {
 
     const creditCard = accounts.find((a) => a.name === "Sample Credit Card")!;
     expect(creditCard.type).toBe("credit_card");
-    // Debt balances are stored positive even though the CSV carried negatives.
+    // Account.balance is the amount owed, positive while money is owed.
     expect(creditCard.balance.toNumber()).toBe(450);
     expect(creditCard.archivedAt).toBeNull();
 
@@ -225,12 +227,12 @@ describe("POST /api/accounts/balance-history", () => {
       "2026-01-02",
       "2026-01-03",
     ]);
-    // Debt event balances are stored positive too.
-    expect(creditCardEvents.map((e) => e.balance.toNumber())).toEqual([200, 450, 450]);
+    // Events store the account's signed CONTRIBUTION to net worth, so an
+    // owed card balance is negative (see lib/net-worth-history.ts).
+    expect(creditCardEvents.map((e) => e.balance.toNumber())).toEqual([-200, -450, -450]);
 
-    // The asset account's early overdraft day keeps its negative sign in
-    // history — only the account's CURRENT balance clamps to 0 if negative,
-    // never a historical event.
+    // The asset account's early overdraft day keeps its negative sign, same
+    // as every other contribution.
     const checkingEvents = events
       .filter((e) => e.accountId === checking.id)
       .sort((a, b) => a.asOf.getTime() - b.asOf.getTime());
@@ -319,7 +321,7 @@ describe("POST /api/accounts/balance-history", () => {
     expect(checking?.balance.toNumber()).toBe(1200);
   });
 
-  it("an existing asset-typed account whose imported final balance is negative is re-typed (Ruling 7)", async () => {
+  it("keeps an existing asset-typed account's type when the imported balance is negative, and reports the conflict", async () => {
     const user = await signIn();
     userId = user.id;
 
@@ -337,13 +339,21 @@ describe("POST /api/accounts/balance-history", () => {
     expect(res.status).toBe(200);
 
     const account = await prisma.account.findFirst({ where: { userId, name: "Old Brokerage" } });
-    // Sign disagreement overrides the stored type — re-guessed from the
-    // negative balance and the (non-mortgage-shaped) name as credit_card.
-    expect(account?.type).toBe("credit_card");
-    expect(account?.balance.toNumber()).toBe(800);
+    // The user's own typing survives the import. A negative month is not
+    // evidence that a brokerage account is a credit card.
+    expect(account?.type).toBe("brokerage");
+    // Stored in the bucket's natural direction: an asset holding -800.
+    expect(account?.balance.toNumber()).toBe(-800);
+
+    // The disagreement isn't swallowed either — the preview names it so the
+    // user can decide once.
+    const body = await res.json();
+    expect(body.summary.typeConflicts).toEqual([
+      { name: "Old Brokerage", storedType: "brokerage", suggestedType: "credit_card" },
+    ]);
   });
 
-  it("an existing debt-typed account whose imported final balance is positive is re-typed (Ruling 7, other direction)", async () => {
+  it("keeps an existing debt-typed account's type when the imported balance is positive, and reports the conflict", async () => {
     const user = await signIn();
     userId = user.id;
 
@@ -361,10 +371,14 @@ describe("POST /api/accounts/balance-history", () => {
     expect(res.status).toBe(200);
 
     const account = await prisma.account.findFirst({ where: { userId, name: "Sunset Rewards" } });
-    // Sign disagreement overrides the stored type — re-guessed from the
-    // positive balance and the (no-keyword-matching) name as "cash".
-    expect(account?.type).toBe("cash");
-    expect(account?.balance.toNumber()).toBe(300);
+    expect(account?.type).toBe("credit_card");
+    // A $300 credit on a card is -300 owed, which raises net worth.
+    expect(account?.balance.toNumber()).toBe(-300);
+
+    const body = await res.json();
+    expect(body.summary.typeConflicts).toEqual([
+      { name: "Sunset Rewards", storedType: "credit_card", suggestedType: "cash" },
+    ]);
   });
 
   it("archivedAt is monotone: an account the user explicitly archived stays archived even if its data still runs to the file max", async () => {
@@ -414,13 +428,13 @@ describe("POST /api/accounts/balance-history", () => {
     expect(after?.archivedAt).not.toBeNull();
   });
 
-  it("debt event history stores the negated raw balance, not its absolute value — an overpayment day stays negative", async () => {
+  it("a card's owed day and its credited day carry opposite contributions, and the credit raises net worth", async () => {
     const user = await signIn();
     userId = user.id;
 
-    // "Test Visa Card" always resolves to the credit_card (debt) type via
-    // guessAccountType's keyword match, regardless of which day's sign is
-    // final — isolating the negate-vs-abs behavior from the type guess.
+    // "Test Visa Card" resolves to credit_card via guessAccountType's
+    // keyword match whichever day is final, isolating the stored sign from
+    // the type guess.
     const csv =
       "Date,Balance,Account\n2026-04-01,-500.00,Test Visa Card\n2026-04-02,120.00,Test Visa Card\n";
     const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf", fileText: csv }));
@@ -431,11 +445,17 @@ describe("POST /api/accounts/balance-history", () => {
 
     const events = await prisma.accountBalanceEvent.findMany({ where: { accountId: account!.id } });
     const balanceByDate = new Map(events.map((e) => [e.asOf.toISOString().slice(0, 10), e.balance.toNumber()]));
-    // -500 owed -> stored as +500 (amount owed). +120 (a credit/overpayment)
-    // -> stored as -120, NOT +120 — Math.abs would have collapsed both days
-    // to the same sign, hiding the overpayment as if it were still owed.
-    expect(balanceByDate.get("2026-04-01")).toBe(500);
-    expect(balanceByDate.get("2026-04-02")).toBe(-120);
+    // Contributions, not magnitudes: $500 owed reduces net worth, a $120
+    // credit raises it. Math.abs collapsed both days to the same sign.
+    expect(balanceByDate.get("2026-04-01")).toBe(-500);
+    expect(balanceByDate.get("2026-04-02")).toBe(120);
+
+    // And the live summary card agrees with that history rather than
+    // diverging by twice the credit: the final balance is a $120 credit, so
+    // the amount owed is negative and net worth goes UP by 120.
+    expect(account?.balance.toNumber()).toBe(-120);
+    const summary = computeNetWorth(await listAccounts(userId));
+    expect(summary.netWorth).toBe(120);
   });
 
   it("Ruling 8 regression: a same-day double balance edit via updateAccount still succeeds", async () => {

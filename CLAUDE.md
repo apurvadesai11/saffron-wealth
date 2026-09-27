@@ -220,7 +220,7 @@ lib/
   categories.ts            Query layer: listCategories + seedDefaultCategories (no API route —
                             read via RSC hydration, written only at registration / Phase 2b import)
   transactions.ts          Query layer for Transaction (server-only); UTC-safe date <-> string helpers
-  transaction-validation.ts  Hand-rolled validators + body parser for POST /api/transactions
+  transaction-validation.ts  Hand-rolled validators, POST body parser, and GET query-param parser for /api/transactions
   budgets.ts               Query layer: listBudgets + saveBudgets (batch upsert, server-only)
   budget-validation.ts     Hand-rolled validators + body parser for PUT /api/budgets
   db-errors.ts             InvalidReferenceError — cross-user FK reference caught by query layers
@@ -286,6 +286,32 @@ fetches `listCategories` / `listTransactions` / `listBudgets` for the session
 user in parallel and passes the results as `AppProvider`'s `seedCategories` /
 `seedTransactions` / `seedBudgets` props — the client never re-fetches on
 first paint.
+
+**Transactions are hydrated in a bounded window, not in full.** The layout
+passes `listTransactions(userId, { from: getHydrationWindowStart(new Date()) })`
+— the first of the month 13 months back, derived from the same
+`HISTORICAL_LOOKBACK_PERIODS` constant `getHistoricalAverage` reads. Everything
+AppProvider's consumers compute (current-period spend, alerts, cashflow, and
+that 12-period lookback) lives inside it. An unbounded read put a
+Monarch-sized history — thousands of rows, megabytes of RSC payload — on every
+authenticated navigation.
+
+The window's lower bound is exposed as `transactionsFrom` (null means
+unbounded), and `ensureTransactionsFrom(from)` extends it backwards, fetching
+only the gap below the current start via `GET /api/transactions`, paging on
+`nextCursor`, de-duping by id, and leaving the window untouched on failure.
+**Any consumer that reads a period possibly older than `transactionsFrom` must
+check it before concluding the period is empty** — an unhydrated month and a
+month with no spending are indistinguishable otherwise, and reporting the
+second when the first is true is a wrong number about someone's money.
+`MonthlyReviewWidget` is the worked example: navigating before the window
+requests it and renders a loading state.
+
+The Transactions page does **not** read this array for its rows. It queries
+`GET /api/transactions` directly (server-side filtering on date range, type,
+categories, amount range, and a description/merchant/category-name search,
+with cursor paging), because the window can't answer a filter that reaches
+further back than it does.
 
 State slices:
 
@@ -369,8 +395,40 @@ the app layer, not a DB enum — mirrors `CategoryType`/`BudgetPeriod`) belongs 
 exactly one `AccountBucket`: `cash`, `investments`, `retirement`,
 `real_estate`, `debt`. Only the `debt` bucket is a liability
 (`isLiability(bucket)`); everything else is an asset. `computeNetWorth` sums
-assets, sums liabilities, and subtracts — liabilities are stored as a positive
-"amount owed" (a $5k card balance is `5000`, not `-5000`).
+assets, sums liabilities, and subtracts.
+
+**Two sign conventions, and they are not the same one.**
+
+- `Account.balance` is the value in its bucket's **natural direction**: what
+  you hold for an asset, what you **owe** for a debt. A $5k card balance is
+  `5000`, not `-5000`.
+- `AccountBalanceEvent.balance` is the account's **signed contribution to net
+  worth**: negative reduces it. That same $5k owed is `-5000`.
+
+Either can legitimately be negative. An overdrawn checking account is an asset
+at `-50`; a card carrying a statement credit is a debt at `-500`, meaning the
+issuer owes *you*. Nothing clamps them — `validateBalance` enforces only the
+column's magnitude, and `describeAccountBalance` renders a credited debt
+balance as "$500.00 credit" rather than an ambiguous "-$500.00" inside a group
+labelled Debt.
+
+The event convention is deliberately type-independent: `computeNetWorthSeries`
+never reads `account.type`, so **an account changing bucket cannot retroactively
+reinterpret history already written**. The writers apply the bucket once, at
+write time. The one exception is explicit and lives in `updateAccount`: a
+`PATCH` whose new type crosses the asset/liability line negates that account's
+existing events in a single `UPDATE`, because the user is asserting the account
+was always that kind of thing.
+
+**The import never re-types an existing account.** When a stored bucket
+disagrees with the sign of an imported final balance, that surfaces as a
+`typeConflict` on the resolve result and a "Type disagreements" block in the
+import preview; the user decides. This replaced an earlier rule ("the imported
+sign overrides the stored type"), which claimed the institution's sign was
+ground truth but wasn't: `guessAccountType` only consults the sign on its
+negative branch, so a card-named account with a credited balance re-guessed
+straight back to `credit_card` and the override changed nothing in exactly the
+case it existed for. Where it did fire, it overwrote a type the user had set.
 
 **Soft-delete, not hard-delete.** "Deleting" an account (`archiveAccount` in
 `lib/accounts.ts`, called by `DELETE /api/accounts/[id]`) sets `archivedAt`
@@ -384,9 +442,10 @@ deliberately to stay consistent with that prior design.
 **Balance history is append-only and silent.** `AccountBalanceEvent` gets one
 row when an account is created (opening balance) and one more **only when a
 `PATCH` actually changes `balance`** — editing name/type/institution alone
-does not append a row. Nothing in the UI reads this table yet; it exists
-purely so Phase 3 (the net-worth-over-time graph) has real history to chart
-instead of starting from zero. `AccountBalanceEvent.userId` is denormalized
+does not append a row (a type change that crosses buckets re-signs the
+existing rows instead — see above). The balance-history import backfills this
+table in bulk, and `lib/net-worth-history.ts` turns it into the Net Worth
+chart's series. `AccountBalanceEvent.userId` is denormalized
 (not just derived via `accountId`) to support per-user history queries without
 a join, and to keep a future pivot to `SetNull`-on-delete (if the graph needs
 to show since-deleted accounts) a config change rather than a migration.

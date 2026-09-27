@@ -212,6 +212,29 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                 </div>
               </dl>
 
+              {summary.typeConflicts.length > 0 && (
+                <div data-testid="type-conflicts">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    Type disagreements
+                  </h3>
+                  <ul className="text-sm divide-y divide-amber-100 border border-amber-200 bg-amber-50 rounded-lg">
+                    {summary.typeConflicts.map((c) => (
+                      <li key={c.name} className="px-3 py-1.5">
+                        <span className="text-gray-800">{c.name}</span>
+                        <span className="block text-xs text-gray-500">
+                          Saved as {ACCOUNT_TYPE_LABELS[c.storedType]}, but this file&apos;s
+                          balance looks like {ACCOUNT_TYPE_LABELS[c.suggestedType]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    The import won&apos;t change these types. If the file is right, edit the
+                    account after importing.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                   New accounts
