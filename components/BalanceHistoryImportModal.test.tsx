@@ -20,6 +20,7 @@ const PREVIEW_SUMMARY = {
   newEventRows: 8,
   duplicateEventRows: 0,
   skippedNonAccountRows: 1,
+  typeConflicts: [],
   dateRange: { from: "2026-01-01", to: "2026-01-03" },
 };
 
@@ -181,5 +182,68 @@ describe("BalanceHistoryImportModal — error path", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("Network error.");
     });
+  });
+});
+
+// The import never re-types an existing account (see
+// upsertAccountsFromBalanceHistory). When an account's stored bucket
+// disagrees with the sign of its imported balance, the preview has to say so,
+// because nothing else will: the old rule overwrote the type silently, and
+// doing nothing at all would hide a real disagreement about whether an
+// account is an asset or a debt.
+describe("BalanceHistoryImportModal — type conflicts", () => {
+  it("names each conflicting account with its stored and suggested types", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        summary: {
+          ...PREVIEW_SUMMARY,
+          typeConflicts: [
+            { name: "Old Brokerage", storedType: "brokerage", suggestedType: "credit_card" },
+          ],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BalanceHistoryImportModal onClose={vi.fn()} onImported={vi.fn()} />);
+    await pickFile(screen.getByLabelText("Monarch balance history CSV"), csvFile());
+    const conflicts = await screen.findByTestId("type-conflicts");
+    expect(conflicts).toHaveTextContent("Old Brokerage");
+    expect(conflicts).toHaveTextContent("Brokerage");
+    expect(conflicts).toHaveTextContent("Credit Card");
+  });
+
+  it("says the import will not change the type, so the user knows to act", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        summary: {
+          ...PREVIEW_SUMMARY,
+          typeConflicts: [
+            { name: "Old Brokerage", storedType: "brokerage", suggestedType: "credit_card" },
+          ],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BalanceHistoryImportModal onClose={vi.fn()} onImported={vi.fn()} />);
+    await pickFile(screen.getByLabelText("Monarch balance history CSV"), csvFile());
+    expect(await screen.findByText(/won.t change (the |these )?type/i)).toBeInTheDocument();
+  });
+
+  it("shows no conflict section when there are none", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: true, summary: PREVIEW_SUMMARY }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BalanceHistoryImportModal onClose={vi.fn()} onImported={vi.fn()} />);
+    await pickFile(screen.getByLabelText("Monarch balance history CSV"), csvFile());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-import-step", "preview"),
+    );
+    expect(screen.queryByTestId("type-conflicts")).not.toBeInTheDocument();
   });
 });

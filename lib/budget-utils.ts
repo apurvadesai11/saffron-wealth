@@ -22,6 +22,27 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day);
 }
 
+// How many complete prior periods getHistoricalAverage averages over. Shared
+// with getHydrationWindowStart below so the layout can't hydrate a window
+// narrower than the math reads.
+const HISTORICAL_LOOKBACK_PERIODS = 12;
+
+/**
+ * First calendar day the (app) layout needs to hydrate, as "YYYY-MM-DD".
+ *
+ * The layout used to load every transaction a user had, which is fine at a
+ * dozen rows and several seconds plus a multi-megabyte RSC payload per
+ * navigation once a Monarch import lands years of history. Everything
+ * AppProvider's consumers compute (current-period spend, alerts, cashflow,
+ * and getHistoricalAverage's lookback) sits inside this window; anything
+ * older is fetched on demand from GET /api/transactions.
+ */
+export function getHydrationWindowStart(asOf: Date): string {
+  const start = new Date(asOf.getFullYear(), asOf.getMonth() - HISTORICAL_LOOKBACK_PERIODS, 1);
+  const month = String(start.getMonth() + 1).padStart(2, '0');
+  return `${start.getFullYear()}-${month}-01`;
+}
+
 // ---------------------------------------------------------------------------
 // Period bounds & keys
 // ---------------------------------------------------------------------------
@@ -137,7 +158,7 @@ export function getHistoricalAverage(
     return null;
   }
 
-  const maxPeriods = 12;
+  const maxPeriods = HISTORICAL_LOOKBACK_PERIODS;
   let totalSpend = 0;
   let periodsWithData = 0;
 

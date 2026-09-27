@@ -47,8 +47,12 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
     const fieldErrors: Record<string, string> = {};
 
     if (trimmedName === "") fieldErrors.name = "Account name is required.";
-    if (balance.trim() === "" || isNaN(parsedBalance) || parsedBalance < 0) {
-      fieldErrors.balance = "Enter a valid amount ($0 or more).";
+    // Negative is valid: an asset can be overdrawn and a debt balance (the
+    // amount owed) goes negative when the account carries a statement
+    // credit. The import can produce both, so refusing them here would show
+    // the user a value the editor won't let them type back.
+    if (balance.trim() === "" || isNaN(parsedBalance)) {
+      fieldErrors.balance = "Enter a valid amount.";
     }
 
     if (Object.keys(fieldErrors).length > 0) {
@@ -159,7 +163,6 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
               <input
                 id="account-balance"
                 type="number"
-                min="0"
                 step="0.01"
                 placeholder="0.00"
                 value={balance}

@@ -7,6 +7,9 @@ interface AppRenderOptions extends Omit<RenderOptions, "wrapper"> {
   categories?: Category[];
   transactions?: Transaction[];
   budgets?: Budget[];
+  // Sets AppProvider's hydration window lower bound. Omitted means the seed
+  // is treated as complete history, which is what most component tests want.
+  transactionsFrom?: string;
 }
 
 /**
@@ -15,12 +18,13 @@ interface AppRenderOptions extends Omit<RenderOptions, "wrapper"> {
  * Omitted seeds fall back to the production mock data.
  */
 export function renderWithApp(ui: ReactElement, opts: AppRenderOptions = {}) {
-  const { categories, transactions, budgets, ...rest } = opts;
+  const { categories, transactions, budgets, transactionsFrom, ...rest } = opts;
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <AppProvider
       seedCategories={categories}
       seedTransactions={transactions}
       seedBudgets={budgets}
+      transactionsFrom={transactionsFrom}
       offline
     >
       {children}

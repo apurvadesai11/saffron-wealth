@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/server";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
-import { createTransaction } from "@/lib/transactions";
-import { parseCreateTransactionBody } from "@/lib/transaction-validation";
+import { createTransaction, queryTransactions } from "@/lib/transactions";
+import {
+  parseCreateTransactionBody,
+  parseTransactionQueryParams,
+} from "@/lib/transaction-validation";
 import { InvalidReferenceError } from "@/lib/db-errors";
 
 interface ErrorBody {
@@ -20,6 +23,30 @@ function err(
     { ok: false, error: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } },
     { status },
   );
+}
+
+// Filtered, paged read for the Transactions page. Deliberately no CSRF check:
+// this is a safe read and every ordinary page load reaches it without the
+// header, unlike the mutating handlers below.
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
+
+    const parsed = parseTransactionQueryParams(req.nextUrl.searchParams);
+    if (!parsed.ok) {
+      return err("VALIDATION_FAILED", "Invalid filter.", 400, parsed.fieldErrors);
+    }
+
+    const page = await queryTransactions(session.user.id, parsed.value);
+    return NextResponse.json({ ok: true, data: page });
+  } catch (e) {
+    console.error("[api/transactions] GET unhandled error", e);
+    return NextResponse.json(
+      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

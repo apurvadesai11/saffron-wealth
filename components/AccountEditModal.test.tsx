@@ -41,7 +41,7 @@ describe("AccountEditModal — add mode", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("rejects a negative or missing balance", async () => {
+  it("rejects a missing balance", async () => {
     const onSave = vi.fn();
     render(<AccountEditModal onSave={onSave} onClose={vi.fn()} />);
     await userEvent.type(screen.getByLabelText("Account name"), "New Account");
@@ -74,6 +74,23 @@ describe("AccountEditModal — add mode", () => {
     await userEvent.type(screen.getByLabelText("Balance"), "100");
     await userEvent.click(screen.getByRole("button", { name: "Add Account" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ institution: null }));
+  });
+
+  // An overdrawn asset and a card carrying a statement credit are both real
+  // states the balance import can produce, so the editor has to accept them
+  // too — otherwise a user can see a value it refuses to let them re-enter.
+  it("accepts a negative balance", async () => {
+    const onSave = vi.fn();
+    render(<AccountEditModal onSave={onSave} onClose={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("Account name"), "Overdrawn Checking");
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "cash");
+    await userEvent.type(screen.getByLabelText("Balance"), "-50");
+    await userEvent.click(screen.getByRole("button", { name: "Add Account" }));
+
+    expect(screen.queryByText(/Enter a valid amount/)).not.toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Overdrawn Checking", balance: -50 }),
+    );
   });
 });
 

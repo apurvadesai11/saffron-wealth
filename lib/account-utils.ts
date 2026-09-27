@@ -79,6 +79,29 @@ export function isLiability(bucket: AccountBucket): boolean {
   return bucket === "debt";
 }
 
+// Account.balance is the value in its bucket's natural direction: what you
+// hold for an asset, what you owe for a debt. Either can be negative — an
+// overdrawn checking account, and a card carrying a statement credit — so
+// display has to say which of those it is. "-$500.00" printed inside a group
+// labelled Debt is ambiguous: it reads as "owes 500" or "is owed 500"
+// depending on which convention the reader assumes.
+export type BalanceSign = "normal" | "negative" | "owed" | "credit";
+
+export function describeAccountBalance(
+  type: AccountType,
+  balance: number,
+): { text: string; sign: BalanceSign } {
+  const liability = isLiability(getBucketForType(type));
+  if (liability) {
+    return balance < 0
+      ? { text: `$${Math.abs(balance).toFixed(2)} credit`, sign: "credit" }
+      : { text: `$${balance.toFixed(2)}`, sign: "owed" };
+  }
+  return balance < 0
+    ? { text: `-$${Math.abs(balance).toFixed(2)}`, sign: "negative" }
+    : { text: `$${balance.toFixed(2)}`, sign: "normal" };
+}
+
 export function computeNetWorth(accounts: Account[]): NetWorthSummary {
   let totalAssets = 0;
   let totalLiabilities = 0;

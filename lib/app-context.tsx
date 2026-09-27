@@ -18,6 +18,16 @@ interface AppContextValue {
   categories: Category[];
   transactions: Transaction[];
   budgets: Budget[];
+  // First calendar day `transactions` is known to be complete from, or null
+  // when it holds everything. app/(app)/layout.tsx seeds only the last 13
+  // months (see getHydrationWindowStart), so a consumer that needs an older
+  // period MUST check this before concluding a month is empty — an
+  // unhydrated month and a month with no spending look identical otherwise.
+  transactionsFrom: string | null;
+  // Extends the hydrated window back to `from`, fetching and merging the gap.
+  // Resolves immediately when the window already covers it. Safe to call on
+  // every render of a consumer that depends on the range.
+  ensureTransactionsFrom: (from: string) => Promise<void>;
   // Always a batch (one entry for a manual edit, many for "Auto-Set All") so
   // there's a single upsert call and a single source of truth for the
   // resulting list — mirrors PUT /api/budgets.
@@ -53,6 +63,10 @@ interface AppProviderProps {
   seedCategories?: Category[];
   seedTransactions?: Transaction[];
   seedBudgets?: Budget[];
+  // Lower bound of the seeded transaction window ("YYYY-MM-DD"). Omitted
+  // means the seed is the user's whole history, which is what component
+  // tests and the importers' own callers want.
+  transactionsFrom?: string;
   // Test-only: mutate local state directly instead of calling the API, so
   // component tests can assert on the result synchronously without mocking
   // fetch. Always true via renderWithApp; production never sets this.
@@ -64,12 +78,14 @@ export function AppProvider({
   seedCategories,
   seedTransactions,
   seedBudgets,
+  transactionsFrom,
   offline = false,
 }: AppProviderProps) {
   const [transactions, setTransactions] = useState<Transaction[]>(
     seedTransactions ?? MOCK_TRANSACTIONS,
   );
   const [budgets, setBudgets] = useState<Budget[]>(seedBudgets ?? MOCK_BUDGETS);
+  const [windowFrom, setWindowFrom] = useState<string | null>(transactionsFrom ?? null);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const categories = seedCategories ?? MOCK_CATEGORIES;
 
@@ -146,10 +162,84 @@ export function AppProvider({
     const safeToAdopt =
       pendingRefreshBaseline === null || mutationVersionRef.current === pendingRefreshBaseline;
     if (safeToAdopt) {
-      if (seedTransactionsChanged && seedTransactions) setTransactions(seedTransactions);
+      if (seedTransactionsChanged && seedTransactions) {
+        setTransactions(seedTransactions);
+        // A fresh seed carries a fresh window, so any older rows fetched
+        // on demand during the previous seed's lifetime are gone with it.
+        // Narrowing the claim back is the honest move — consumers re-ask.
+        setWindowFrom(transactionsFrom ?? null);
+      }
       if (seedBudgetsChanged && seedBudgets) setBudgets(seedBudgets);
     }
     if (pendingRefreshBaseline !== null) setPendingRefreshBaseline(null);
+  }
+
+  // Yesterday, relative to a "YYYY-MM-DD" string. The gap fetch stops one day
+  // short of the current window start so it never re-downloads rows already
+  // in state. Built in UTC so the arithmetic can't shift a day.
+  function dayBefore(dateStr: string): string {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const prev = new Date(Date.UTC(y, m - 1, d - 1));
+    return prev.toISOString().slice(0, 10);
+  }
+
+  // In-flight requests keyed by target `from`, so a consumer calling this
+  // from a render-driven effect can't stack duplicate fetches for the same
+  // range while the first is still running.
+  const inFlightRef = useRef(new Map<string, Promise<void>>());
+
+  async function ensureTransactionsFrom(from: string) {
+    // Null window means "everything is here"; a `from` at or after the
+    // current start is already covered. Lexicographic comparison is valid
+    // for "YYYY-MM-DD".
+    if (windowFrom === null || from >= windowFrom) return;
+
+    const existing = inFlightRef.current.get(from);
+    if (existing) return existing;
+
+    const run = (async () => {
+      const to = dayBefore(windowFrom);
+      const fetched: Transaction[] = [];
+      let cursor: string | null = null;
+
+      // The gap can be years wide, so page it rather than asking the server
+      // for an unbounded result set.
+      do {
+        const params = new URLSearchParams({ from, to, limit: "500" });
+        if (cursor) params.set("cursor", cursor);
+        const res = await fetch(`/api/transactions?${params.toString()}`);
+        const body = await res.json();
+        if (!res.ok || !body.ok) {
+          throw new Error(body?.error?.message ?? "Failed to load transactions.");
+        }
+        fetched.push(...(body.data.transactions as Transaction[]));
+        cursor = (body.data.nextCursor as string | null) ?? null;
+      } while (cursor);
+
+      setTransactions(prev => {
+        const seen = new Set(prev.map(t => t.id));
+        const merged = prev.concat(fetched.filter(t => !seen.has(t.id)));
+        // Same order the server and the seed use, so consumers that assume
+        // newest-first (TransactionList, the month filters) keep working.
+        return merged.sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
+      });
+      // Only widened after the merge lands: this value is the provider's
+      // claim about what it holds, and a claim ahead of the data makes
+      // every later consumer read an unhydrated month as an empty one.
+      setWindowFrom(from);
+    })();
+
+    // A failure leaves windowFrom untouched, so the next call retries rather
+    // than trusting a window that was never filled. Swallowed rather than
+    // rethrown because the callers are effects, where an unhandled rejection
+    // is an unactionable console error; the unchanged window IS the signal.
+    const guarded = run
+      .catch(() => {})
+      .finally(() => {
+        inFlightRef.current.delete(from);
+      });
+    inFlightRef.current.set(from, guarded);
+    return guarded;
   }
 
   async function addTransaction(t: Omit<Transaction, "id">) {
@@ -226,6 +316,8 @@ export function AppProvider({
       categories,
       transactions,
       budgets,
+      transactionsFrom: windowFrom,
+      ensureTransactionsFrom,
       saveBudgets,
       addTransaction,
       deleteTransaction,

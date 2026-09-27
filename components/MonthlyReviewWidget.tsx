@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/lib/app-context";
 import { useAlertState, getAsOf } from "@/lib/use-alert-state";
 import {
@@ -29,7 +29,10 @@ function getNoDataState(month: number, year: number) {
 
 export default function MonthlyReviewWidget() {
   const now = new Date();
-  const { categories, transactions, budgets, saveBudgets } = useApp();
+  const {
+    categories, transactions, budgets, saveBudgets,
+    transactionsFrom, ensureTransactionsFrom,
+  } = useApp();
   const { clearDismissedThresholds } = useAlertState();
 
   const expenseCategories = categories.filter(c => c.type === "expense");
@@ -137,6 +140,22 @@ export default function MonthlyReviewWidget() {
     .filter(c => c.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 
+  // AppProvider seeds a bounded window, so a month before its start has no
+  // rows in state yet — indistinguishable from a month with no spending
+  // unless we ask. Every figure below (Earned/Spent/Net, budget progress,
+  // the category breakdown) would otherwise render as $0 for a month the
+  // user actually spent money in.
+  const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const awaitingOlderData = transactionsFrom !== null && monthStart < transactionsFrom;
+
+  useEffect(() => {
+    if (awaitingOlderData) void ensureTransactionsFrom(monthStart);
+    // ensureTransactionsFrom is re-created per render and de-dupes in-flight
+    // ranges internally, so keying on the range alone is both sufficient and
+    // necessary — including the function would re-run this every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitingOlderData, monthStart]);
+
   const maxCategory = categoryTotals[0]?.amount ?? 0;
   const noData      = getNoDataState(month, year);
 
@@ -175,6 +194,15 @@ export default function MonthlyReviewWidget() {
 
         <div className="border-t border-gray-100" />
 
+        {awaitingOlderData ? (
+          <div
+            className="flex flex-col items-center justify-center py-12 px-6 text-center"
+            aria-live="polite"
+          >
+            <p className="text-gray-400 text-sm">Loading earlier transactions…</p>
+          </div>
+        ) : (
+        <>
         {/* Earned / Spent / Net */}
         <div className="grid grid-cols-3 gap-3 px-5 pt-4 pb-3">
           <div className="bg-green-50 rounded-lg p-3">
@@ -280,6 +308,8 @@ export default function MonthlyReviewWidget() {
               </div>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
 

@@ -39,12 +39,115 @@ function mapTransaction(row: {
   };
 }
 
-export async function listTransactions(userId: string): Promise<Transaction[]> {
+// Hydration read for the (app) layout. `from` bounds how far back it reaches:
+// AppProvider's consumers (budget progress, alerts, cashflow, the monthly
+// review) only ever need the current period plus the 12 complete periods
+// getHistoricalAverage looks back over, and pulling the whole table put a
+// Monarch-sized history — thousands of rows, megabytes of RSC payload — on
+// every authenticated page navigation. Omitting `from` still returns
+// everything, which is what the API routes and the importers want.
+export async function listTransactions(
+  userId: string,
+  opts: { from?: string } = {},
+): Promise<Transaction[]> {
   const rows = await prisma.transaction.findMany({
-    where: { userId },
+    where: {
+      userId,
+      ...(opts.from ? { date: { gte: dateStringToUtcDate(opts.from) } } : {}),
+    },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
   return rows.map(mapTransaction);
+}
+
+export interface TransactionQuery {
+  from?: string; // "YYYY-MM-DD", inclusive
+  to?: string; // "YYYY-MM-DD", inclusive
+  type?: CategoryType;
+  categoryIds?: string[];
+  amountMin?: number;
+  amountMax?: number;
+  search?: string;
+  limit?: number;
+  cursor?: string; // a transaction id from a previous page's nextCursor
+}
+
+export interface TransactionPage {
+  transactions: Transaction[];
+  // Null on the last page. Callers pass it back as `cursor` to continue.
+  nextCursor: string | null;
+  // Count of ALL rows matching the filters, not just this page — the
+  // Transactions page renders "N of M", and M has to survive paging.
+  total: number;
+}
+
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 500;
+
+function buildWhere(userId: string, q: TransactionQuery): Prisma.TransactionWhereInput {
+  const where: Prisma.TransactionWhereInput = { userId };
+
+  if (q.from || q.to) {
+    where.date = {
+      ...(q.from ? { gte: dateStringToUtcDate(q.from) } : {}),
+      ...(q.to ? { lte: dateStringToUtcDate(q.to) } : {}),
+    };
+  }
+  if (q.type) where.type = q.type;
+  if (q.categoryIds && q.categoryIds.length > 0) where.categoryId = { in: q.categoryIds };
+  if (q.amountMin !== undefined || q.amountMax !== undefined) {
+    where.amount = {
+      ...(q.amountMin !== undefined ? { gte: q.amountMin } : {}),
+      ...(q.amountMax !== undefined ? { lte: q.amountMax } : {}),
+    };
+  }
+  // Matches the three fields the client-side filter searched (description and
+  // category name) plus merchant, which the Monarch import populates and which
+  // is what a user actually remembers about an imported row.
+  if (q.search) {
+    where.OR = [
+      { description: { contains: q.search, mode: "insensitive" } },
+      { merchant: { contains: q.search, mode: "insensitive" } },
+      { category: { name: { contains: q.search, mode: "insensitive" } } },
+    ];
+  }
+
+  return where;
+}
+
+// Filtered, cursor-paged read for the Transactions page. Replaces filtering a
+// fully-hydrated array in the browser, which stopped being viable at import
+// scale. `id` is the final orderBy key so the sort is total: date and
+// createdAt can both tie, and a cursor against a non-deterministic order
+// silently skips or repeats rows across pages.
+export async function queryTransactions(
+  userId: string,
+  q: TransactionQuery,
+): Promise<TransactionPage> {
+  const where = buildWhere(userId, q);
+  const limit = Math.min(Math.max(q.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+
+  const [rows, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      // One extra row is the "is there a next page" probe — cheaper and more
+      // accurate than comparing an offset against `total`, which can shift
+      // under a concurrent write.
+      take: limit + 1,
+      ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+
+  return {
+    transactions: page.map(mapTransaction),
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+    total,
+  };
 }
 
 export interface CreateTransactionInput {

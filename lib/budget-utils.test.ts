@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getPeriodBounds,
+  getHydrationWindowStart,
   getPeriodKey,
   getCurrentPeriodSpend,
   getHistoricalAverage,
@@ -428,5 +429,34 @@ describe("integration: empty state", () => {
     expect(projection.budgetedExpenses).toBe(0);
     expect(projection.projectedNet).toBe(0);
     expect(projection.isStaticProjection).toBe(true);
+  });
+});
+
+describe('getHydrationWindowStart', () => {
+  it('returns the first of the month 12 months before asOf', () => {
+    expect(getHydrationWindowStart(new Date(2026, 8, 27))).toBe('2025-09-01');
+  });
+
+  it('rolls the year back correctly from January', () => {
+    expect(getHydrationWindowStart(new Date(2026, 0, 15))).toBe('2025-01-01');
+  });
+
+  it('zero-pads a single-digit month', () => {
+    expect(getHydrationWindowStart(new Date(2026, 2, 3))).toBe('2025-03-01');
+  });
+
+  // The window exists to cover getHistoricalAverage's lookback. If that
+  // function's maxPeriods ever grows past the window, Auto-Set All Budgets
+  // starts averaging over months the layout never hydrated and silently
+  // under-reports, so this pins the two together.
+  it('reaches at least as far back as the oldest period getHistoricalAverage reads', () => {
+    const asOf = new Date(2026, 8, 27);
+    const oldestPeriodStart = getPeriodBounds(
+      new Date(asOf.getFullYear(), asOf.getMonth() - 12, 1),
+      'monthly',
+    )[0];
+    const [y, m, d] = getHydrationWindowStart(asOf).split('-').map(Number);
+
+    expect(new Date(y, m - 1, d).getTime()).toBeLessThanOrEqual(oldestPeriodStart.getTime());
   });
 });
