@@ -37,6 +37,16 @@ const TransactionsIcon = createElement(
   createElement("path",     { d: "M21 13v2a4 4 0 0 1-4 4H3" }),
 );
 
+const NetWorthIcon = createElement(
+  "svg",
+  iconProps,
+  // balance scale (assets vs liabilities)
+  createElement("line", { x1: 12, y1: 3,  x2: 12, y2: 21 }),
+  createElement("path", { d: "M5 7h14" }),
+  createElement("path", { d: "M6 7l-3 6a3 3 0 0 0 6 0z" }),
+  createElement("path", { d: "M18 7l-3 6a3 3 0 0 0 6 0z" }),
+);
+
 const ProfileIcon = createElement(
   "svg",
   iconProps,
@@ -49,5 +59,6 @@ const ProfileIcon = createElement(
 export const NAV_ITEMS: NavItem[] = [
   { href: "/",             label: "Monthly Review", icon: MonthlyReviewIcon },
   { href: "/transactions", label: "Transactions",   icon: TransactionsIcon  },
+  { href: "/net-worth",    label: "Net Worth",      icon: NetWorthIcon      },
   { href: "/profile",      label: "Profile",        icon: ProfileIcon       },
 ];

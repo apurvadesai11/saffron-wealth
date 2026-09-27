@@ -29,7 +29,7 @@ function getNoDataState(month: number, year: number) {
 
 export default function MonthlyReviewWidget() {
   const now = new Date();
-  const { categories, transactions, budgets, setBudgets } = useApp();
+  const { categories, transactions, budgets, saveBudgets } = useApp();
   const { clearDismissedThresholds } = useAlertState();
 
   const expenseCategories = categories.filter(c => c.type === "expense");
@@ -41,18 +41,15 @@ export default function MonthlyReviewWidget() {
 
   const asOf = useMemo(() => getAsOf(month, year), [month, year]);
 
-  function handleSave(categoryId: string, amount: number) {
+  async function handleSave(categoryId: string, amount: number) {
     const oldBudget = budgets.find(b => b.categoryId === categoryId && b.period === "monthly");
 
-    setBudgets(prev => {
-      const idx = prev.findIndex(b => b.categoryId === categoryId && b.period === "monthly");
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], amount };
-        return next;
-      }
-      return [...prev, { categoryId, amount, period: "monthly" }];
-    });
+    try {
+      await saveBudgets([{ categoryId, amount, period: "monthly" }]);
+    } catch (e) {
+      console.error("Failed to save budget", e);
+      return;
+    }
 
     // FR-19: if budget increased and spend drops below a dismissed threshold,
     // clear the dismissed key so the alert can re-appear if crossed again
@@ -69,41 +66,36 @@ export default function MonthlyReviewWidget() {
     setEditingCategoryId(null);
   }
 
-  function handleAutoSetAll() {
+  async function handleAutoSetAll() {
     const oldAmounts = new Map(
       budgets.filter(b => b.period === "monthly").map(b => [b.categoryId, b.amount])
     );
 
-    setBudgets(prev => {
-      const next = [...prev];
-      categories.forEach(cat => {
-        const avg = getHistoricalAverage(transactions, cat.id, "monthly", asOf);
-        if (!avg) return;
-        const rounded = Math.round(avg.average);
-        const idx = next.findIndex(b => b.categoryId === cat.id && b.period === "monthly");
-        if (idx >= 0) {
-          next[idx] = { ...next[idx], amount: rounded };
-        } else {
-          next.push({ categoryId: cat.id, amount: rounded, period: "monthly" });
-        }
-      });
-      return next;
+    const entries = categories.flatMap(cat => {
+      const avg = getHistoricalAverage(transactions, cat.id, "monthly", asOf);
+      if (!avg) return [];
+      return [{ categoryId: cat.id, amount: Math.round(avg.average), period: "monthly" as const }];
     });
+    if (entries.length === 0) return;
+
+    try {
+      await saveBudgets(entries);
+    } catch (e) {
+      console.error("Failed to auto-set budgets", e);
+      return;
+    }
 
     // FR-19: clear dismissed keys for categories where budget increased
     const periodKey = getPeriodKey(asOf, "monthly");
-    categories.forEach(cat => {
-      const avg = getHistoricalAverage(transactions, cat.id, "monthly", asOf);
-      if (!avg) return;
-      const newAmount = Math.round(avg.average);
-      const oldAmount = oldAmounts.get(cat.id);
+    entries.forEach(({ categoryId, amount: newAmount }) => {
+      const oldAmount = oldAmounts.get(categoryId);
       if (oldAmount !== undefined && newAmount > oldAmount) {
-        const spent = getCurrentPeriodSpend(transactions, cat.id, "monthly", asOf);
+        const spent = getCurrentPeriodSpend(transactions, categoryId, "monthly", asOf);
         const newPercent = (spent / newAmount) * 100;
         const thresholds: number[] = [];
         if (newPercent < 80)  thresholds.push(80);
         if (newPercent < 100) thresholds.push(100);
-        if (thresholds.length) clearDismissedThresholds(cat.id, periodKey, thresholds);
+        if (thresholds.length) clearDismissedThresholds(categoryId, periodKey, thresholds);
       }
     });
   }

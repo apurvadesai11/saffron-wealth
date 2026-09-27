@@ -22,7 +22,7 @@ function ConnectedList() {
 const CATS = [CAT_GROCERIES, CAT_SALARY];
 
 const EXPENSE_TX: Transaction = {
-  id: 1,
+  id: "1",
   description: "Coffee",
   amount: 4.5,
   categoryId: CAT_GROCERIES.id,
@@ -31,7 +31,7 @@ const EXPENSE_TX: Transaction = {
 };
 
 const INCOME_TX: Transaction = {
-  id: 2,
+  id: "2",
   description: "Paycheck",
   amount: 3000,
   categoryId: CAT_SALARY.id,

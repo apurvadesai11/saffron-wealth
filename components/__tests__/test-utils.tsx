@@ -21,6 +21,7 @@ export function renderWithApp(ui: ReactElement, opts: AppRenderOptions = {}) {
       seedCategories={categories}
       seedTransactions={transactions}
       seedBudgets={budgets}
+      offline
     >
       {children}
     </AppProvider>

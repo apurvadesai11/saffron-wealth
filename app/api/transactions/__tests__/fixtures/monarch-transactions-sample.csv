@@ -1,0 +1,6 @@
+Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags,Owner,Reviewed,Id
+2026-01-05,Fresh Grocer,Groceries,Everyday Checking,FRESHGROCER 4021,,-84.50,,Shared,Reviewed,imp-tx-0001
+2026-01-10,Initech Payroll,Salary,Everyday Checking,INITECH DEP,,2500.00,,Shared,Reviewed,imp-tx-0002
+2026-01-12,,Credit Card Payment,Sunset Credit Card,ONLINE PMT THANK YOU,,-200.00,,Shared,Reviewed,imp-tx-0003
+2026-01-15,City Cab Co,Transport,"Travel Card, Signature",CITY CAB 88213,,-32.10,,Shared,Reviewed,imp-tx-0004
+2026-01-05,Fresh Grocer,Groceries,Everyday Checking,FRESHGROCER 4021,,-84.50,,Shared,Reviewed,imp-tx-0001

@@ -15,6 +15,7 @@ import { rateLimit } from "@/lib/auth/rate-limit";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
+import { seedDefaultCategories } from "@/lib/categories";
 
 interface ErrorBody {
   ok: false;
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
     const session = await createSession(user.id, ua, ip);
 
     await Promise.all([
+      seedDefaultCategories(user.id),
       recordAuthEvent({ type: "signup", userId: user.id, ipAddress: ip, userAgent: ua }),
       recordAuthEvent({ type: "login_success", userId: user.id, ipAddress: ip, userAgent: ua,
         metadata: { emailNormalized } }),

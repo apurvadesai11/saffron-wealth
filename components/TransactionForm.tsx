@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
 import type { CategoryType } from "@/lib/types";
+import AuthFormError from "@/components/auth/AuthFormError";
 
 const inputClass =
   "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -24,6 +25,8 @@ export default function TransactionForm({ onSubmitted }: Props) {
     type: "expense" as CategoryType,
     date: new Date().toISOString().split("T")[0],
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const formCategories = form.type === "expense" ? expenseCategories : incomeCategories;
 
@@ -32,19 +35,27 @@ export default function TransactionForm({ onSubmitted }: Props) {
     setForm(prev => ({ ...prev, type, categoryId: first?.id ?? "" }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsedAmount = parseFloat(form.amount);
     if (!form.description || !form.amount || !form.categoryId || isNaN(parsedAmount) || parsedAmount <= 0) return;
-    addTransaction({
-      description: form.description,
-      amount:      parsedAmount,
-      categoryId:  form.categoryId,
-      type:        form.type,
-      date:        form.date,
-    });
-    setForm(prev => ({ ...prev, description: "", amount: "" }));
-    onSubmitted?.();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await addTransaction({
+        description: form.description,
+        amount:      parsedAmount,
+        categoryId:  form.categoryId,
+        type:        form.type,
+        date:        form.date,
+      });
+      setForm(prev => ({ ...prev, description: "", amount: "" }));
+      onSubmitted?.();
+    } catch {
+      setError("Couldn't save the transaction. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -114,11 +125,13 @@ export default function TransactionForm({ onSubmitted }: Props) {
           className={inputClass}
         />
       </div>
+      <AuthFormError message={error} />
       <button
         type="submit"
-        className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors"
+        disabled={submitting}
+        className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
       >
-        Save Transaction
+        {submitting ? "Saving…" : "Save Transaction"}
       </button>
     </form>
   );

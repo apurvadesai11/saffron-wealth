@@ -8,10 +8,12 @@ import TransactionFilters, {
   EMPTY_FILTERS,
   TransactionFilterState,
 } from "@/components/TransactionFilters";
+import MonarchImportModal from "@/components/MonarchImportModal";
 
 export default function TransactionsPage() {
   const { categories, transactions } = useApp();
   const [showForm, setShowForm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [filters, setFilters] = useState<TransactionFilterState>(EMPTY_FILTERS);
 
   const visible = useMemo(
@@ -60,12 +62,20 @@ export default function TransactionsPage() {
               {visible.length} of {transactions.length} {transactions.length === 1 ? "transaction" : "transactions"}
             </p>
           </div>
-          <button
-            onClick={() => setShowForm(prev => !prev)}
-            className="bg-blue-600 text-white rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            {showForm ? "Cancel" : "+ Add Transaction"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="border border-gray-200 text-gray-700 rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              Import from Monarch
+            </button>
+            <button
+              onClick={() => setShowForm(prev => !prev)}
+              className="bg-blue-600 text-white rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              {showForm ? "Cancel" : "+ Add Transaction"}
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -76,6 +86,10 @@ export default function TransactionsPage() {
 
         <TransactionList transactions={visible} />
       </div>
+
+      {showImportModal && (
+        <MonarchImportModal onClose={() => setShowImportModal(false)} />
+      )}
     </>
   );
 }

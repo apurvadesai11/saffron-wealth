@@ -23,11 +23,16 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  sessions       Session[]
-  oauthAccounts  OAuthAccount[]
-  resetTokens    PasswordResetToken[]
-  failedLogins   FailedLogin[]
-  authEvents     AuthEvent[]
+  sessions             Session[]
+  oauthAccounts        OAuthAccount[]
+  resetTokens          PasswordResetToken[]
+  failedLogins         FailedLogin[]
+  authEvents           AuthEvent[]
+  accounts             Account[]
+  accountBalanceEvents AccountBalanceEvent[]
+  categories           Category[]
+  transactions         Transaction[]
+  budgets              Budget[]
 
   @@index([emailNormalized])
 }
@@ -103,4 +108,142 @@ model AuthEvent {
 
   @@index([userId, createdAt])
   @@index([type, createdAt])
+}
+
+// A financial account contributing to net worth. `type` is one of the
+// AccountType union (enforced in the app layer, not a DB enum — mirrors how
+// CategoryType/BudgetPeriod are TS unions, so new types need no migration).
+// `balance` is always positive; liabilities represent the amount owed and are
+// subtracted during net-worth aggregation (see lib/account-utils.ts).
+// Soft-deleted via `archivedAt` (matches the app's established convention):
+// an archived account is hidden from net worth but its balance history is kept
+// so a future net-worth-over-time graph can still reflect it.
+model Account {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  type        String
+  institution String?
+  balance     Decimal   @db.Decimal(14, 2)
+  balanceAsOf DateTime  @default(now())
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceHistory AccountBalanceEvent[]
+  transactions   Transaction[]
+
+  @@index([userId])
+}
+
+// Append-only log of every balance value an account has held. Written on create
+// (opening balance) and whenever the balance actually changes. No graph consumes
+// this yet — it exists so a future net-worth-over-time chart has real history.
+// `userId` is denormalized to support per-user history queries and a possible
+// future pivot to soft-delete without a data migration.
+//
+// `asOf` (Phase 3, Task 5) is the calendar date the balance is true as of —
+// for Phase 1's create/edit paths that's just "now" (the @default), but the
+// balance-history import sets it to the CSV's own Date so history isn't
+// dated by when the import ran. `recordedAt` stays the audit/insert
+// timestamp; Task 6 tiebreaks same-`asOf` events by it. Deliberately NO
+// `@@unique([accountId, asOf])` — Phase 1 legitimately writes more than one
+// event for the same account on the same calendar day (editing a balance
+// twice in one sitting), so uniqueness has to be enforced in application
+// code (the import's dedup Set), not the schema.
+model AccountBalanceEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  accountId  String
+  balance    Decimal  @db.Decimal(14, 2)
+  asOf       DateTime @db.Date @default(now())
+  recordedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId, recordedAt])
+  @@index([accountId, asOf])
+}
+
+// Income/expense (and 'transfer', for Monarch-imported transfer rows —
+// lib/budget-utils.ts excludes it from every sum via strict type equality)
+// category. `sortOrder` gives bulk-seeded default categories (created in the
+// same request, sometimes the same millisecond) a stable display order
+// without relying on `createdAt` tie-breaking.
+// `@@unique([userId, name])` lets the Monarch import (Phase 2b) upsert a
+// category by name instead of tracking Monarch's own category ids.
+// Soft-deleted via `archivedAt`, matching `Account`.
+model Category {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  type       String
+  color      String
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// `accountId` is nullable because manually-added transactions (this phase's
+// UI) aren't tied to a specific Account — only Monarch-imported rows (Phase
+// 2b) will set it. `type` mirrors CategoryType ('income' | 'expense' |
+// 'transfer'); a transfer's amount is still stored positive, direction is
+// carried by `type` alone, same convention as income/expense.
+// `externalHash` + `@@unique([userId, externalHash])` is the Phase 2b import
+// dedup key (sha256 of date|amount|account|merchant|original statement) —
+// null for manually-added transactions, which is why the unique constraint
+// must tolerate multiple nulls (Postgres treats distinct NULLs as non-equal,
+// so this is safe without a partial index).
+model Transaction {
+  id            String   @id @default(cuid())
+  userId        String
+  accountId     String?
+  categoryId    String
+  description   String
+  merchant      String?
+  notes         String?
+  amount        Decimal  @db.Decimal(14, 2)
+  type          String
+  date          DateTime @db.Date
+  externalHash  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, externalHash])
+  @@index([userId, date])
+}
+
+// `amount === 0` is a valid sentinel meaning "hidden from budgets" (mirrors
+// the mock Budget model). `@@unique([userId, categoryId, period])` is both
+// the natural key the UI already looks budgets up by and the upsert target
+// for saving one or many budgets at once.
+model Budget {
+  id         String       @id @default(cuid())
+  userId     String
+  categoryId String
+  amount     Decimal      @db.Decimal(14, 2)
+  period     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId, period])
+  @@index([userId])
 }

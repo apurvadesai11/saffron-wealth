@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 const sampleTx = (overrides: Partial<Transaction>): Transaction => ({
-  id: Math.floor(Math.random() * 1e9),
+  id: `tx-${Math.floor(Math.random() * 1e9)}`,
   description: "x",
   amount: 100,
   categoryId: CAT_GROCERIES.id,
