@@ -1,137 +1,200 @@
-// Targets the seed-sync guard in AppProvider directly (see the long comment
-// above it in app-context.tsx). This exists because the guard's whole
-// purpose only shows up across a *changed seed prop reference* — every other
-// test in the repo either holds seeds stable (renderWithApp) or imports with
-// no prior mutation (e2e/monarch-import.spec.ts), so neither ever exercises
-// the mut !== baseline branch. A prior version of this guard shipped with a
-// baseline bug that passed the full suite anyway, precisely because nothing
-// re-rendered the provider with a new seed reference.
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+// AppProvider's hydration window. app/(app)/layout.tsx now seeds only the
+// last 13 months of transactions instead of the whole table, so anything that
+// wants an older period has to say so and wait. Without that, a consumer
+// reading a pre-window month sees an empty array and reports "no
+// transactions" for a month that actually has them, which is a wrong number
+// rather than a slow one.
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { AppProvider, useApp } from "./app-context";
 import type { Transaction } from "./types";
 
-function tx(id: string): Transaction {
+function tx(id: string, date: string, amount = 10): Transaction {
   return {
     id,
     description: `Tx ${id}`,
-    amount: 10,
+    amount,
     categoryId: "cat-1",
     type: "expense",
-    date: "2026-01-01",
+    date,
+    accountId: null,
+    merchant: null,
+    notes: null,
   };
 }
 
-// A minimal consumer exposing just enough of useApp() to drive and observe
-// the guard: transactions (to see which seed "won"), and the three actions
-// that can move it — a mutation, and beginRefresh.
-function Harness() {
-  const { transactions, addTransaction, deleteTransaction, beginRefresh } = useApp();
+// Exposes what the provider decided, plus a handle to drive it, so the tests
+// assert on context state rather than on the mock.
+let ensure: (from: string) => Promise<void>;
+function Probe() {
+  const { transactions, transactionsFrom, ensureTransactionsFrom } = useApp();
+  ensure = ensureTransactionsFrom;
   return (
     <div>
-      <p data-testid="tx-ids">{transactions.map(t => t.id).join(",")}</p>
-      <button onClick={() => void addTransaction({
-        description: "New tx",
-        amount: 5,
-        categoryId: "cat-1",
-        type: "expense",
-        date: "2026-01-02",
-      })}>
-        add
-      </button>
-      <button onClick={() => void deleteTransaction(transactions[0]?.id)}>delete-first</button>
-      <button onClick={beginRefresh}>begin-refresh</button>
+      <span data-testid="from">{transactionsFrom ?? "unbounded"}</span>
+      <span data-testid="ids">{transactions.map((t) => t.id).join(",")}</span>
     </div>
   );
 }
 
-function ids() {
-  return screen.getByTestId("tx-ids").textContent;
+function renderProvider(opts: { seedTransactions: Transaction[]; transactionsFrom?: string }) {
+  return render(
+    <AppProvider
+      seedCategories={[]}
+      seedBudgets={[]}
+      seedTransactions={opts.seedTransactions}
+      transactionsFrom={opts.transactionsFrom}
+    >
+      <Probe />
+    </AppProvider>,
+  );
 }
 
-describe("AppProvider — seed-sync guard", () => {
-  it("adopts a clean seed change with no local mutations and no beginRefresh call", () => {
-    const seedA = [tx("a1"), tx("a2")];
-    const seedB = [tx("b1"), tx("b2"), tx("b3")];
-    const { rerender } = render(
-      <AppProvider seedTransactions={seedA} offline><Harness /></AppProvider>,
-    );
-    expect(ids()).toBe("a1,a2");
+function page(transactions: Transaction[], nextCursor: string | null = null) {
+  return {
+    ok: true,
+    json: async () => ({ ok: true, data: { transactions, nextCursor, total: transactions.length } }),
+  };
+}
 
-    rerender(<AppProvider seedTransactions={seedB} offline><Harness /></AppProvider>);
-    expect(ids()).toBe("b1,b2,b3");
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("AppProvider hydration window", () => {
+  it("exposes the window start the layout seeded it with", () => {
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    expect(screen.getByTestId("from")).toHaveTextContent("2025-09-01");
   });
 
-  it("skips a seed that a later mutation raced ahead of", async () => {
-    const seedA = [tx("a1"), tx("a2")];
-    const seedB = [tx("b1"), tx("b2")];
-    const { rerender } = render(
-      <AppProvider seedTransactions={seedA} offline><Harness /></AppProvider>,
-    );
+  it("reports an unbounded window when the layout seeded no start", () => {
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")] });
 
-    await userEvent.click(screen.getByRole("button", { name: "begin-refresh" }));
-    // A mutation happens AFTER the refresh was "requested" — races ahead of
-    // whatever snapshot the eventual seed represents.
-    await userEvent.click(screen.getByRole("button", { name: "delete-first" }));
-    expect(ids()).toBe("a2");
-
-    rerender(<AppProvider seedTransactions={seedB} offline><Harness /></AppProvider>);
-    // The stale seed is skipped — the more recent local delete stands.
-    expect(ids()).toBe("a2");
+    expect(screen.getByTestId("from")).toHaveTextContent("unbounded");
   });
 
-  it("adopts a seed that arrives after an unrelated EARLIER mutation (the regression)", async () => {
-    const seedA = [tx("a1"), tx("a2")];
-    const seedB = [tx("b1"), tx("b2"), tx("b3")];
-    const { rerender } = render(
-      <AppProvider seedTransactions={seedA} offline><Harness /></AppProvider>,
-    );
+  it("does not fetch for a date already inside the window", async () => {
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
 
-    // Mutation happens BEFORE the refresh is even requested — e.g. a budget
-    // edit on the dashboard minutes before the user opens the import modal.
-    await userEvent.click(screen.getByRole("button", { name: "add" }));
-    await userEvent.click(screen.getByRole("button", { name: "begin-refresh" }));
+    await act(async () => {
+      await ensure("2026-01-01");
+    });
 
-    rerender(<AppProvider seedTransactions={seedB} offline><Harness /></AppProvider>);
-    // beginRefresh() snapshots the CURRENT (already-mutated) version, so
-    // nothing races it — the fresh seed must still win. A baseline captured
-    // at "last seed change" instead of "refresh requested" would fail this.
-    expect(ids()).toBe("b1,b2,b3");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("adopts two consecutive clean seeds without latching", async () => {
-    const seedA = [tx("a1")];
-    const seedB = [tx("b1")];
-    const seedC = [tx("c1")];
-    const { rerender } = render(
-      <AppProvider seedTransactions={seedA} offline><Harness /></AppProvider>,
-    );
+  it("does not fetch when the window is unbounded", async () => {
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")] });
 
-    await userEvent.click(screen.getByRole("button", { name: "begin-refresh" }));
-    rerender(<AppProvider seedTransactions={seedB} offline><Harness /></AppProvider>);
-    expect(ids()).toBe("b1");
+    await act(async () => {
+      await ensure("2019-01-01");
+    });
 
-    // A second, independent refresh cycle — the first one's now-consumed
-    // snapshot must not linger and block this one.
-    await userEvent.click(screen.getByRole("button", { name: "begin-refresh" }));
-    rerender(<AppProvider seedTransactions={seedC} offline><Harness /></AppProvider>);
-    expect(ids()).toBe("c1");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("an unarmed refresh (no beginRefresh call) is never permanently blocked by an earlier mutation", async () => {
-    // Mirrors a caller that doesn't opt into the race guard at all (e.g.
-    // app/(app)/profile/page.tsx's router.refresh() calls, which never touch
-    // transactions/budgets) — must behave like a plain, unguarded adopt.
-    const seedA = [tx("a1")];
-    const seedB = [tx("b1"), tx("b2")];
-    const { rerender } = render(
-      <AppProvider seedTransactions={seedA} offline><Harness /></AppProvider>,
-    );
+  it("fetches only the gap below the current window start", async () => {
+    fetchMock.mockResolvedValue(page([tx("old", "2024-06-15")]));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
 
-    await userEvent.click(screen.getByRole("button", { name: "add" }));
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
 
-    rerender(<AppProvider seedTransactions={seedB} offline><Harness /></AppProvider>);
-    expect(ids()).toBe("b1,b2");
+    const url = new URL(fetchMock.mock.calls[0][0], "http://localhost");
+    expect(url.searchParams.get("from")).toBe("2024-01-01");
+    // The day before the existing window start: re-requesting rows the
+    // provider already holds wastes a payload on every navigation back.
+    expect(url.searchParams.get("to")).toBe("2025-08-31");
+  });
+
+  it("merges fetched rows into the transaction list", async () => {
+    fetchMock.mockResolvedValue(page([tx("old", "2024-06-15")]));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ids")).toHaveTextContent("a,old");
+    });
+  });
+
+  it("widens the window start after a successful fetch", async () => {
+    fetchMock.mockResolvedValue(page([tx("old", "2024-06-15")]));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("from")).toHaveTextContent("2024-01-01");
+    });
+  });
+
+  it("follows nextCursor until the gap is fully loaded", async () => {
+    fetchMock
+      .mockResolvedValueOnce(page([tx("p1", "2024-06-15")], "cursor-1"))
+      .mockResolvedValueOnce(page([tx("p2", "2024-03-15")], null));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const second = new URL(fetchMock.mock.calls[1][0], "http://localhost");
+    expect(second.searchParams.get("cursor")).toBe("cursor-1");
+    await waitFor(() => {
+      expect(screen.getByTestId("ids")).toHaveTextContent("a,p1,p2");
+    });
+  });
+
+  it("drops a row it already holds rather than duplicating it", async () => {
+    fetchMock.mockResolvedValue(page([tx("a", "2026-09-01"), tx("old", "2024-06-15")]));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ids")).toHaveTextContent("a,old");
+    });
+  });
+
+  // The window start is the provider's claim about what it holds. Widening it
+  // on a failed fetch would make every later consumer believe data is present
+  // that never arrived, and the empty result reads as "no transactions".
+  it("leaves the window start alone when the fetch fails", async () => {
+    fetchMock.mockRejectedValue(new Error("offline"));
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    expect(screen.getByTestId("from")).toHaveTextContent("2025-09-01");
+  });
+
+  it("leaves the window start alone on a non-ok response", async () => {
+    fetchMock.mockResolvedValue({ ok: false, json: async () => ({ ok: false }) });
+    renderProvider({ seedTransactions: [tx("a", "2026-09-01")], transactionsFrom: "2025-09-01" });
+
+    await act(async () => {
+      await ensure("2024-01-01");
+    });
+
+    expect(screen.getByTestId("from")).toHaveTextContent("2025-09-01");
   });
 });

@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth/server";
 import { AppProvider } from "@/lib/app-context";
 import { listCategories } from "@/lib/categories";
 import { listTransactions } from "@/lib/transactions";
+import { getHydrationWindowStart } from "@/lib/budget-utils";
 import { listBudgets } from "@/lib/budgets";
 
 export default async function AppShellLayout({ children }: { children: ReactNode }) {
@@ -26,9 +27,13 @@ export default async function AppShellLayout({ children }: { children: ReactNode
   // server-side and passed down so the client never re-fetches on first
   // paint; only (app)/net-worth fetches independently, and only because it
   // predates this hydration and isn't on AppProvider (see lib/accounts.ts).
+  // Bounded rather than the whole table: see getHydrationWindowStart. Every
+  // AppProvider consumer's math lives inside this window, and anything older
+  // is fetched on demand through ensureTransactionsFrom.
+  const transactionsFrom = getHydrationWindowStart(new Date());
   const [categories, transactions, budgets] = await Promise.all([
     listCategories(session.user.id),
-    listTransactions(session.user.id),
+    listTransactions(session.user.id, { from: transactionsFrom }),
     listBudgets(session.user.id),
   ]);
 
@@ -36,6 +41,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
     <AppProvider
       seedCategories={categories}
       seedTransactions={transactions}
+      transactionsFrom={transactionsFrom}
       seedBudgets={budgets}
     >
       <div className="min-h-screen bg-gray-50">

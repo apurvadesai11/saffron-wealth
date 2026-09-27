@@ -113,3 +113,74 @@ describe("MonthlyReviewWidget", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
+
+// AppProvider seeds only the last 13 months (see getHydrationWindowStart).
+// Before this, navigating past the window showed the same "no transactions"
+// empty state as a genuinely empty month, which is a wrong claim about the
+// user's money rather than a missing feature.
+describe("months outside the hydration window", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: { transactions: [], nextCursor: null, total: 0 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function navigateBack(times: number) {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const prev = screen.getByRole("button", { name: /previous month/i });
+    for (let i = 0; i < times; i++) await user.click(prev);
+  }
+
+  it("requests the selected month when it predates the window", async () => {
+    renderWithApp(<MonthlyReviewWidget />, {
+      categories: CATS,
+      transactions: [],
+      budgets: [],
+      transactionsFrom: "2026-04-01",
+    });
+
+    await navigateBack(2); // 2026-05 -> 2026-03, before the window
+
+    const urls = fetchMock.mock.calls.map(c => new URL(c[0], "http://localhost"));
+    expect(urls.some(u => u.searchParams.get("from") === "2026-03-01")).toBe(true);
+  });
+
+  it("does not request a month already inside the window", async () => {
+    renderWithApp(<MonthlyReviewWidget />, {
+      categories: CATS,
+      transactions: [],
+      budgets: [],
+      transactionsFrom: "2026-01-01",
+    });
+
+    await navigateBack(1); // 2026-05 -> 2026-04, still inside
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("says it is loading rather than claiming the month is empty", async () => {
+    // A fetch that never settles holds the component in its pending state.
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    renderWithApp(<MonthlyReviewWidget />, {
+      categories: CATS,
+      transactions: [],
+      budgets: [],
+      transactionsFrom: "2026-04-01",
+    });
+
+    await navigateBack(2); // 2026-05 -> 2026-03, before the window
+
+    expect(screen.getByText(/loading earlier transactions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not a single transaction/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/financial desert/i)).not.toBeInTheDocument();
+  });
+});

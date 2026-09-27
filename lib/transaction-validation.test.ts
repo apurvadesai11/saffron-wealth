@@ -4,6 +4,7 @@ import {
   validateAmount,
   validateTransactionType,
   validateDate,
+  parseTransactionQueryParams,
   parseCreateTransactionBody,
 } from "./transaction-validation";
 
@@ -113,5 +114,99 @@ describe("parseCreateTransactionBody", () => {
       type: "expense", date: "2026-07-01", accountId: "acc-1",
     });
     expect(r.ok && r.value.accountId).toBe("acc-1");
+  });
+});
+
+describe("parseTransactionQueryParams", () => {
+  function params(init: Record<string, string>) {
+    return new URLSearchParams(init);
+  }
+
+  it("returns an empty query for no params", () => {
+    const r = parseTransactionQueryParams(params({}));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({});
+  });
+
+  it("reads a date range", () => {
+    const r = parseTransactionQueryParams(params({ from: "2026-01-01", to: "2026-09-30" }));
+    expect(r.ok && r.value.from).toBe("2026-01-01");
+    expect(r.ok && r.value.to).toBe("2026-09-30");
+  });
+
+  it("rejects a malformed date", () => {
+    const r = parseTransactionQueryParams(params({ from: "01/01/2026" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.from).toBeDefined();
+  });
+
+  it("rejects a range whose end precedes its start", () => {
+    const r = parseTransactionQueryParams(params({ from: "2026-09-30", to: "2026-01-01" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.to).toBeDefined();
+  });
+
+  it("reads a valid category type", () => {
+    const r = parseTransactionQueryParams(params({ type: "income" }));
+    expect(r.ok && r.value.type).toBe("income");
+  });
+
+  it("treats type=all as no type filter", () => {
+    const r = parseTransactionQueryParams(params({ type: "all" }));
+    expect(r.ok && r.value.type).toBeUndefined();
+  });
+
+  it("rejects an unknown type", () => {
+    const r = parseTransactionQueryParams(params({ type: "refund" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.type).toBeDefined();
+  });
+
+  it("splits categoryIds on commas and drops empties", () => {
+    const r = parseTransactionQueryParams(params({ categoryIds: "a,,b," }));
+    expect(r.ok && r.value.categoryIds).toEqual(["a", "b"]);
+  });
+
+  it("reads an amount range", () => {
+    const r = parseTransactionQueryParams(params({ amountMin: "10", amountMax: "99.5" }));
+    expect(r.ok && r.value.amountMin).toBe(10);
+    expect(r.ok && r.value.amountMax).toBe(99.5);
+  });
+
+  it("rejects a non-numeric amount", () => {
+    const r = parseTransactionQueryParams(params({ amountMin: "cheap" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.amountMin).toBeDefined();
+  });
+
+  it("rejects an amount range whose max is below its min", () => {
+    const r = parseTransactionQueryParams(params({ amountMin: "100", amountMax: "10" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.amountMax).toBeDefined();
+  });
+
+  it("trims the search term and drops it when empty", () => {
+    expect(parseTransactionQueryParams(params({ search: "  coffee " })).ok).toBe(true);
+    const r = parseTransactionQueryParams(params({ search: "  coffee " }));
+    expect(r.ok && r.value.search).toBe("coffee");
+    const blank = parseTransactionQueryParams(params({ search: "   " }));
+    expect(blank.ok && blank.value.search).toBeUndefined();
+  });
+
+  it("rejects a limit that isn't a positive integer", () => {
+    const r = parseTransactionQueryParams(params({ limit: "0" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.limit).toBeDefined();
+  });
+
+  it("rejects a limit above the page-size ceiling", () => {
+    const r = parseTransactionQueryParams(params({ limit: "5000" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.limit).toBeDefined();
+  });
+
+  it("passes the cursor through", () => {
+    const r = parseTransactionQueryParams(params({ cursor: "ckz123" }));
+    expect(r.ok && r.value.cursor).toBe("ckz123");
   });
 });

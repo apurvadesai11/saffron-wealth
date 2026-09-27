@@ -11,7 +11,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { POST } from "../route";
+import { GET, POST } from "../route";
 import { seedUser, seedSession, seedCategory, makeRequest, cleanupUser } from "./helpers";
 
 let userId: string;
@@ -146,5 +146,105 @@ describe("POST /api/transactions", () => {
     const res = await POST(req);
     expect(res.status).toBe(201);
     expect((await res.json()).data.transaction.type).toBe("transfer");
+  });
+});
+
+describe("GET /api/transactions", () => {
+  async function seedTx(
+    uid: string,
+    categoryId: string,
+    fields: { date: string; amount: number; description: string },
+  ) {
+    const [y, m, d] = fields.date.split("-").map(Number);
+    return prisma.transaction.create({
+      data: {
+        userId: uid,
+        categoryId,
+        description: fields.description,
+        amount: fields.amount,
+        type: "expense",
+        date: new Date(Date.UTC(y, m - 1, d)),
+      },
+    });
+  }
+
+  it("returns 401 when not signed in", async () => {
+    const req = makeRequest({ method: "GET" });
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  // A read needs no CSRF token — requiring one here would break every
+  // ordinary page load, which sends no such header.
+  it("serves a signed-in read with no CSRF token", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const category = await seedCategory(user.id);
+    await seedTx(user.id, category.id, { date: "2026-09-01", amount: 12, description: "Coffee" });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(makeRequest({ method: "GET" }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.transactions.map((t: { description: string }) => t.description)).toEqual(["Coffee"]);
+    expect(body.data.total).toBe(1);
+    expect(body.data.nextCursor).toBeNull();
+  });
+
+  it("applies a filter from the query string", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const category = await seedCategory(user.id);
+    await seedTx(user.id, category.id, { date: "2026-08-01", amount: 5, description: "Older" });
+    await seedTx(user.id, category.id, { date: "2026-09-15", amount: 5, description: "Newer" });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(
+      makeRequest({ method: "GET", url: "http://localhost/api/transactions?from=2026-09-01" }),
+    );
+
+    const body = await res.json();
+    expect(body.data.transactions.map((t: { description: string }) => t.description)).toEqual(["Newer"]);
+    expect(body.data.total).toBe(1);
+  });
+
+  it("returns 400 with a field error on a malformed date param", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(
+      makeRequest({ method: "GET", url: "http://localhost/api/transactions?from=not-a-date" }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+    expect(body.error.fieldErrors.from).toBeDefined();
+  });
+
+  it("never returns another user's transactions", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const category = await seedCategory(user.id);
+    await seedTx(user.id, category.id, { date: "2026-09-01", amount: 1, description: "Mine" });
+
+    const other = await seedUser();
+    otherUserId = other.id;
+    const otherCategory = await seedCategory(other.id);
+    await seedTx(other.id, otherCategory.id, { date: "2026-09-02", amount: 2, description: "Theirs" });
+
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(makeRequest({ method: "GET" }));
+
+    const body = await res.json();
+    expect(body.data.transactions.map((t: { description: string }) => t.description)).toEqual(["Mine"]);
+    expect(body.data.total).toBe(1);
   });
 });
