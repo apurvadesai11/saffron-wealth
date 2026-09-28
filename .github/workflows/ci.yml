@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# A second push to the same branch makes the first run's result irrelevant;
+# without this they queue up and compete for the same runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Lint, build, unit, e2e
@@ -61,6 +67,13 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # `next build` type-checks application code but never compiles test
+      # files, and tsconfig includes **/*.ts — so a type error in a *.test.ts
+      # rode all the way through CI green. Must run after `prisma generate`:
+      # the types it checks against are the generated client's.
+      - name: Typecheck
+        run: npm run typecheck
 
       # Catches the case where the code reads an env var .env.example never
       # documents (or documents one nothing reads) — drift that fails silently
