@@ -3,20 +3,36 @@ import {
   buildGoogleAuthorizeUrl,
   exchangeGoogleCode,
   fetchGoogleProfile,
+  googleCallbackRedirectUri,
+  googleOauthConfigStatus,
 } from "./google-oauth";
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
 
+const MANAGED_KEYS = [
+  "GOOGLE_OAUTH_CLIENT_ID",
+  "GOOGLE_OAUTH_CLIENT_SECRET",
+  "GOOGLE_OAUTH_REDIRECT_URI",
+  "APP_BASE_URL",
+] as const;
+
+function restoreKey(key: string) {
+  const prior = originalEnv[key];
+  if (prior === undefined) delete process.env[key];
+  else process.env[key] = prior;
+}
+
 beforeEach(() => {
-  process.env.GOOGLE_CLIENT_ID = "test-client-id";
-  process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+  process.env.GOOGLE_OAUTH_CLIENT_ID = "test-client-id";
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET = "test-client-secret";
+  delete process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  delete process.env.APP_BASE_URL;
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  process.env.GOOGLE_CLIENT_ID = originalEnv.GOOGLE_CLIENT_ID;
-  process.env.GOOGLE_CLIENT_SECRET = originalEnv.GOOGLE_CLIENT_SECRET;
+  for (const key of MANAGED_KEYS) restoreKey(key);
 });
 
 describe("buildGoogleAuthorizeUrl", () => {
@@ -32,11 +48,71 @@ describe("buildGoogleAuthorizeUrl", () => {
     expect(parsed.searchParams.get("state")).toBe("state-abc");
   });
 
-  it("throws when GOOGLE_CLIENT_ID is missing", () => {
-    delete process.env.GOOGLE_CLIENT_ID;
+  it("throws when GOOGLE_OAUTH_CLIENT_ID is missing", () => {
+    delete process.env.GOOGLE_OAUTH_CLIENT_ID;
     expect(() => buildGoogleAuthorizeUrl("s", "https://x")).toThrow(
-      /GOOGLE_CLIENT_ID/,
+      /GOOGLE_OAUTH_CLIENT_ID/,
     );
+  });
+});
+
+describe("googleCallbackRedirectUri", () => {
+  it("uses GOOGLE_OAUTH_REDIRECT_URI verbatim when set", () => {
+    // It has to byte-match what is registered in the Google console, so an
+    // explicit value must not be rebuilt from parts.
+    process.env.GOOGLE_OAUTH_REDIRECT_URI = "https://registered.example/custom/cb";
+    expect(googleCallbackRedirectUri("https://ignored.example/api/x")).toBe(
+      "https://registered.example/custom/cb",
+    );
+  });
+
+  it("derives from APP_BASE_URL when no explicit URI is set", () => {
+    process.env.APP_BASE_URL = "https://app.example";
+    expect(googleCallbackRedirectUri("https://ignored.example/api/x")).toBe(
+      "https://app.example/api/auth/oauth/google/callback",
+    );
+  });
+
+  it("falls back to the request origin when neither is set", () => {
+    expect(googleCallbackRedirectUri("http://localhost:3000/api/auth/oauth/google/start")).toBe(
+      "http://localhost:3000/api/auth/oauth/google/callback",
+    );
+  });
+
+  it("prefers the explicit URI over APP_BASE_URL", () => {
+    process.env.APP_BASE_URL = "https://app.example";
+    process.env.GOOGLE_OAUTH_REDIRECT_URI = "https://registered.example/cb";
+    expect(googleCallbackRedirectUri("https://x.example/y")).toBe(
+      "https://registered.example/cb",
+    );
+  });
+});
+
+describe("googleOauthConfigStatus", () => {
+  it("reports ok when both id and secret are present", () => {
+    expect(googleOauthConfigStatus()).toEqual({ ok: true });
+  });
+
+  it("names the missing secret when only the id is set", () => {
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const status = googleOauthConfigStatus();
+    expect(status.ok).toBe(false);
+    expect(status.ok === false && status.reason).toMatch(/SECRET is missing/);
+  });
+
+  it("names the missing id when only the secret is set", () => {
+    delete process.env.GOOGLE_OAUTH_CLIENT_ID;
+    const status = googleOauthConfigStatus();
+    expect(status.ok).toBe(false);
+    expect(status.ok === false && status.reason).toMatch(/CLIENT_ID is missing/);
+  });
+
+  it("reports both unset distinctly from a half-configured pair", () => {
+    delete process.env.GOOGLE_OAUTH_CLIENT_ID;
+    delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const status = googleOauthConfigStatus();
+    expect(status.ok).toBe(false);
+    expect(status.ok === false && status.reason).toMatch(/both unset/);
   });
 });
 

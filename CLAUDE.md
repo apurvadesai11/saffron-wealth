@@ -720,13 +720,22 @@ gracefully:
 | Var                                 | Required for                         | Without it                                |
 |-------------------------------------|--------------------------------------|-------------------------------------------|
 | `DATABASE_URL`                      | Auth (anything DB-backed)            | App won't boot the (app) routes.          |
-| `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` | Google sign-in flow         | Google button errors when clicked.        |
+| `APP_BASE_URL`                      | Absolute links in emails; OAuth callback base in prod | Derives the base from the request URL.  |
+| `GOOGLE_OAUTH_CLIENT_ID`            | Google sign-in flow                  | Google button redirects to `?oauth=unconfigured`. |
+| `GOOGLE_OAUTH_CLIENT_SECRET`        | Google sign-in flow                  | Same — and a half-configured pair is refused at `/start` with a logged reason. |
+| `GOOGLE_OAUTH_REDIRECT_URI`         | Pinning the callback to the URI registered in the Google console | Callback URI is derived from `APP_BASE_URL` or the request origin. |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Password-reset emails              | Logs the email body to console instead.   |
 | `UPSTASH_REDIS_REST_URL/TOKEN`      | Cross-instance rate limiting         | Falls back to per-process in-memory map.  |
 | `BLOB_READ_WRITE_TOKEN`             | Avatar upload in production          | Writes to `public/uploads/avatars/`.      |
 | `CRON_SECRET`                       | Vercel Cron endpoints                | Cron requests 401.                        |
 | `AUDIT_RETENTION_DAYS`              | Override default 365-day retention   | Defaults to 365 (min 30).                 |
-| `NEXTAUTH_URL`                      | Google callback base URL in prod     | Derives base from request URL.            |
+
+This table and `.env.example` must agree with what the code actually reads.
+They did not for every Google variable at one point — the code read
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`NEXTAUTH_URL` while the docs named
+`GOOGLE_OAUTH_CLIENT_ID`/`..._SECRET`/`GOOGLE_OAUTH_REDIRECT_URI`, so anyone
+following the setup instructions got `/login?oauth=unconfigured`.
+`npm run check:env` now diffs the two and the pre-push hook runs it.
 
 ### When you add a new feature
 

@@ -200,6 +200,7 @@ Each import shows a preview before it writes, and both are safe to re-run: trans
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run check:env` | Verify the env vars the source reads match `.env.example` |
 | `npm test` | Run Vitest unit tests |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run test:e2e` | Run Playwright E2E tests (boots its own dev server on :3100; needs Postgres) |

@@ -62,6 +62,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Catches the case where the code reads an env var .env.example never
+      # documents (or documents one nothing reads) — drift that fails silently
+      # by producing a feature that simply never works.
+      - name: Env parity (source vs .env.example)
+        run: npm run check:env
+
       - name: Build
         run: npm run build
 
