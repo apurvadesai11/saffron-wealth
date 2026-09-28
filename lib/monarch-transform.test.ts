@@ -17,7 +17,7 @@ describe("TRANSFER_LIKE_CATEGORIES", () => {
 });
 
 describe("NON_ACCOUNT_NAMES", () => {
-  it("is the two medical trackers from Ruling 5", () => {
+  it("is the two medical trackers from docs/decisions/0005-non-account-denylist.md", () => {
     expect(NON_ACCOUNT_NAMES).toEqual([
       "Individual innetwork medical deductible",
       "Individual innetwork medical outofpocket",

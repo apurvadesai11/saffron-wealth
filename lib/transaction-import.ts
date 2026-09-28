@@ -1,6 +1,6 @@
 // Two-pass transform + DB-aware planning for the Monarch transaction import
-// (Task 3, Phase 2b). Pure CSV parsing lives in lib/csv.ts (Task 1); pure
-// row transforms live in lib/monarch-transform.ts (Task 2); this module is
+// (this module, Phase 2b). Pure CSV parsing lives in lib/csv.ts (lib/csv.ts); pure
+// row transforms live in lib/monarch-transform.ts (lib/monarch-transform.ts); this module is
 // the glue that needs the whole batch (inferCategoryType can't decide a
 // category's type from one row) and the DB (dedup, existing accounts/
 // categories) that neither of those pure modules can see.
@@ -43,7 +43,7 @@ interface ParsedRow {
 }
 
 // Case-insensitive + trimmed, mirroring lib/csv.ts's validateHeader
-// normalization. A header that validated leniently (Ruling 2 — Monarch has
+// normalization. A header that validated leniently (docs/decisions/0002-lenient-csv-header-validation.md — Monarch has
 // added columns twice and will again) must also be READ leniently, or a
 // column matched only by its normalized name would silently read as
 // undefined here.
@@ -63,8 +63,8 @@ function cell(row: Record<string, string>, lookup: Map<string, string>, name: st
 
 // Drops a row rather than throwing when a required cell is empty or Amount
 // doesn't parse. lib/csv.ts already discards papaparse's own per-row parse
-// errors (a Task 1 decision carried forward here rather than revisited —
-// see the Task 3 report for why a dedicated `malformedRows` counter wasn't
+// errors (a lib/csv.ts decision carried forward here rather than revisited —
+// see the this module report for why a dedicated `malformedRows` counter wasn't
 // added instead): every row in the real export and this fixture has all
 // four required cells populated, so a dropped row here means a genuinely
 // unusable one, not a false negative.

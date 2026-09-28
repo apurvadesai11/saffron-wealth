@@ -15,10 +15,11 @@ import type { AccountType, CategoryType } from "./types";
 // not a code change.
 export const TRANSFER_LIKE_CATEGORIES = ["transfer", "balance adjustments", "credit card payment"];
 
-// Ruling 5: these two Monarch rows are insurance deductible/out-of-pocket
-// progress counters, not account balances — importing them as accounts would
-// inflate assets. Case-insensitive exact match is the caller's job; this is
-// just the denylist.
+// Insurance deductible/out-of-pocket progress counters, not balances —
+// importing them as accounts would inflate assets. Case-insensitive exact
+// match is the caller's job; this is just the denylist. See
+// docs/decisions/0005-non-account-denylist.md, which also records that these
+// two literals belong in per-user data rather than here.
 export const NON_ACCOUNT_NAMES = [
   "Individual innetwork medical deductible",
   "Individual innetwork medical outofpocket",
@@ -78,11 +79,10 @@ export function inferCategoryType(categoryName: string, amountsForThatCategory: 
   return positiveCount > negativeCount ? "income" : "expense";
 }
 
-// Ruling 1: prefer Monarch's own stable row Id over a content hash, because
-// the fallback hash keys on merchant — a field users routinely rename in
-// Monarch's UI, which would silently re-import a renamed row as new. The
-// mid:/sha: prefixes keep the two key-spaces disjoint and self-document which
-// path produced a given hash.
+// Prefer Monarch's own stable row Id over a content hash: the fallback hash
+// keys on merchant, a field users routinely rename, which would silently
+// re-import a renamed row as new. The mid:/sha: prefixes keep the two
+// key-spaces disjoint. See docs/decisions/0001-dedup-on-monarch-id.md.
 export function buildExternalHash(input: {
   id?: string | null;
   date: string;
@@ -173,7 +173,8 @@ export const ASSET_TYPE_RULES: AssetTypeRule[] = [
   { keywords: ["checking", "banking", "savings", "cash"], type: "cash" },
 ];
 
-// Ruling 4: sign first, keywords second. In the real data the mortgage is
+// Sign first, keywords second (docs/decisions/0004-sign-before-keywords.md).
+// In the real data the mortgage is
 // named "1200 MAPLE STREET (Orig. $500,000.00) (...1111)" while the
 // property it secures is named "1200 maple" — no keyword can separate
 // those two, but the balance sign always can. "Orig. $" is Monarch's own

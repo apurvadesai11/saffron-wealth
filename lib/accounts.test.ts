@@ -1,5 +1,5 @@
 // DB-backed tests for the net-worth-over-time series query functions
-// (Phase 3, Task 8). Unlike the rest of lib/accounts.ts, these two have no
+// . Unlike the rest of lib/accounts.ts, these two have no
 // API route wrapping them to test through (the series is computed directly
 // inside app/(app)/net-worth/page.tsx's RSC body, not behind an endpoint),
 // so they get their own file here rather than living in
@@ -271,7 +271,7 @@ describe("balance event sign at write time", () => {
   });
 });
 
-// Replaces Ruling 7 ("an imported balance's sign overrides the stored type").
+// Replaces docs/decisions/0007-never-retype-an-existing-account.md ("an imported balance's sign overrides the stored type").
 // That rule did not do what its rationale claimed: guessAccountType only
 // consults the sign on its NEGATIVE branch, so a card-named account with a
 // credited balance re-guessed straight back to credit_card and the override

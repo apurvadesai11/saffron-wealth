@@ -51,9 +51,9 @@ describe("computeNetWorthSeries", () => {
     expect(mid?.value).toBe(100 + 5000);
   });
 
-  it("Ruling 3: an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
+  it("docs/decisions/0003-account-contribution-window.md: an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
     // Mirrors the real scenario: a mortgage that stops reporting (paid off /
-    // account closed and archived by Task 5's import) while still frozen at
+    // account closed and archived by the account upsert's import) while still frozen at
     // a large balance. Stored as its contribution to net worth, so an owed
     // $450k mortgage is -450000.
     const points = computeNetWorthSeries(
@@ -196,7 +196,7 @@ describe("computeNetWorthSeries", () => {
     expect(byDate.get("2026-03-01")).toBe(30); // "a" updates to 30; "b" already closed (archived)
   });
 
-  it("Ruling 9: two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
+  it("docs/decisions/0009-same-day-events-tiebreak-on-recordedat.md: two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
     const points = computeNetWorthSeries(
       [
         // Same-day double-edit: user set the balance to 100, then to 200
@@ -259,7 +259,7 @@ describe("computeNetWorthSeries", () => {
     expect(points).toEqual([{ date: "2026-01-01", value: 100 }]);
   });
 
-  describe("archivedAt window semantics (Ruling 3, amended)", () => {
+  describe("archivedAt window semantics (docs/decisions/0003-account-contribution-window.md, amended)", () => {
     // Each case below isolates one cell of the archived x before/after-window
     // matrix, using a second single-event "anchor" account purely to create
     // a sample date at the point of interest (computeNetWorthSeries only
@@ -305,7 +305,7 @@ describe("computeNetWorthSeries", () => {
       expect(points.find((p) => p.date === "2026-02-01")?.value).toBe(100);
     });
 
-    // Task 8 review finding: archiveAccount (lib/accounts.ts) never writes a
+    // the Net Worth page review finding: archiveAccount (lib/accounts.ts) never writes a
     // closing AccountBalanceEvent, so an account created and archived on the
     // SAME calendar day has lastDate === its own archive date. Pre-fix,
     // "date > lastDate" alone doesn't exclude that day (equal isn't

@@ -20,7 +20,7 @@ test.describe("Sidebar navigation", () => {
     await page.goto("/");
     await page.getByRole("link", { name: /Net Worth/ }).click();
     await expect(page).toHaveURL("/net-worth");
-    // exact: true — Task 8's NetWorthChart adds its own "Net Worth Over
+    // exact: true — the Net Worth page's NetWorthChart adds its own "Net Worth Over
     // Time" heading, which would otherwise substring-match too.
     await expect(page.getByRole("heading", { name: "Net Worth", exact: true })).toBeVisible();
 
@@ -34,7 +34,7 @@ test.describe("Net Worth page", () => {
     await page.goto("/net-worth");
     await expect(page.getByText("Total Assets")).toBeVisible();
     await expect(page.getByText("Total Liabilities")).toBeVisible();
-    // exact: true — Task 8's NetWorthChart adds its own "Net Worth Over
+    // exact: true — the Net Worth page's NetWorthChart adds its own "Net Worth Over
     // Time" heading, which would otherwise substring-match too.
     await expect(page.getByRole("heading", { name: "Net Worth", exact: true })).toBeVisible();
   });
@@ -83,7 +83,7 @@ test.describe("Net Worth page", () => {
   });
 
   // "Delete" is a soft-archive (see lib/accounts.ts's archiveAccount) — as of
-  // Task 8 the deleted account no longer vanishes outright, it moves into
+  // the Net Worth page the deleted account no longer vanishes outright, it moves into
   // the collapsed "Archived" group (with a Restore path back). This test
   // used to assert the name disappeared everywhere on the page; that
   // assertion is now specifically about the ACTIVE bucket groups, since the

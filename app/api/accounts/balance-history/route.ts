@@ -7,8 +7,8 @@ import {
 
 export const runtime = "nodejs";
 
-// This is a global import (every account in one file), not [id]-scoped — see
-// the Task 5 brief. The real Monarch balance-history export is 1.7 MB across
+// A global import — every account in one file — rather than [id]-scoped,
+// because that is the shape Monarch exports. The real export is 1.7 MB across
 // ~34,000 rows; 20 MB is a guard against a mistaken upload, not a target.
 const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 

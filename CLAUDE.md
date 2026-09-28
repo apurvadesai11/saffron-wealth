@@ -650,6 +650,23 @@ Testing gotchas (learned the hard way — repeat at your peril):
   layout, but `(app)` has an additional layout that runs `getSession()` and
   draws the Sidebar + TopHeader chrome.
 
+### Decision records
+
+`docs/decisions/` holds one short record per decision the code leans on, with
+the context and the rejected alternative. Source comments state the current
+invariant and link there rather than carrying the argument inline — which is
+what the numbered "Ruling N" references used to do, from files that never
+defined them.
+
+Its index also maps the "Task N" references that appear in comments to the
+plan sections they came from. If you find yourself writing a comment that
+explains why something *isn't* done the obvious way, and the explanation is
+longer than the code, it belongs in a record with a link from the code.
+
+A decision that was later overturned keeps its record, marked **Superseded** —
+see `0007-never-retype-an-existing-account.md`, which documents both the rule
+and the one it replaced.
+
 ### Date conventions: where UTC ends and local begins
 
 Two date conventions live in this codebase. Both are correct, and they are

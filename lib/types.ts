@@ -130,7 +130,12 @@ export interface Account {
   name: string;
   type: AccountType;
   institution: string | null;
-  balance: number;      // dollars; positive — liabilities are the amount owed
+  // Dollars, in the bucket's natural direction: what you hold for an asset,
+  // what you owe for a debt. EITHER SIGN IS VALID — an overdrawn asset and a
+  // card carrying a statement credit are both real, and neither is clamped.
+  // describeAccountBalance in lib/account-utils.ts owns the display
+  // convention. See docs/decisions/0011-signed-contribution-at-write-time.md.
+  balance: number;
   balanceAsOf: string;  // ISO — updated only when the balance changes
   createdAt: string;    // ISO
   updatedAt: string;    // ISO
@@ -160,7 +165,7 @@ export interface AccountInput {
 }
 
 // PATCH allows any subset of the create fields (but never an empty patch).
-// `archivedAt` is a narrow bolt-on for Restore (Phase 3, Task 8): the ONLY
+// `archivedAt` is a narrow bolt-on for Restore: the ONLY
 // legal value is `null` (clearing it) — there is no PATCH-based way to
 // archive an account, that stays DELETE-only (archiveAccount). Restoring is
 // an explicit user action, which is the authority level the monotone-

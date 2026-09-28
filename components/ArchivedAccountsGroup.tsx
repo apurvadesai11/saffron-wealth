@@ -6,13 +6,13 @@ interface Props {
   onRestore: (account: Account) => void;
 }
 
-// Collapsed-by-default group for archived accounts (Phase 3, Task 8). These
-// are excluded from net worth — computeNetWorth only ever reads accounts
-// returned by listAccounts, which already filters archivedAt: null, so
-// nothing here needs to re-implement that exclusion — this component exists
-// purely as the Restore escape hatch Task 5's monotone archiving needs: an
-// account the import archived by inference (not a real user delete) would
-// otherwise have no way back into net worth. Renders nothing when there are
+// Collapsed-by-default group for archived accounts. These are excluded from
+// net worth already — computeNetWorth only reads what listAccounts returns,
+// and that filters archivedAt: null — so nothing here re-implements the
+// exclusion. This exists purely as the Restore escape hatch that the import's
+// monotone archiving requires: an account archived by inference rather than by
+// a real user delete would otherwise have no way back into net worth. See
+// docs/decisions/0003-account-contribution-window.md. Renders nothing when there are
 // no archived accounts, mirroring how AccountBucketGroup omits empty buckets.
 export default function ArchivedAccountsGroup({ accounts, onRestore }: Props) {
   if (accounts.length === 0) return null;
