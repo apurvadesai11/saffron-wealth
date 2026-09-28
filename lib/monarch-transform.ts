@@ -101,12 +101,53 @@ export function buildExternalHash(input: {
   return `sha:${createHash("sha256").update(composite).digest("hex")}`;
 }
 
+// Matches `keyword` as a whole term inside `text`, both already lowercased.
+//
+// The previous implementation was `text.includes(keyword)`, which matched a
+// keyword buried inside a longer word: "citi" matched "Citibank Checking" and
+// "ira" matched "Iraq", classifying a cash asset as a credit card. That moves
+// the account into the debt bucket and inverts its sign in the net-worth
+// calculation — a wrong number, not a cosmetic mislabel.
+//
+// Lookarounds on alphanumerics rather than \b, and applied only at whichever
+// ends of the keyword are themselves alphanumeric. A boundary assertion is
+// only meaningful against a word character: "orig. $" ends in "$" and is
+// immediately followed by a digit in the real data ("(Orig. $500,000.00)"), so
+// a trailing lookahead would reject the very string the keyword exists to
+// match. Same at the front for a keyword that begins with punctuation.
+// Internal punctuation and spaces are matched literally.
+function matchesKeyword(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const before = /[a-z0-9]/.test(keyword[0]) ? "(?<![a-z0-9])" : "";
+  const after = /[a-z0-9]/.test(keyword[keyword.length - 1]) ? "(?![a-z0-9])" : "";
+  return new RegExp(`${before}${escaped}${after}`).test(text);
+}
+
+interface AssetTypeRule {
+  keywords: string[];
+  type: AccountType;
+  // Keywords that disqualify this rule even when one of its own matched.
+  // First-match-wins ordering can't express "a Visa-branded *debit* card is a
+  // cash account" — "Visa" genuinely is a word in "Visa Debit Checking", so
+  // no boundary rule rejects it and the credit-card row is checked before
+  // cash. The exclusion says it directly.
+  excludeKeywords?: string[];
+}
+
 // First-match-wins keyword table for the asset branch of guessAccountType,
 // checked in this exact order. Order is load-bearing: 'roth 401' must beat
 // '401k', 'health savings' must beat 'savings' (else the HSA reads as plain
 // cash), and 'rsu'/'restricted unit' must beat 'individual' (else
 // "INDIVIDUAL - Globex RSU" reads as a plain brokerage account).
-const ASSET_TYPE_RULES: { keywords: string[]; type: AccountType }[] = [
+//
+// Only generic account-kind and card-network terms belong here. This table
+// used to carry one person's own accounts — "sapphire", "bankamericard",
+// "circle card", "red card", "citi" — which generalize to no second user.
+// They are gone: an unrecognized account is now 'uncategorized' and surfaced
+// in the import preview for its owner to classify, which is the mechanism
+// those entries were standing in for. Moving the table into per-user mapping
+// data is the remaining half of item 15 (15a) and needs a migration.
+export const ASSET_TYPE_RULES: AssetTypeRule[] = [
   { keywords: ["roth 401", "roth401"], type: "roth_401k" },
   { keywords: ["401(k)", "401k"], type: "401k" },
   { keywords: ["roth ira"], type: "roth_ira" },
@@ -120,17 +161,13 @@ const ASSET_TYPE_RULES: { keywords: string[]; type: AccountType }[] = [
   {
     keywords: [
       "credit card",
-      "sapphire",
       "visa",
       "discover",
-      "bankamericard",
       "mastercard",
       "amex",
       "american express",
-      "citi",
-      "circle card",
-      "red card",
     ],
+    excludeKeywords: ["debit"],
     type: "credit_card",
   },
   { keywords: ["checking", "banking", "savings", "cash"], type: "cash" },
@@ -147,20 +184,33 @@ const ASSET_TYPE_RULES: { keywords: string[]; type: AccountType }[] = [
 // sign-check), the asset branch runs unconditionally and rule 11 below
 // produces 'credit_card' for a credit-card-named account on its own — no
 // separate branch needed for that case.
+//
+// The catch-all returns 'uncategorized', not 'cash'. Defaulting an
+// unrecognized account to an asset silently inflates net worth, and for a
+// net-worth tracker that is the wrong direction to fail in: an unknown account
+// should be visible as unknown, not quietly counted as money you have.
+// 'uncategorized' is excluded from every total (lib/account-utils.ts,
+// lib/net-worth-history.ts) and reported in the import preview so its owner
+// classifies it once.
 export function guessAccountType(name: string, balance?: number): AccountType {
   const lower = name.toLowerCase();
 
+  // Sign first, keywords second — see the note above.
   if (balance !== undefined && balance < 0) {
-    if (lower.includes("orig. $") || lower.includes("mortgage") || lower.includes("loan")) {
+    if (
+      matchesKeyword(lower, "orig. $") ||
+      matchesKeyword(lower, "mortgage") ||
+      matchesKeyword(lower, "loan")
+    ) {
       return "loan_mortgage";
     }
     return "credit_card";
   }
 
   for (const rule of ASSET_TYPE_RULES) {
-    if (rule.keywords.some((keyword) => lower.includes(keyword))) {
-      return rule.type;
-    }
+    if (!rule.keywords.some((keyword) => matchesKeyword(lower, keyword))) continue;
+    if (rule.excludeKeywords?.some((keyword) => matchesKeyword(lower, keyword))) continue;
+    return rule.type;
   }
-  return "cash";
+  return "uncategorized";
 }

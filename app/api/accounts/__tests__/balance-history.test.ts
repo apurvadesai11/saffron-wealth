@@ -377,7 +377,12 @@ describe("POST /api/accounts/balance-history", () => {
 
     const body = await res.json();
     expect(body.summary.typeConflicts).toEqual([
-      { name: "Sunset Rewards", storedType: "credit_card", suggestedType: "cash" },
+      // 15c: the name matches no keyword, so the "suggestion" is that the app
+      // cannot tell — which is the honest answer. It used to say 'cash', a
+      // confident guess with nothing behind it. The conflict is still
+      // reported, because a positive balance on a stored liability is the
+      // signal worth surfacing regardless of what the name says.
+      { name: "Sunset Rewards", storedType: "credit_card", suggestedType: "uncategorized" },
     ]);
   });
 

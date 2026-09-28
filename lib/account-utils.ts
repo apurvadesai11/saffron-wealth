@@ -20,6 +20,8 @@ export const BUCKET_ORDER: AccountBucket[] = [
   "retirement",
   "real_estate",
   "debt",
+  // Last: the page reads assets, then debt, then what needs attention.
+  "uncategorized",
 ];
 
 // The taxonomy, defined bucket-first so it reads top-down and can't drift out of
@@ -31,6 +33,7 @@ export const ACCOUNT_TYPES_BY_BUCKET: Record<AccountBucket, AccountType[]> = {
   retirement: ["traditional_ira", "roth_ira", "401k", "roth_401k"],
   real_estate: ["property"],
   debt: ["credit_card", "loan_mortgage"],
+  uncategorized: ["uncategorized"],
 };
 
 // Derived reverse index: type → bucket.
@@ -50,6 +53,7 @@ export const ACCOUNT_BUCKET_LABELS: Record<AccountBucket, string> = {
   retirement: "Retirement",
   real_estate: "Real Estate",
   debt: "Debt",
+  uncategorized: "Uncategorized",
 };
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -65,6 +69,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   property: "Property",
   credit_card: "Credit Card",
   loan_mortgage: "Loan/Mortgage",
+  uncategorized: "Uncategorized",
 };
 
 export function isValidAccountType(value: unknown): value is AccountType {
@@ -107,6 +112,13 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
   let totalAssets = 0;
   let totalLiabilities = 0;
   for (const a of accounts) {
+    // An unclassified account contributes to neither total. Counting it as an
+    // asset (the old catch-all) inflated net worth with a number the user had
+    // never confirmed meant what the app assumed. It stays visible on the
+    // page — groupAccountsByBucket gives it its own bucket — so the exclusion
+    // is something the user can act on rather than a silent omission.
+    if (getBucketForType(a.type) === "uncategorized") continue;
+
     if (isLiability(getBucketForType(a.type))) {
       totalLiabilities += a.balance;
     } else {

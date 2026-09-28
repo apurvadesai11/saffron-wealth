@@ -32,6 +32,15 @@ describe("AccountEditModal — add mode", () => {
     expect(groupLabels).toEqual(["Cash", "Investments", "Retirement", "Real Estate", "Debt"]);
   });
 
+  // 'uncategorized' contributes to no net-worth total, so it is a state the
+  // import assigns and the user moves out of — never one they opt into.
+  it("does not offer Uncategorized when adding an account", () => {
+    render(<AccountEditModal onSave={vi.fn()} onClose={vi.fn()} />);
+    const select = screen.getByLabelText("Type") as HTMLSelectElement;
+    const values = Array.from(select.querySelectorAll("option")).map((o) => o.value);
+    expect(values).not.toContain("uncategorized");
+  });
+
   it("rejects an empty name", async () => {
     const onSave = vi.fn();
     render(<AccountEditModal onSave={onSave} onClose={vi.fn()} />);
@@ -102,6 +111,25 @@ describe("AccountEditModal — edit mode", () => {
     expect(screen.getByLabelText("Type")).toHaveValue("brokerage");
     expect(screen.getByLabelText(/Institution/)).toHaveValue("Fidelity");
     expect(screen.getByLabelText("Balance")).toHaveValue(10000);
+  });
+
+  // An import-assigned uncategorized account has to be able to show its own
+  // current value, and be correctable — the whole point of surfacing it.
+  it("shows Uncategorized when editing an account that already has it, and lets the user move off it", async () => {
+    const onSave = vi.fn();
+    render(
+      <AccountEditModal
+        account={{ ...account(), type: "uncategorized" }}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Type")).toHaveValue("uncategorized");
+
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "credit_card");
+    await userEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ type: "credit_card" }));
   });
 
   it("allows changing the type in edit mode", async () => {

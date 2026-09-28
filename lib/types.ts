@@ -104,14 +104,23 @@ export interface BudgetProgress {
 // account adds to (asset) or subtracts from (liability) net worth — only the
 // `debt` bucket is a liability. The concrete type→bucket mapping and the
 // net-worth math live in lib/account-utils.ts.
-export type AccountBucket = 'cash' | 'investments' | 'retirement' | 'real_estate' | 'debt';
+// 'uncategorized' is a real bucket for display but contributes to no total:
+// it holds accounts the import could not classify, so their owner can see and
+// fix them. See lib/account-utils.ts's computeNetWorth.
+export type AccountBucket =
+  | 'cash' | 'investments' | 'retirement' | 'real_estate' | 'debt'
+  | 'uncategorized';
 
 export type AccountType =
   | 'cash'
   | 'brokerage' | 'rsu' | 'espp' | 'hsa'
   | 'traditional_ira' | 'roth_ira' | '401k' | 'roth_401k'
   | 'property'
-  | 'credit_card' | 'loan_mortgage';
+  | 'credit_card' | 'loan_mortgage'
+  // What guessAccountType returns when it recognizes nothing. Deliberately
+  // not a default of 'cash': an unknown account silently counted as an asset
+  // inflates net worth, which is the wrong direction for this app to fail in.
+  | 'uncategorized';
 
 // Client-facing (serialized) account shape. The DB stores `balance` as a
 // Decimal; the query layer converts it to a JS number and timestamps to ISO

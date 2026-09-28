@@ -19,6 +19,7 @@ const ALL_TYPES: AccountType[] = [
   "traditional_ira", "roth_ira", "401k", "roth_401k",
   "property",
   "credit_card", "loan_mortgage",
+  "uncategorized",
 ];
 
 // Minimal Account fixture — only the fields the pure helpers read matter.
@@ -54,8 +55,15 @@ describe("taxonomy maps", () => {
     }
   });
 
-  it("BUCKET_ORDER contains all five buckets in display order", () => {
-    expect(BUCKET_ORDER).toEqual(["cash", "investments", "retirement", "real_estate", "debt"]);
+  it("BUCKET_ORDER contains every bucket in display order, uncategorized last", () => {
+    expect(BUCKET_ORDER).toEqual([
+      "cash",
+      "investments",
+      "retirement",
+      "real_estate",
+      "debt",
+      "uncategorized",
+    ]);
   });
 
   it("has a human label for every bucket and type", () => {
@@ -207,5 +215,54 @@ describe("groupAccountsByBucket rounding", () => {
 
     expect(Object.is(groups[0].bucketTotal, -0)).toBe(false);
     expect(groups[0].bucketTotal).toBe(0);
+  });
+});
+
+// 15c — an unrecognized account used to default to 'cash', which counted it as
+// money you have. It is now 'uncategorized': visible, but excluded from every
+// total until its owner classifies it. For a net-worth tracker, silently
+// inflating the number is the wrong direction to fail in.
+describe("uncategorized accounts are excluded from totals", () => {
+  it("does not count an uncategorized balance as an asset", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("uncategorized", 999),
+    ]);
+
+    expect(result.totalAssets).toBe(100);
+    expect(result.netWorth).toBe(100);
+  });
+
+  it("does not count it as a liability either", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("uncategorized", -999),
+    ]);
+
+    expect(result.totalLiabilities).toBe(0);
+    expect(result.netWorth).toBe(100);
+  });
+
+  it("is not a liability bucket", () => {
+    expect(isLiability(getBucketForType("uncategorized"))).toBe(false);
+  });
+
+  // Still visible on the page — excluded from the math, not hidden from the
+  // user, or they could never fix it.
+  it("still groups for display, with its own bucket", () => {
+    const groups = groupAccountsByBucket([
+      acct("cash", 100),
+      acct("uncategorized", 999),
+    ]);
+
+    const uncategorized = groups.find((g) => g.bucket === "uncategorized");
+    expect(uncategorized).toBeDefined();
+    expect(uncategorized!.accounts).toHaveLength(1);
+    expect(uncategorized!.bucketTotal).toBe(999);
+  });
+
+  // It sorts last so the page reads assets, debt, then "needs attention".
+  it("sorts after every real bucket", () => {
+    expect(BUCKET_ORDER[BUCKET_ORDER.length - 1]).toBe("uncategorized");
   });
 });

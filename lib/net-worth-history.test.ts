@@ -473,3 +473,32 @@ describe("chart and summary card agree", () => {
     expect(Object.is(points[points.length - 1].value, -0)).toBe(false);
   });
 });
+
+// 15c — the series has to exclude uncategorized accounts for the same reason
+// computeNetWorth does, and for the extra reason that if it didn't, the chart
+// and the card would disagree by exactly that account's balance.
+describe("uncategorized accounts are excluded from the series", () => {
+  it("omits an uncategorized account's events from every point", () => {
+    const points = computeNetWorthSeries(
+      [ev("chk", "2026-02-14", 100), ev("unk", "2026-02-14", 999)],
+      [acct("chk", "cash"), acct("unk", "uncategorized")],
+    );
+
+    expect(points).toEqual([{ date: "2026-02-14", value: 100 }]);
+  });
+
+  it("keeps the chart's last point equal to the card with one uncategorized account present", () => {
+    const accounts: Account[] = [
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 100, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+      { id: "unk", name: "unk", type: "uncategorized", institution: null, balance: 999, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+    ];
+    const points = computeNetWorthSeries(
+      [ev("chk", "2026-02-14", 100), ev("unk", "2026-02-14", 999)],
+      [acct("chk", "cash"), acct("unk", "uncategorized")],
+    );
+    const summary = computeNetWorth(accounts);
+
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+    expect(summary.netWorth).toBe(100);
+  });
+});

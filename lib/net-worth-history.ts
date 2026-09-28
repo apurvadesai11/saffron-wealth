@@ -116,6 +116,11 @@ export function computeNetWorthSeries(
     // An event whose account isn't in the roster has no type to key the
     // asset/liability taxonomy off of — drop it rather than guess a bucket.
     if (!account) continue;
+    // An unclassified account contributes to no total, here for the same
+    // reason as in computeNetWorth — and for one more: if the series counted
+    // it while the summary card did not, the chart's last point and the card
+    // would differ by exactly that account's balance.
+    if (account.type === "uncategorized") continue;
 
     // Lexicographic comparison is valid for "YYYY-MM-DD" and avoids building
     // a Date per event in what's otherwise a hot sort.
