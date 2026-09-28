@@ -3,17 +3,9 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "./prisma";
 import { InvalidReferenceError } from "./db-errors";
 import type { Transaction, CategoryType } from "./types";
-
-// The Transaction.date column is `@db.Date` (no time component). Reading and
-// writing it in UTC-only arithmetic sidesteps the local-timezone shift that
-// `new Date(y, m, d)` (local midnight) would risk on the write path.
-function dateStringToUtcDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-function utcDateToDateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+// Transaction.date is `@db.Date`; see lib/date-utils.ts for why the
+// conversions are UTC-only on both the read and the write path.
+import { dateStringToUtcDate, utcDateToDateString } from "./date-utils";
 
 function mapTransaction(row: {
   id: string;

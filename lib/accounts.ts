@@ -6,18 +6,9 @@ import { prisma } from "./prisma";
 import { guessAccountType } from "./monarch-transform";
 import { getBucketForType, isLiability } from "./account-utils";
 import type { Account, AccountInput, AccountPatch, AccountType } from "./types";
-
-// Mirrors lib/transactions.ts's UTC-safe date <-> string helpers. Both
-// Account.balanceAsOf and AccountBalanceEvent.asOf need to land on the exact
-// calendar day a CSV row names — `new Date(y, m, d)` (local midnight) risks
-// shifting that day in negative-UTC-offset timezones.
-function dateStringToUtcDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-function utcDateToDateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+// Account.balanceAsOf and AccountBalanceEvent.asOf must land on the exact
+// calendar day a CSV row names; see lib/date-utils.ts.
+import { dateStringToUtcDate, utcDateToDateString } from "./date-utils";
 
 // AccountBalanceEvent.balance is the account's signed contribution to net
 // worth, not a magnitude the reader re-signs from the live type (see the

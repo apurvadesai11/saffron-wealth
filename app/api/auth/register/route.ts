@@ -16,23 +16,7 @@ import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 import { seedDefaultCategories } from "@/lib/categories";
-
-interface ErrorBody {
-  ok: false;
-  error: { code: string; message: string; fieldErrors?: Record<string, string> };
-}
-
-function err(
-  code: string,
-  message: string,
-  status: number,
-  fieldErrors?: Record<string, string>,
-): NextResponse<ErrorBody> {
-  return NextResponse.json<ErrorBody>(
-    { ok: false, error: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } },
-    { status },
-  );
-}
+import { err, internalError } from "@/lib/api/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (!ruleResult.ok) fieldErrors.password = ruleResult.errors[0];
 
     if (Object.keys(fieldErrors).length > 0) {
-      return err("VALIDATION_FAILED", "Please correct the errors and try again.", 400, fieldErrors);
+      return err("VALIDATION_FAILED", "Please correct the errors and try again.", 400, { fieldErrors });
     }
 
     if (isCommonPassword(parsed.password)) {
@@ -79,7 +63,7 @@ export async function POST(req: NextRequest) {
         "PASSWORD_TOO_COMMON",
         "That password is too common. Pick a more unique one.",
         400,
-        { password: "Password is on the common-password blocklist." },
+        { fieldErrors: { password: "Password is on the common-password blocklist." } },
       );
     }
 
@@ -91,7 +75,7 @@ export async function POST(req: NextRequest) {
         "PASSWORD_PWNED",
         "This password has appeared in a known data breach. Choose a different one.",
         400,
-        { password: "Password appeared in a public breach. Pick another." },
+        { fieldErrors: { password: "Password appeared in a public breach. Pick another." } },
       );
     }
 
@@ -106,7 +90,7 @@ export async function POST(req: NextRequest) {
         "EMAIL_EXISTS",
         "An account with this email already exists.",
         409,
-        { email: "An account with this email already exists." },
+        { fieldErrors: { email: "An account with this email already exists." } },
       );
     }
 
@@ -143,9 +127,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e) {
     console.error("[api/auth/register] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }

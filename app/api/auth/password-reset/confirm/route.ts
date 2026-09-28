@@ -12,18 +12,7 @@ import {
   consumeResetToken,
 } from "@/lib/auth/reset-tokens";
 import { revokeAllSessionsForUser } from "@/lib/auth/sessions";
-
-interface ErrorBody {
-  ok: false;
-  error: { code: string; message: string };
-}
-
-function err(code: string, message: string, status: number) {
-  return NextResponse.json<ErrorBody>(
-    { ok: false, error: { code, message } },
-    { status },
-  );
-}
+import { err, internalError } from "@/lib/api/errors";
 
 export async function POST(req: NextRequest) {
   try {
@@ -130,10 +119,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[api/auth/password-reset/confirm] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }
 

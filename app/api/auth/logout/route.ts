@@ -5,14 +5,12 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/server";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
+import { err, internalError } from "@/lib/api/errors";
 
 export async function POST(req: NextRequest) {
   try {
     if (!validateCsrfFromRequest(req)) {
-      return NextResponse.json(
-        { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
-        { status: 403 },
-      );
+      return err("CSRF_FAILED", "Invalid request.", 403);
     }
 
     const raw = req.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -31,9 +29,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e) {
     console.error("[api/auth/logout] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }

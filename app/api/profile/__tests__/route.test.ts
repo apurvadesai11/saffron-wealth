@@ -29,7 +29,7 @@ afterEach(async () => {
 
 describe("GET /api/profile", () => {
   it("returns 401 when not signed in", async () => {
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error.code).toBe("UNAUTHENTICATED");
@@ -41,7 +41,7 @@ describe("GET /api/profile", () => {
     const { rawToken } = await seedSession(user.id);
     mocks.sessionToken = rawToken;
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
