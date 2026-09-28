@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const ip = clientIp(req);
     const ua = userAgent(req);
 
-    const rl = await rateLimit("password-reset", ip ?? "unknown");
+    const rl = await rateLimit("password-reset-request", ip ?? "unknown");
     if (!rl.ok) {
       return NextResponse.json(
         { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },

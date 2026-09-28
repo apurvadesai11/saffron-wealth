@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const ip = clientIp(req);
     const ua = userAgent(req);
 
-    const rl = await rateLimit("password-reset", ip ?? "unknown");
+    const rl = await rateLimit("password-reset-confirm", ip ?? "unknown");
     if (!rl.ok) return err("RATE_LIMITED", "Too many requests.", 429);
     if (!validateCsrfFromRequest(req)) return err("CSRF_FAILED", "Invalid request.", 403);
 
