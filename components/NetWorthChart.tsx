@@ -383,6 +383,14 @@ export default function NetWorthChart({ series }: Props) {
         ref={containerRef}
         data-point-count={filtered.length}
         data-crosses-zero={crossesZero}
+        // The series' most recent value, exposed so a test can assert the
+        // chart and the summary cards agree. They disagreed after every
+        // account edit until the mutation handlers started refreshing the
+        // server component, and two different net-worth numbers on one screen
+        // is a trust problem on a net-worth tracker, not a cosmetic one.
+        data-latest-value={
+          filtered.length > 0 ? filtered[filtered.length - 1].value.toFixed(2) : undefined
+        }
         className="w-full relative"
       >
         {/* Static, non-live equivalent of the visible axis labels — role="img"
