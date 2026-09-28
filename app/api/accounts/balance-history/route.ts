@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/server";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
+import { rateLimit } from "@/lib/auth/rate-limit";
 import { parseCsv, validateHeader, CsvHeaderError } from "@/lib/csv";
 import {
   runBalanceHistoryImportPipeline,
@@ -30,6 +31,14 @@ export async function POST(req: NextRequest) {
     const session = await getSession();
     if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
     if (!validateCsrfFromRequest(req)) return err("CSRF_FAILED", "Invalid request.", 403);
+
+    // A 20MB CSV and a 30s transaction per request.
+    // Keyed by user id, not IP: this route is authenticated, the user id is the
+    // thing whose resources are being spent, and IP is client-supplied.
+    const rl = await rateLimit("import", session.user.id);
+    if (!rl.ok) {
+      return err("RATE_LIMITED", "Too many requests. Try again shortly.", 429);
+    }
 
     // Hard-stop an honestly-reported oversized request before reading the
     // body. This alone isn't the real guard (content-length is client-

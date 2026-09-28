@@ -16,7 +16,6 @@ import { validateCsrfFromRequest } from "@/lib/auth/csrf";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 import {
   getBackoffStatus,
-  clearFailedLoginsForUser,
   acquireLoginLock,
 } from "@/lib/auth/exponential-backoff";
 
@@ -62,10 +61,27 @@ export async function POST(req: NextRequest) {
     // Wrap the entire credential check in a single transaction holding a
     // Postgres advisory lock keyed on the email — closes the concurrent-bypass
     // race on the exponential-backoff window.
+    //
+    // The Argon2 verify below runs INSIDE this transaction, deliberately. It
+    // was measured both ways: moving it outside admits one password guess per
+    // concurrent request (20 of 20 fired in parallel were verified) instead of
+    // one per backoff window, because the expensive step IS the guess and
+    // limiting guesses means serializing them. See docs/audit-remediation-plan.md
+    // item 6 and the measurements in app/api/auth/__tests__/login-concurrency.test.ts.
+    //
+    // The timeout is explicit rather than Prisma's silent 5s default, which is
+    // what turned a slow login into a P2028 and a 500 on valid credentials.
+    // Requests that queue on the lock read the backoff and return 429 without
+    // hashing, so the queue drains at DB speed, not one Argon2 per waiter.
     const result = await prisma.$transaction(async (tx) => {
       await acquireLoginLock(tx, emailNormalized);
 
-      const backoff = await getBackoffStatus(emailNormalized);
+      // Pass tx, not the singleton: the interactive transaction already holds a
+      // connection, and letting this open a second one self-deadlocks at
+      // connection_limit=1 (a common Vercel + pgbouncer setting) until the
+      // transaction times out. The advisory lock above is what makes the read
+      // correct; the client choice is purely about pool arithmetic.
+      const backoff = await getBackoffStatus(emailNormalized, tx);
       if (!backoff.allowed) {
         const retrySec = Math.ceil(
           (backoff.retryAfter.getTime() - Date.now()) / 1000,
@@ -114,7 +130,7 @@ export async function POST(req: NextRequest) {
           profilePicture: user.profilePicture,
         },
       };
-    });
+    }, { timeout: 15_000, maxWait: 5_000 });
 
     if (result.kind === "backoff") {
       await recordAuthEvent({
@@ -151,11 +167,6 @@ export async function POST(req: NextRequest) {
       userAgent: ua,
       metadata: { emailNormalized },
     });
-
-    // Defensive: clearFailedLoginsForUser is also done inside the tx, but keep a
-    // best-effort outside cleanup as well in case a stale row was created via a
-    // separate code path.
-    await clearFailedLoginsForUser(result.user.id).catch(() => {});
 
     const res = NextResponse.json({ ok: true, data: { user: result.user } });
     setSessionCookie(res, session.rawToken, session.expiresAt);

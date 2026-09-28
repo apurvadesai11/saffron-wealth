@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, SESSION_COOKIE_NAME } from "@/lib/auth/server";
 import { validateCsrfFromRequest } from "@/lib/auth/csrf";
+import { rateLimit } from "@/lib/auth/rate-limit";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 import {
@@ -26,6 +27,15 @@ export async function POST(req: NextRequest) {
     const session = await getSession();
     if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
     if (!validateCsrfFromRequest(req)) return err("CSRF_FAILED", "Invalid request.", 403);
+
+    // An Argon2 verify against the CURRENT password — without a limit this is
+    // an unthrottled password oracle for anyone holding a stolen session.
+    // Keyed by user id, not IP: this route is authenticated, the user id is the
+    // thing whose resources are being spent, and IP is client-supplied.
+    const rl = await rateLimit("change-password", session.user.id);
+    if (!rl.ok) {
+      return err("RATE_LIMITED", "Too many requests. Try again shortly.", 429);
+    }
 
     let body: unknown;
     try {

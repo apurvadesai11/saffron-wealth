@@ -11,8 +11,14 @@ export interface FieldError {
 }
 
 const DESCRIPTION_MAX = 200;
-// Upper bound keeps values inside the Decimal(14, 2) column headroom.
-const AMOUNT_MAX = 1e12;
+// The largest value the Decimal(14, 2) column can hold: 12 integer digits and
+// 2 decimal places. Spelled out rather than written as 1e12 because 1e12 was
+// the bound with a strict `>`, which let exactly 1e12 through — Postgres then
+// rejected it ("a field with precision 14, scale 2 must round to an absolute
+// value less than 10^12") and the route returned 500 instead of a field error.
+// A value above this is also refused when it would merely ROUND up to 10^12,
+// since the column stores two decimals.
+const AMOUNT_MAX = 999_999_999_999.99;
 const VALID_TYPES: CategoryType[] = ["income", "expense", "transfer"];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

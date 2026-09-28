@@ -101,3 +101,120 @@ test.describe("Net Worth page", () => {
     await expect(archivedGroup.getByText(name)).toBeVisible();
   });
 });
+
+// Item 9. The summary cards are driven by local state and update
+// optimistically; the chart's series is a prop computed server-side. Nothing
+// refreshed it, so after any account mutation the chart's most recent point
+// contradicted the card directly above it until a manual reload — two
+// different net-worth numbers on one screen.
+//
+// These assert the two agree, which is what the user actually sees, rather
+// than asserting router.refresh was called (that is pinned in the unit test).
+test.describe("Chart and summary cards agree after a mutation", () => {
+  const chart = (page: import("@playwright/test").Page) =>
+    page.locator("[data-latest-value]");
+
+  async function latestChartValue(page: import("@playwright/test").Page): Promise<string | null> {
+    return chart(page).getAttribute("data-latest-value");
+  }
+
+  async function addAccount(
+    page: import("@playwright/test").Page,
+    name: string,
+    balance: string,
+    type = "cash",
+  ) {
+    await page.getByRole("button", { name: "+ Add Account" }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Account name").fill(name);
+    await modal.getByLabel("Type").selectOption(type);
+    await modal.getByLabel("Balance").fill(balance);
+    await modal.getByRole("button", { name: "Add Account" }).click();
+    await expect(modal).not.toBeVisible();
+  }
+
+  test("editing a balance moves the chart's last point with the summary card", async ({ page }) => {
+    const name = `E2E Agree Edit ${Date.now()}`;
+    await page.goto("/net-worth");
+
+    await addAccount(page, name, "1000");
+    const afterAdd = await latestChartValue(page);
+
+    await page.getByText(name).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Balance").fill("7777");
+    await modal.getByRole("button", { name: "Save Changes" }).click();
+    await expect(modal).not.toBeVisible();
+
+    // The chart has to move off its previous value without a reload.
+    await expect(chart(page)).not.toHaveAttribute("data-latest-value", afterAdd ?? "");
+
+    // And it must match the Net Worth card exactly.
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^\$/)
+      .first()
+      .innerText();
+    const cardValue = cardText.replace(/[$,]/g, "");
+    await expect(chart(page)).toHaveAttribute("data-latest-value", cardValue);
+  });
+
+  test("archiving an account drops it from both the totals and the chart", async ({ page }) => {
+    const name = `E2E Agree Archive ${Date.now()}`;
+    await page.goto("/net-worth");
+
+    await addAccount(page, name, "4321");
+    const withAccount = await latestChartValue(page);
+
+    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
+
+    await expect(chart(page)).not.toHaveAttribute("data-latest-value", withAccount ?? "");
+
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^\$/)
+      .first()
+      .innerText();
+    await expect(chart(page)).toHaveAttribute(
+      "data-latest-value",
+      cardText.replace(/[$,]/g, ""),
+    );
+  });
+
+  test("restoring an account returns it to both the totals and the chart", async ({ page }) => {
+    const name = `E2E Agree Restore ${Date.now()}`;
+    await page.goto("/net-worth");
+
+    await addAccount(page, name, "2468");
+    const withAccount = await latestChartValue(page);
+
+    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    // Wait for the CHART to reflect the archive, not just the account list.
+    // The list updates optimistically from local state before the refresh
+    // lands, so reading the chart at that moment captures the pre-archive
+    // value and makes the comparison below vacuous.
+    await expect(chart(page)).not.toHaveAttribute("data-latest-value", withAccount ?? "");
+
+    const archivedGroup = page.locator('[data-state="archived-group"]');
+    await archivedGroup.locator("summary").click();
+    await archivedGroup
+      .locator("li", { hasText: name })
+      .getByRole("button", { name: "Restore" })
+      .click();
+
+    await expect(page.locator("[data-bucket]").getByText(name)).toBeVisible();
+    // Back to exactly where it was before the archive.
+    await expect(chart(page)).toHaveAttribute("data-latest-value", withAccount ?? "");
+
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^\$/)
+      .first()
+      .innerText();
+    await expect(chart(page)).toHaveAttribute(
+      "data-latest-value",
+      cardText.replace(/[$,]/g, ""),
+    );
+  });
+});

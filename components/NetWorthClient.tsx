@@ -79,6 +79,12 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
         isEditing ? prev.map((a) => (a.id === saved.id ? saved : a)) : [...prev, saved],
       );
       setEditingAccount(null);
+      // The summary cards read local state and update immediately; `series`
+      // is a prop computed server-side and would otherwise keep its old last
+      // point, leaving two different net-worth numbers on one screen. Refresh
+      // AFTER the optimistic update so the UI still responds instantly and
+      // the server value reconciles behind it.
+      router.refresh();
     } catch {
       setError("Network error.");
     }
@@ -103,6 +109,9 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
       // available without a page reload.
       setAccounts((prev) => prev.filter((a) => a.id !== account.id));
       setArchivedAccounts((prev) => [account, ...prev]);
+      // Archiving removes the account from the totals; the chart's current
+      // value has to drop with them.
+      router.refresh();
     } catch {
       setError("Network error.");
     }
@@ -128,6 +137,8 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
       const restored = data.data.account as Account;
       setArchivedAccounts((prev) => prev.filter((a) => a.id !== account.id));
       setAccounts((prev) => [...prev, restored]);
+      // Restoring puts it back into both the totals and the chart.
+      router.refresh();
     } catch {
       setError("Network error.");
     }
