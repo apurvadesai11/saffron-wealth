@@ -165,3 +165,74 @@ describe("POST /api/accounts", () => {
     expect(events[0].balance.toNumber()).toBe(10000);
   });
 });
+
+describe("POST /api/accounts at the Decimal(14,2) boundary", () => {
+  // Balances are legitimately signed in both directions (an overdrawn asset, a
+  // debt carrying a statement credit), so the magnitude limit has to hold on
+  // both ends. Exactly 1e12 used to pass validation and then overflow the
+  // column, turning a field error into a 500.
+  async function authed() {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+    return user;
+  }
+
+  it("rejects balance 1e12 with a 400 field error, not a 500", async () => {
+    await authed();
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: { name: "Too big", type: "cash", balance: 1e12 },
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.fieldErrors?.balance).toBeTruthy();
+  });
+
+  it("rejects balance -1e12 with a 400 field error", async () => {
+    await authed();
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: { name: "Too negative", type: "cash", balance: -1e12 },
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.fieldErrors?.balance).toBeTruthy();
+  });
+
+  it("stores the largest magnitude the column can hold, both signs", async () => {
+    const user = await authed();
+
+    const positive = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: { name: "Max asset", type: "cash", balance: 999999999999.99 },
+      }),
+    );
+    expect(positive.status).toBe(201);
+
+    const negative = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: { name: "Max credited debt", type: "credit_card", balance: -999999999999.99 },
+      }),
+    );
+    expect(negative.status).toBe(201);
+
+    const stored = await prisma.account.findMany({
+      where: { userId: user.id },
+      select: { balance: true },
+      orderBy: { name: "asc" },
+    });
+    expect(stored.map(a => Number(a.balance)).sort((x, y) => x - y)).toEqual([
+      -999999999999.99, 999999999999.99,
+    ]);
+  });
+});

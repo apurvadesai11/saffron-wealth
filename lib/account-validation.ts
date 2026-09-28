@@ -12,8 +12,11 @@ export interface FieldError {
 
 const NAME_MAX = 80;
 const INSTITUTION_MAX = 80;
-// Upper bound keeps values inside the Decimal(14, 2) column headroom.
-const BALANCE_MAX = 1e12;
+// The largest magnitude the Decimal(14, 2) column can hold. See the note on
+// AMOUNT_MAX in lib/transaction-validation.ts: this was 1e12 with a strict
+// comparison, so exactly 1e12 passed validation and failed at the database as
+// a 500.
+const BALANCE_MAX = 999_999_999_999.99;
 
 export function validateAccountName(raw: string): FieldError | null {
   const trimmed = raw.trim();

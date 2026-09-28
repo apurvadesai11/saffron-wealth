@@ -210,3 +210,58 @@ describe("parseTransactionQueryParams", () => {
     expect(r.ok && r.value.cursor).toBe("ckz123");
   });
 });
+
+describe("Decimal(14,2) boundary", () => {
+  // The column holds 12 integer digits and 2 decimals, so the largest storable
+  // value is 999999999999.99. The bound used to be 1e12 with a strict `>`,
+  // which let exactly 1e12 through to Postgres, where it raised a numeric
+  // field overflow and the route answered 500 instead of a 400 field error.
+  it("rejects exactly 1e12", () => {
+    expect(validateAmount(1e12)).toEqual({
+      field: "amount",
+      message: "That amount is too large.",
+    });
+  });
+
+  it("accepts the largest storable value", () => {
+    expect(validateAmount(999_999_999_999.99)).toBeNull();
+  });
+
+  it("rejects a value that would round up to 10^12", () => {
+    // Decimal(14,2) stores two decimals, so .995 rounds to 10^12 and overflows
+    // even though the unrounded number is below the limit.
+    expect(validateAmount(999_999_999_999.995)).not.toBeNull();
+  });
+
+  it("rejects values beyond 1e12", () => {
+    expect(validateAmount(1e13)).not.toBeNull();
+    expect(validateAmount(Number.MAX_SAFE_INTEGER)).not.toBeNull();
+  });
+});
+
+describe("amountMin/amountMax query params at the boundary", () => {
+  // readNumberParam shares AMOUNT_MAX, so the filter parser had the same
+  // off-by-one.
+  it("rejects amountMin of exactly 1e12", () => {
+    const result = parseTransactionQueryParams(
+      new URLSearchParams({ amountMin: "1000000000000" }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.amountMin).toBeTruthy();
+  });
+
+  it("rejects amountMax of exactly 1e12", () => {
+    const result = parseTransactionQueryParams(
+      new URLSearchParams({ amountMax: "1000000000000" }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.amountMax).toBeTruthy();
+  });
+
+  it("accepts the largest storable value as a filter bound", () => {
+    const result = parseTransactionQueryParams(
+      new URLSearchParams({ amountMax: "999999999999.99" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+});

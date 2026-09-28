@@ -167,3 +167,31 @@ describe("parseUpdateAccountBody", () => {
     if (r.ok) expect(r.value).toEqual({ archivedAt: null, name: "Restored Account" });
   });
 });
+
+describe("Decimal(14,2) boundary", () => {
+  // Balances are signed in both directions (an overdrawn asset, a credited
+  // debt), so the magnitude limit has to hold on both ends.
+  it("rejects exactly 1e12", () => {
+    expect(validateBalance(1e12)).toEqual({
+      field: "balance",
+      message: "That amount is too large.",
+    });
+  });
+
+  it("rejects exactly -1e12", () => {
+    expect(validateBalance(-1e12)).toEqual({
+      field: "balance",
+      message: "That amount is too large.",
+    });
+  });
+
+  it("accepts the largest storable magnitude in both directions", () => {
+    expect(validateBalance(999_999_999_999.99)).toBeNull();
+    expect(validateBalance(-999_999_999_999.99)).toBeNull();
+  });
+
+  it("rejects a magnitude that would round up to 10^12", () => {
+    expect(validateBalance(999_999_999_999.995)).not.toBeNull();
+    expect(validateBalance(-999_999_999_999.995)).not.toBeNull();
+  });
+});

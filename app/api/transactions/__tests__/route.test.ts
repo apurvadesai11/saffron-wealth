@@ -248,3 +248,80 @@ describe("GET /api/transactions", () => {
     expect(body.data.total).toBe(1);
   });
 });
+
+describe("POST /api/transactions at the Decimal(14,2) boundary", () => {
+  // The user-visible half of item 8: exactly 1e12 passed validation and then
+  // overflowed the column, so the route answered 500 INTERNAL_ERROR on input
+  // that should have been a clean 400 field error.
+  it("rejects amount 1e12 with a 400 field error, not a 500", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+    const category = await seedCategory(user.id);
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: {
+          categoryId: category.id,
+          description: "Boundary probe",
+          amount: 1e12,
+          type: "expense",
+          date: "2026-03-01",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.fieldErrors?.amount).toBeTruthy();
+  });
+
+  it("stores the largest value the column can hold", async () => {
+    // Proves the accepted bound is actually storable, rather than just being
+    // one less than the old broken one.
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+    const category = await seedCategory(user.id);
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        csrfToken: "csrf",
+        body: {
+          categoryId: category.id,
+          description: "Maximum",
+          amount: 999999999999.99,
+          type: "expense",
+          date: "2026-03-01",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    const stored = await prisma.transaction.findFirst({
+      where: { userId: user.id },
+      select: { amount: true },
+    });
+    expect(Number(stored?.amount)).toBe(999999999999.99);
+  });
+
+  it("rejects an amountMax filter of exactly 1e12 with a 400", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(
+      makeRequest({
+        method: "GET",
+        url: "http://localhost/api/transactions?amountMax=1000000000000",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+});
