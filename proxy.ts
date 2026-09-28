@@ -1,15 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { buildPageCsp } from "@/lib/security-headers";
 
 // Edge runtime cannot run Prisma without Accelerate, so we do a CHEAP shape
 // check on the session cookie here and let server components (`getSession()`
 // in lib/auth/server.ts) do the real DB-backed validation.
 //
-// Two concerns live in this proxy:
+// Three concerns live in this proxy:
 //   1. Gate /(app)/* routes on the session cookie shape; redirect to /login
 //      when missing/malformed (proxy.ts cannot hit Prisma in Edge runtime).
 //   2. Issue the CSRF double-submit cookie on the response so client auth
 //      forms can read it. Server Components can read but not write cookies in
 //      Next.js 15+, so the proxy is the right home for this.
+//   3. Attach the per-request CSP nonce. Next's App Router emits inline
+//      bootstrap scripts on every page, so a static `script-src 'self'`
+//      reports a violation per script and the only alternatives are
+//      'unsafe-inline' or a nonce. Next reads the nonce off the REQUEST's
+//      Content-Security-Policy header and applies it to its own inline
+//      scripts, so it has to be set here — a header in next.config.ts cannot
+//      vary per request. The static, non-varying headers stay in
+//      next.config.ts.
 
 const SESSION_COOKIE = "sw_session";
 const SESSION_COOKIE_PROD = "__Host-sw_session";
@@ -33,6 +42,32 @@ function isAuthPath(pathname: string): boolean {
   return AUTH_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+}
+
+// Next extracts the nonce from the request's own CSP header, so the same value
+// has to go on the request (for rendering) and the response (for the browser).
+function withCsp(req: NextRequest, res?: NextResponse): NextResponse {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const nonce = base64url(bytes);
+  const csp = buildPageCsp({
+    nonce,
+    dev: process.env.NODE_ENV === "development",
+  });
+
+  let out: NextResponse;
+  if (res) {
+    // A redirect renders nothing, so it needs no nonce propagation — just the
+    // header on the way out.
+    out = res;
+  } else {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("content-security-policy", csp);
+    requestHeaders.set("x-nonce", nonce);
+    out = NextResponse.next({ request: { headers: requestHeaders } });
+  }
+  out.headers.set("Content-Security-Policy", csp);
+  return out;
 }
 
 function base64url(bytes: Uint8Array): string {
@@ -76,7 +111,7 @@ export function proxy(req: NextRequest) {
   }
 
   if (isAuthPath(pathname)) {
-    const res = NextResponse.next();
+    const res = withCsp(req);
     ensureCsrfCookie(req, res);
     return res;
   }
@@ -89,12 +124,12 @@ export function proxy(req: NextRequest) {
     const url = new URL("/login", req.url);
     const path = pathname + req.nextUrl.search;
     if (path && path !== "/login") url.searchParams.set("next", path);
-    const res = NextResponse.redirect(url);
+    const res = withCsp(req, NextResponse.redirect(url));
     ensureCsrfCookie(req, res);
     return res;
   }
 
-  return NextResponse.next();
+  return withCsp(req);
 }
 
 export const config = {

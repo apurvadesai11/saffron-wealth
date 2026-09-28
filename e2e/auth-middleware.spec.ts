@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import { prisma } from "../lib/prisma";
 import { hashPassword } from "../lib/auth/password";
@@ -104,7 +105,10 @@ test.describe("Post-sign-in redirect is same-origin", () => {
   let userId: string;
 
   test.beforeAll(async () => {
-    email = `e2e-redirect-${Date.now()}@example.test`;
+    // randomUUID, not Date.now(): Playwright shards this describe across
+    // parallel workers, and two beforeAll hooks in the same millisecond
+    // collide on User.email's unique constraint.
+    email = `e2e-redirect-${randomUUID()}@example.test`;
     const user = await prisma.user.create({
       data: {
         email,
