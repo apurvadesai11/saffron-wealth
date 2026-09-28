@@ -4,6 +4,7 @@
 // reading a pre-window month sees an empty array and reports "no
 // transactions" for a month that actually has them, which is a wrong number
 // rather than a slow one.
+import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { AppProvider, useApp } from "./app-context";
@@ -196,5 +197,35 @@ describe("AppProvider hydration window", () => {
     });
 
     expect(screen.getByTestId("from")).toHaveTextContent("2025-09-01");
+  });
+});
+
+// The README states as fact that "production never falls back to [mock data]:
+// the (app) layout always passes real (possibly empty) arrays". That was an
+// assertion about a code path, not a guarantee: the seed props were optional
+// and defaulted to MOCK_*. In a wealth tracker, a regression that drops a
+// seed prop renders fabricated balances indistinguishable from real ones, and
+// the user has no way to tell. The props are now required, so the type system
+// is what enforces the claim.
+//
+// Asserted against the source text because that is the actual invariant --
+// there is no runtime path left to exercise, which is the point. A future
+// edit that reintroduces a fallback fails here.
+describe("AppProvider cannot reach mock data", () => {
+  // Vitest runs from the repo root; import.meta.url is not a file: URL
+  // under happy-dom, so resolve from cwd instead.
+  const source = readFileSync("lib/app-context.tsx", "utf8");
+
+  it("does not reference MOCK_ anywhere", () => {
+    const hits = source
+      .split("\n")
+      .map((line, i) => [i + 1, line] as const)
+      .filter(([, line]) => line.includes("MOCK_"));
+
+    expect(hits).toEqual([]);
+  });
+
+  it("does not import from mock-data", () => {
+    expect(source).not.toMatch(/from\s+"\.\/mock-data"/);
   });
 });

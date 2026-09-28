@@ -10,7 +10,6 @@ import {
   ReactNode,
 } from "react";
 import { Category, Transaction, Budget } from "./types";
-import { MOCK_CATEGORIES, MOCK_TRANSACTIONS, MOCK_BUDGETS } from "./mock-data";
 import { readCsrfCookie } from "./auth/csrf-client";
 import { CSRF_HEADER_NAME } from "./auth/csrf-shared";
 
@@ -57,12 +56,17 @@ interface AppProviderProps {
   // Real data from Postgres, fetched server-side by app/(app)/layout.tsx and
   // passed down. Also doubles as test-fixture injection: component tests call
   // renderWithApp() with these instead of touching module-scoped mock data.
-  // Omitted only when neither applies, which falls back to MOCK_* — that
-  // path is a safety net for stray test callers, never exercised in
-  // production (the (app) layout always passes real, possibly empty, arrays).
-  seedCategories?: Category[];
-  seedTransactions?: Transaction[];
-  seedBudgets?: Budget[];
+  //
+  // Required, deliberately. These were optional and fell back to the
+  // lib/mock-data arrays, so a regression that dropped one prop would render
+  // fabricated balances that look exactly like real ones — the one failure
+  // mode in a wealth tracker a user cannot detect. Mock data is a test
+  // fixture, so test callers pass it explicitly (see renderWithApp); an
+  // empty array is how "this user has no data" is expressed. There is no
+  // third state, and now no way to ask for one.
+  seedCategories: Category[];
+  seedTransactions: Transaction[];
+  seedBudgets: Budget[];
   // Lower bound of the seeded transaction window ("YYYY-MM-DD"). Omitted
   // means the seed is the user's whole history, which is what component
   // tests and the importers' own callers want.
@@ -81,13 +85,11 @@ export function AppProvider({
   transactionsFrom,
   offline = false,
 }: AppProviderProps) {
-  const [transactions, setTransactions] = useState<Transaction[]>(
-    seedTransactions ?? MOCK_TRANSACTIONS,
-  );
-  const [budgets, setBudgets] = useState<Budget[]>(seedBudgets ?? MOCK_BUDGETS);
+  const [transactions, setTransactions] = useState<Transaction[]>(seedTransactions);
+  const [budgets, setBudgets] = useState<Budget[]>(seedBudgets);
   const [windowFrom, setWindowFrom] = useState<string | null>(transactionsFrom ?? null);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
-  const categories = seedCategories ?? MOCK_CATEGORIES;
+  const categories = seedCategories;
 
   // useState's initializer only runs on mount, so a later re-render carrying
   // a fresh seed prop (e.g. app/(app)/layout.tsx re-fetching after
@@ -162,14 +164,14 @@ export function AppProvider({
     const safeToAdopt =
       pendingRefreshBaseline === null || mutationVersionRef.current === pendingRefreshBaseline;
     if (safeToAdopt) {
-      if (seedTransactionsChanged && seedTransactions) {
+      if (seedTransactionsChanged) {
         setTransactions(seedTransactions);
         // A fresh seed carries a fresh window, so any older rows fetched
         // on demand during the previous seed's lifetime are gone with it.
         // Narrowing the claim back is the honest move — consumers re-ask.
         setWindowFrom(transactionsFrom ?? null);
       }
-      if (seedBudgetsChanged && seedBudgets) setBudgets(seedBudgets);
+      if (seedBudgetsChanged) setBudgets(seedBudgets);
     }
     if (pendingRefreshBaseline !== null) setPendingRefreshBaseline(null);
   }

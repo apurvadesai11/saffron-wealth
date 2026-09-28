@@ -1,6 +1,7 @@
 import { render, type RenderOptions } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { AppProvider } from "@/lib/app-context";
+import { MOCK_CATEGORIES, MOCK_TRANSACTIONS, MOCK_BUDGETS } from "@/lib/mock-data";
 import type { Category, Transaction, Budget } from "@/lib/types";
 
 interface AppRenderOptions extends Omit<RenderOptions, "wrapper"> {
@@ -15,10 +16,21 @@ interface AppRenderOptions extends Omit<RenderOptions, "wrapper"> {
 /**
  * Render a component wrapped in the real AppProvider. Tests can seed
  * categories / transactions / budgets to set up deterministic scenarios.
- * Omitted seeds fall back to the production mock data.
+ *
+ * An omitted seed falls back to lib/mock-data. That default lives here rather
+ * than in AppProvider, whose seed props are required precisely so production
+ * cannot reach the mock arrays — the fixtures are a testing convenience, and
+ * this is the only place entitled to supply them. A test that wants a genuinely
+ * empty provider passes `[]`, which is distinct from omitting the prop.
  */
 export function renderWithApp(ui: ReactElement, opts: AppRenderOptions = {}) {
-  const { categories, transactions, budgets, transactionsFrom, ...rest } = opts;
+  const {
+    categories = MOCK_CATEGORIES,
+    transactions = MOCK_TRANSACTIONS,
+    budgets = MOCK_BUDGETS,
+    transactionsFrom,
+    ...rest
+  } = opts;
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <AppProvider
       seedCategories={categories}
