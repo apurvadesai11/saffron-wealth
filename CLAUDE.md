@@ -55,6 +55,12 @@ The app is intended to grow into an integrated personal-wealth platform:
 - FIRE calculator
 - Retirement planning
 
+**`docs/ROADMAP.md` is the sequenced source of truth** for the order this gets
+built in and why. The list above is the unordered vision; the roadmap names the
+prerequisites (notably: `User` carries no declared financial inputs — no salary,
+birth date, or return assumptions — and that gap blocks projections, FIRE, and
+retirement planning). Update the roadmap when scope moves, not this list.
+
 ### What's shipped right now (v1 scope)
 
 The first feature delivered against the vision is the **Monthly Budget** module.

@@ -3,18 +3,18 @@
 **Status:** Ready to build. Phases 1 and 2a are shipped and committed on branch
 `feat/net-worth-accounts` (`ffd7eb9`, `ff67a38`).
 
-**v2 supersedes v1.** v1's file-schema section was written from a June 2026 export that is no
+**v2 supersedes v1.** v1's file-schema section was written from an earlier export that is no
 longer on disk, and both of its schema assumptions turned out to be wrong. v2's "Validated file
-facts" section below was measured against the user's **actual** current exports with a real CSV
-parser. Where v1 and v2 disagree, v2 is correct. The material corrections:
+facts" section below was measured against a current export with a real CSV parser. Where v1 and
+v2 disagree, v2 is correct. The material corrections:
 
 | v1 assumed | Reality |
 |---|---|
 | Transaction export has 9 columns | **11** — adds `Reviewed` and `Id` |
 | Dedup via `sha256(date\|amount\|account\|merchant\|statement)` | **`Id` is a stable unique Monarch PK** — use it |
 | Balance history is **per-account**, 2 cols (`Date, Balance`), uploaded per account | **One global file**, 3 cols (`Date, Balance, Account`) |
-| Balance history covers ~16 accounts | **35** — 19 of which never appear in transactions |
-| Balance history is sparse | **Daily** — 34,248 rows |
+| Balance history covers ~16 accounts | **~35** — over half of which never appear in transactions |
+| Balance history is sparse | **Daily** — tens of thousands of rows |
 | Series carry-forward = "most recent event ≤ D" | **Bug.** Carries closed accounts forever; see Ruling 3 |
 
 ---
@@ -40,8 +40,14 @@ on the other having run — each must work standalone against an empty database.
 
 ## Validated file facts
 
-Measured against the user's real exports on 2026-08-30 with Python's `csv` module (not `split(',')`).
-Files live outside the repo, in Google Drive:
+> **Figures in this section are deliberately banded.** This repo is public. Row counts are
+> rounded, absolute dates are given as relative spans, balances are described by magnitude rather
+> than amount, and account names are replaced with generic archetypes. Every schema fact, ruling,
+> and engineering constraint is preserved exactly — only the personal financial detail is
+> obscured. Re-measure against your own export if you need precise numbers.
+
+Measured against a representative export with Python's `csv` module (not `split(',')`).
+Files live outside the repo:
 
 ```
 <a local folder outside this repo — path deliberately not recorded>
@@ -49,48 +55,52 @@ Files live outside the repo, in Google Drive:
     Monarch_Balances_<month>.csv
 ```
 
-**Never copy these into the repo.** `*.csv` is not gitignored. Test fixtures are small synthetic
-files and belong in the repo; real exports do not.
+**Never copy these into the repo.** `*.csv`, `Monarch_*`, and `/data/` are gitignored, with a
+narrow whitelist for `**/__tests__/fixtures/*.csv`. Test fixtures are small synthetic files and
+belong in the repo; real exports do not — and neither do figures derived from them.
 
 ### `Monarch_Transactions_<month>.csv`
 
-- **7,576 data rows**, dates **2019-11-18 → 2026-08-30**.
+- **~7.5k data rows**, spanning several years up to the export date.
 - **11 columns:** `Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags,
   Owner, Reviewed, Id`
-- `Id` — **non-empty on all 7,576 rows, all 7,576 distinct.** A stable Monarch primary key.
+- `Id` — **non-empty and distinct on every row.** A stable Monarch primary key.
 - `Reviewed` — values `''` or `'Reviewed'`. Ignore.
 - `Owner` — always `'Shared'`. Ignore.
 - `Tags` — empty on every row. Ignore.
 - `Date` — `YYYY-MM-DD` on every row.
 - `Amount` — plain signed decimal on every row; no `$`, no thousands commas, no parentheses.
-  6,259 negative (expense), 1,317 positive (income). Keep the defensive strip anyway — it is
+  Roughly 5:1 negative (expense) to positive (income). Keep the defensive strip anyway — it is
   three lines and other exports may differ.
 - **16 distinct accounts**, all of which also appear in the balance file.
 - **53 distinct categories.** All three transfer-like categories are present and confirm v1's
-  Decision 1: `Transfer` (603 rows), `Credit Card Payment` (419), `Balance Adjustments` (9).
-- **Quoted fields containing commas confirmed** — e.g. `Mortgage, Lakeside Home` and
-  `1200 MAPLE STREET (Orig. $500,000.00) (...1111)`. A real CSV parser is mandatory.
+  Decision 1: `Transfer` (the most common by far), `Credit Card Payment`, and `Balance
+  Adjustments` (rare) all occur.
+- **Quoted fields containing commas confirmed** — the mortgage account's name is of the shape
+  `Mortgage, <home label>`, and the loan account's of the shape
+  `<STREET ADDRESS> (Orig. <amount>) (...<masked digits>)`. A real CSV parser is mandatory.
 
 ### `Monarch_Balances_<month>.csv`
 
-- **34,248 data rows**, dates **2020-07-01 → 2026-08-30**.
+- **~34k data rows**, spanning several years up to the export date.
 - **3 columns:** `Date, Balance, Account` — one global file, *not* one file per account.
-- **35 distinct accounts.** 16 overlap the transaction file **with byte-identical names** (zero
-  mismatches), so name-keyed upsert is safe. The other **19 appear only here** and are the
-  net-worth-dominant ones: `ACME, INC. 401(K) PLAN`, `GLOBEX, INC. 401(K) PLAN (...2222)`,
-  `Traditional IRA (...3333)`, `Brokerage (...4444)`, `ACME STOCK PURCHASE (...5555)`,
-  `INDIVIDUAL - Globex RSU (...6666)`, `ACME RESTRICTED UNIT (...*****7777)`, two HSAs,
-  four historical brokerage/stock-plan accounts, and assorted closed accounts.
-- **Daily granularity** — for the longest-running account, 2,251 of 2,252 inter-row gaps are
-  exactly 1 day.
-- **Liabilities are negative** — the mortgage sits at `-500,000.00`. Confirms v1's `abs()` rule
+- **~35 distinct accounts.** 16 overlap the transaction file **with byte-identical names** (zero
+  mismatches), so name-keyed upsert is safe. The other **~19 appear only here** and are the
+  net-worth-dominant ones. By archetype, they cover: employer-sponsored retirement plans,
+  tax-advantaged retirement accounts, taxable brokerage, employer equity-compensation accounts,
+  health-savings accounts, several historical brokerage/stock-plan accounts, and assorted closed
+  accounts. Names follow institutional conventions — all-caps plan names, a trailing
+  `(...<masked digits>)` suffix, and an `INDIVIDUAL - ` prefix on some.
+- **Daily granularity** — for the longest-running account, all but one of ~2.3k inter-row gaps
+  are exactly 1 day.
+- **Liabilities are negative** — the mortgage's balance is negative. Confirms v1's `abs()` rule
   for debt-bucket accounts.
-- **Zero duplicate `(Account, Date)` pairs** in the real file. Dedup on that key still required
-  for safe re-import.
-- **23 accounts run to the final date; 12 stop early**, and 6 of those stop at a **non-zero**
-  balance — including `Mortgage, Lakeside Home` at `-450,000.00` (2023-10-31) and
-  `Stock Plan (ACM) -2525` at `+131,000.00` (2023-09-04). This is what breaks v1's carry-forward
-  rule. See Ruling 3.
+- **Zero duplicate `(Account, Date)` pairs** in the source export. Dedup on that key still
+  required for safe re-import.
+- **Roughly two-thirds of accounts run to the final date; the rest stop early**, and several of
+  those stop at a **non-zero** balance — notably a closed mortgage and a closed employer stock
+  plan, each ending years before the export date at a materially non-zero balance. This is what
+  breaks v1's carry-forward rule. See Ruling 3.
 - Two rows are **not accounts at all**: `Individual innetwork medical deductible` and
   `Individual innetwork medical outofpocket` are Monarch insurance-progress trackers. See Ruling 5.
 
@@ -107,9 +117,9 @@ files and belong in the repo; real exports do not.
    constant `TRANSFER_LIKE_CATEGORIES` so adding a fourth is a data change, not a code change.
 2. **`papaparse` for CSV.** A deliberate, acknowledged exception to the app's no-dependency house
    style. CSV correctness (quoted fields, embedded commas/newlines, escaped quotes) is a
-   well-known "don't reinvent this" problem, and the real file exercises exactly those cases.
+   well-known "don't reinvent this" problem, and the source export exercises exactly those cases.
    This exception does **not** extend to charting — see Global Constraint 6.
-3. **Import UX: preview, then confirm.** 7,576 rows is too many to commit blind. Upload → parse →
+3. **Import UX: preview, then confirm.** Thousands of rows is too many to commit blind. Upload → parse →
    summary (new transactions, new accounts with guessed types, new categories, duplicates to be
    skipped, date range) → user confirms → commit.
 
@@ -128,7 +138,7 @@ files and belong in the repo; real exports do not.
    `Date`, `Amount`, `Account`, `Category`; treat `Merchant`, `Original Statement`, `Notes`, `Id`
    as optional-but-used; ignore any other column. Fail loudly (echoing the actual header found)
    only when a *required* column is missing.
-   *Why:* v1's "expect exactly 9, tolerate 8" would have rejected the user's real 11-column file.
+   *Why:* v1's "expect exactly 9, tolerate 8" would have rejected the actual 11-column export.
    Monarch has added columns twice; it will again.
    *Cost if wrong:* a genuinely malformed file with the right four headers gets further into the
    pipeline before failing. Row-level validation still catches it.
@@ -137,8 +147,8 @@ files and belong in the repo; real exports do not.
    `[firstEventDate, lastEventDate]`, and closed accounts import as archived.** Outside that
    window an account contributes **0**. Any account whose last balance event predates the file's
    max date is created with `archivedAt` set.
-   *Why:* v1's unbounded carry-forward would put a phantom $450k mortgage and ~$150k of stale
-   stock-plan balances into today's net worth, making the chart's "today" contradict the summary
+   *Why:* v1's unbounded carry-forward would put a phantom mortgage liability and a large stale
+   stock-plan balance into today's net worth, making the chart's "today" contradict the summary
    card — which v1's own verification step requires to match. Every *active* account exports
    daily, so "last event older than the file max" is a highly reliable closure signal. Phase 1's
    `archivedAt` soft-delete already excludes these from `listAccounts` while preserving their
@@ -149,9 +159,10 @@ files and belong in the repo; real exports do not.
 
 7. **Ruling 4 — guess asset-vs-liability from the balance sign, then refine the type by keyword.**
    Sign first, keywords second (full ordered table in Task 5).
-   *Why:* the mortgage is named `1200 MAPLE STREET (Orig. $500,000.00) (...1111)` — no
-   debt keyword anywhere in it — while the *property* it secures is named `1200 maple`. Names
-   alone cannot separate them; the sign can, trivially and always.
+   *Why:* the mortgage is named after the street address it secures, carrying the original loan
+   amount in the name, with no debt keyword anywhere in it — while the *property* it secures is
+   named after that same street. Names alone cannot separate them; the sign can, trivially and
+   always.
    *Cost if wrong:* a credit card at a $0 or credited balance on its first event could be read as
    an asset. Bounded: the user reviews guessed types in the preview step before committing.
 
@@ -159,8 +170,9 @@ files and belong in the repo; real exports do not.
    `NON_ACCOUNT_NAMES` containing exactly `Individual innetwork medical deductible` and
    `Individual innetwork medical outofpocket` (case-insensitive, exact match).
    *Why:* they are insurance deductible/out-of-pocket progress counters, not balances, and would
-   inflate assets. The other oddly-named rows (`Account`, `******3030`, `OMNICORP RSU`) are real
-   accounts that all end at or near $0, so they are harmless to import and the user can archive
+   inflate assets. The other oddly-named rows (a bare `Account`, a masked-digits-only string, an
+   equity-comp account) are real accounts that all end at or near $0, so they are harmless to
+   import and the user can archive
    them in the UI.
    *Cost if wrong:* a future export names a real account one of those two strings. Vanishingly
    unlikely, and the denylist is one line to amend.
@@ -168,12 +180,12 @@ files and belong in the repo; real exports do not.
 ### Rulings from the pre-flight cross-task scan (2026-08-30)
 
 9. **Ruling 6 — `terrace` is not a property keyword.** The scan found that with `terrace` in the
-   asset keyword list, a *transactions-first* import (Task 3, which has no balance sign) would type
-   `1200 MAPLE STREET (Orig. $500,000.00) (...1111)` — the **mortgage** — as `property`, an
-   asset. Task 5 would then decline to correct it (its "never overwrite a user-corrected type"
-   rule), leaving an $500k liability counted as an $500k asset: a $1.0M net-worth error.
+   asset keyword list, a *transactions-first* import (Task 3, which has no balance sign) would
+   type the street-address-named **mortgage** as `property`, an asset. Task 5 would then decline
+   to correct it (its "never overwrite a user-corrected type" rule), leaving the loan's liability
+   counted as an equally large asset — a net-worth error of twice the outstanding balance.
    *Why:* the keyword was a guess at one specific street name and buys nothing — the property
-   account `1200 maple` is already an accepted miss below.
+   account sharing that street name is already an accepted miss below.
    *Cost if wrong:* a genuinely property-named account guesses as `cash`; one click to fix.
 
 10. **Ruling 7 — Task 5 overwrites the type when the balance sign disagrees with the stored
@@ -207,7 +219,7 @@ files and belong in the repo; real exports do not.
 
 ### Known, accepted imperfection
 
-`1200 maple` (the property asset, positive balance, no keyword match) will be guessed as
+The street-address-named property asset (positive balance, no keyword match) will be guessed as
 `cash` rather than `property`. Left as-is: the preview step exists so the user corrects guesses
 before committing, and hard-coding a street name into the keyword table would be worse — and per
 Ruling 6, actively harmful.
@@ -261,13 +273,13 @@ Export:
 
 - `parseCsv(text: string): { rows: Record<string,string>[]; header: string[] }` — wraps
   `Papa.parse` with `{ header: true, skipEmptyLines: true }`. Trims the BOM if present
-  (the real files are UTF-8; be defensive about `utf-8-sig`).
+  (the source exports are UTF-8; be defensive about `utf-8-sig`).
 - `validateHeader(header: string[], required: string[]): void` — throws a `CsvHeaderError`
   (exported) whose message names the missing columns **and echoes the actual header found**.
   Comparison is case-insensitive and whitespace-trimmed. Extra columns are ignored (Ruling 2).
 
 **Tests (`lib/csv.test.ts`):**
-- Quoted field containing a comma parses as one value (use `Mortgage, Lakeside Home`).
+- Quoted field containing a comma parses as one value (use `Mortgage, Example Home`).
 - Quoted field containing an escaped quote.
 - Embedded newline inside a quoted field.
 - The real 11-column transaction header validates against the 4 required columns.
@@ -331,9 +343,10 @@ Export:
 
 **Tests:** one case per keyword row above (13+ cases), plus: negative balance + `Orig. $` →
 `loan_mortgage`; negative balance + `Sapphire Preferred` → `credit_card`; positive balance +
-`ACME, INC. 401(K) PLAN` → `401k`; `INDIVIDUAL - Globex RSU` → `rsu` (not `brokerage`);
+`EXAMPLE CO. 401(K) PLAN` → `401k`; `INDIVIDUAL - Example RSU` → `rsu` (not `brokerage`);
 `Health savings investments - HSA` → `hsa` (not `cash`); `Advantage Savings` → `cash`;
-`1200 maple` → `cash` (documented accepted miss — assert it so a future change is deliberate);
+`123 example street` → `cash` (documented accepted miss — assert it so a future change is
+deliberate);
 all three transfer-like names route to `'transfer'` on both signs; `parseAmount` on
 `-200.00`, `$1,234.56`, `(45.00)`; `buildExternalHash` prefers `mid:` and is stable across calls.
 
@@ -345,8 +358,8 @@ all three transfer-like names route to `'transfer'` on both signs; `parseAmount`
 `app/api/transactions/__tests__/import.test.ts` (new), `lib/transactions.ts` (extend),
 `lib/categories.ts` (extend), `lib/accounts.ts` (extend)
 
-`runtime = "nodejs"`. CSRF-validated. Multipart `req.formData()`. **10 MB cap** (the real file is
-976 KB; the cap is a guard, not a target). Top-level try/catch.
+`runtime = "nodejs"`. CSRF-validated. Multipart `req.formData()`. **10 MB cap** (a representative
+export is well under 1 MB; the cap is a guard, not a target). Top-level try/catch.
 
 Two modes on one route, switched by a `mode` field in the form data:
 
@@ -404,7 +417,8 @@ confirming and asserting the imported rows render.
 `app/api/accounts/__tests__/balance-history.test.ts` (new), `lib/accounts.ts` (extend)
 
 Note the route path: **global, not `[id]`-scoped** — the export is one file covering all accounts
-(v1 had this wrong). `runtime = "nodejs"`, CSRF, 20 MB cap (real file is 1.7 MB), top-level
+(v1 had this wrong). `runtime = "nodejs"`, CSRF, 20 MB cap (a representative export is a couple
+of MB), top-level
 try/catch. Same `mode=preview` / `mode=commit` shape as Task 3.
 
 Required columns: `Date`, `Balance`, `Account`.
@@ -433,7 +447,7 @@ Pipeline:
    asset balances are allowed in history — clamping would misrepresent the real historical net
    worth). `userId` denormalized. **Dedup in application code:** load existing `(accountId, asOf)`
    pairs for the affected accounts into a `Set`, filter the batch against it before insert.
-7. Batch the inserts — 34,248 rows must not be 34,248 round trips. Chunk `createMany` at ~5,000.
+7. Batch the inserts — ~34k rows must not be ~34k round trips. Chunk `createMany` at ~5,000.
 
 Preview summary: `{ accountsFound, newAccounts: [{name, guessedType, archived}], existingAccounts, eventRows, skippedNonAccountRows, dateRange }`.
 
@@ -495,7 +509,7 @@ Algorithm:
    `lib/account-utils.ts`, not reimplementing the taxonomy.
 6. Sum per date → one `NetWorthPoint`. Return the full MAX series; the client slices by range.
 
-Performance: 2,252 sample dates × 35 accounts. Walk each account's events with a moving index
+Performance: ~2.3k sample dates × ~35 accounts. Walk each account's events with a moving index
 rather than re-scanning per date — an O(dates × accounts) sweep, not O(dates × events).
 
 **Tests:** carry-forward inside the window; **zero after `lastDate`** (the Ruling 3 regression
@@ -545,8 +559,8 @@ filtered point.
 - The page is an RSC: fetch the user's `AccountBalanceEvent` rows + accounts, call
   `computeNetWorthSeries` **server-side**, pass the series down. The chart is read-only derived
   data — no client-side recomputation of the raw event log.
-- **Volume matters here.** A real balance-history import writes ~34,000 events for ~33 accounts.
-  Loading every event on every Net Worth page render, purely to derive ~2,250 chart points, is the
+- **Volume matters here.** A full balance-history import writes ~34k events for ~33 accounts.
+  Loading every event on every Net Worth page render, purely to derive ~2.3k chart points, is the
   obvious performance trap. Select only `accountId`, `asOf`, `balance`, `recordedAt` (never
   `SELECT *`), order in the database rather than in JS, and confirm the `[accountId, asOf]` index
   from Task 5 is actually used. If a measurement shows this is too slow, say so in the report
@@ -601,14 +615,16 @@ Report the mismatch instead.
 Per task: `npm run lint`, `npm run typecheck`, `npm test` clean; new tests actually assert
 behaviour (no `expect(true)`).
 
-End of Phase 2b: import the real `Monarch_Transactions_<month>.csv` in dev. Verify 16 accounts,
-53 categories, ~7,576 transactions; a second import of the same file changes nothing; and
+End of Phase 2b: import the source `Monarch_Transactions_<month>.csv` in dev. Verify 16 accounts,
+53 categories, and a transaction count matching the file's row count; a second import of the same
+file changes nothing; and
 `Transfer` / `Balance Adjustments` / `Credit Card Payment` do **not** move the Monthly Review
 income/expense totals.
 
-End of Phase 3: import the real `Monarch_Balances_<month>.csv` in dev. Verify 33 accounts
-created (35 minus the 2 medical trackers), 12 of them archived; the chart draws a ~6-year line;
-range toggles slice correctly; and the chart's final point matches the Net Worth summary card —
-specifically that the Lakeside mortgage and the ZUO stock plans are **absent** from today's number.
+End of Phase 3: import the source `Monarch_Balances_<month>.csv` in dev. Verify every account
+except the 2 medical trackers is created, with the early-stopping ones archived; the chart draws a
+multi-year line; range toggles slice correctly; and the chart's final point matches the Net Worth
+summary card — specifically that the closed mortgage and the closed stock plans are **absent**
+from today's number.
 
 Both phases: no leftover test rows in the dev DB after the suites run.
