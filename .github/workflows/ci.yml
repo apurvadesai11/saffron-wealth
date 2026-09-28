@@ -45,8 +45,19 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Push Prisma schema to test DB
-        run: npx prisma db push --skip-generate
+      # migrate deploy, not db push: db push would happily build a schema from
+      # schema.prisma even if the migration files could not, which is exactly
+      # how five tables' worth of drift went unnoticed. Deploying the
+      # migrations is what proves they are still the reproducible path from an
+      # empty database to a working one.
+      - name: Apply Prisma migrations to test DB
+        run: npx prisma migrate deploy
+
+      # Fails the build if schema.prisma has drifted ahead of the migrations
+      # again. Without this, a new model added via db:push locally would pass
+      # CI right up until someone deployed.
+      - name: Verify no schema drift
+        run: npx prisma migrate status
 
       - name: Lint
         run: npm run lint

@@ -472,11 +472,14 @@ directly and hands the result to the client component `NetWorthClient`, which
 owns local state and mutates via `/api/accounts` — the same self-contained
 persisted-page pattern as `app/(app)/profile/page.tsx`.
 
-**Schema changes are applied via `db push`, not migrations.** The dev database
-has no `_prisma_migrations` tracking (CI also runs `prisma db push`), so the
-`Account`/`AccountBalanceEvent` models were added by editing
-`prisma/schema.prisma` and running `db:push` directly — there is no
-corresponding file under `prisma/migrations/`.
+**Schema changes go through migrations.** This was `db push` through the Net
+Worth phases, which left `Account`/`AccountBalanceEvent`/`Category`/
+`Transaction`/`Budget` with no migration at all — `migrate deploy` built a
+database the app could not run against. The `add_financial_domain` migration
+captured that drift, the dev DB was baselined onto both migrations with
+`migrate resolve --applied`, and CI now runs `migrate deploy` + `migrate
+status`. Edit `schema.prisma`, run `npm run db:migrate` to author the
+migration, and commit the generated SQL with the schema change.
 
 ### Auth subsystem (`lib/auth/`)
 
@@ -569,9 +572,9 @@ Two test runners, three scopes:
   this →" — need to actually exist in the DB now, not just in a mock array).
 
 - **CI** (`.github/workflows/ci.yml`) — single job. Spins up a `postgres:16`
-  service container, sets `DATABASE_URL`, runs `prisma db push` once, then
-  lint → build → unit tests → install Playwright → e2e. Uploads
-  `playwright-report/` on failure.
+  service container, sets `DATABASE_URL`, runs `prisma migrate deploy` then
+  `prisma migrate status` (drift check), then lint → build → unit tests →
+  install Playwright → e2e. Uploads `playwright-report/` on failure.
 
 - **`.githooks/pre-push`** — runs lint + typecheck + unit tests before every
   push. Activated automatically via the `prepare` script in `package.json`
@@ -671,12 +674,15 @@ Testing gotchas (learned the hard way — repeat at your peril):
 - **`prepare` script in `package.json`** installs the git hooks pointer
   automatically on `npm install`. New contributors get pre-push checks
   without any extra step.
-- **The dev database has no `_prisma_migrations` table.** Schema changes are
-  applied with `prisma db push`, not `prisma migrate dev` — the one existing
-  migration file under `prisma/migrations/` was never actually tracked as
-  applied. Follow the same convention for new schema changes (see
-  `package.json`'s `db:push` script); don't run `migrate dev`, which would try
-  to initialize migration tracking against a database that doesn't have it.
+- **`prisma/migrations/` is now the source of truth, and CI enforces it.**
+  Author schema changes with `npm run db:migrate`, not `db:push`. `db:push`
+  remains in `package.json` as an escape hatch, but reaching for it is what
+  produced five tables of untracked drift; CI's `migrate status` step now
+  fails the build if `schema.prisma` runs ahead of the migrations again.
+  Generate a migration against a **scratch** database
+  (`createdb saffron_migrate_check`), never the dev DB, then verify the
+  round-trip with `migrate deploy` + `migrate status` on a freshly dropped
+  copy before committing.
 - **Before adding a Prisma model, check the live dev DB for tables that aren't
   in `schema.prisma`.** During the Net Worth Phase 1 build, the dev DB turned
   out to contain an uncommitted, abandoned financial-persistence experiment
@@ -771,6 +777,8 @@ npm run test:watch         Vitest in watch mode
 npm run test:e2e           Playwright E2E (boots dev server on :3100)
 npm run test:e2e:ui        Playwright in UI mode
 npm run db:generate        prisma generate
-npm run db:push            prisma db push  (dev; bypasses migrations)
-npm run db:migrate         prisma migrate dev
+npm run db:deploy          prisma migrate deploy  (setup / CI / deploy path)
+npm run db:status          prisma migrate status  (drift check)
+npm run db:migrate         prisma migrate dev     (author a new migration)
+npm run db:push            prisma db push  (escape hatch; bypasses migrations)
 ```

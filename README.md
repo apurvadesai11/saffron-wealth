@@ -134,8 +134,8 @@ prisma/
   schema.prisma              User, Session, OAuthAccount, PasswordResetToken,
                              FailedLogin, AuthEvent, Account, AccountBalanceEvent,
                              Category, Transaction, Budget
-  migrations/                Versioned SQL migrations (auth models only — the
-                             financial models were applied via `db push`)
+  migrations/                Versioned SQL migrations — the full schema. `migrate
+                             deploy` on an empty database produces a working app
 proxy.ts                     Next.js Edge middleware (cookie shape check + CSRF cookie)
 middleware.ts                Re-exports from proxy.ts
 e2e/                         Playwright tests + worker-scoped auth fixture
@@ -170,11 +170,11 @@ cp .env.example .env
 
 Edit `.env` as needed. At minimum `DATABASE_URL` must point at a reachable Postgres. The OAuth, Resend, Upstash, and Blob keys are optional for local development — features that need them no-op or error individually (e.g. password-reset emails print to the console instead of sending when `RESEND_API_KEY` is unset).
 
-### 3. Install + push schema + run
+### 3. Install + apply migrations + run
 
 ```bash
 npm install                # also installs the pre-push git hook
-npx prisma db push         # creates tables on first run
+npm run db:deploy          # applies prisma/migrations — creates every table
 npm run dev
 ```
 
@@ -205,8 +205,10 @@ Each import shows a preview before it writes, and both are safe to re-run: trans
 | `npm run test:e2e` | Run Playwright E2E tests (boots its own dev server on :3100; needs Postgres) |
 | `npm run test:e2e:ui` | Playwright in UI mode |
 | `npm run db:generate` | `prisma generate` |
-| `npm run db:push` | Push schema changes to the local DB |
-| `npm run db:migrate` | Create and apply a new migration |
+| `npm run db:deploy` | Apply pending migrations (setup, CI, and deploy path) |
+| `npm run db:migrate` | Author a new migration after editing `schema.prisma` |
+| `npm run db:status` | Report whether `schema.prisma` has drifted from the migrations |
+| `npm run db:push` | Force the schema on without a migration — **escape hatch only**; it is how five tables of drift went unnoticed |
 
 A pre-push git hook runs `lint`, `typecheck`, and `test` before every push (installed automatically by `npm install`).
 
@@ -214,7 +216,7 @@ A pre-push git hook runs `lint`, `typecheck`, and `test` before every push (inst
 
 - **Unit tests** — Vitest. The bar is one test file per module in `lib/` and one colocated `*.test.tsx` per component. Where color or styling encodes meaningful state, components expose a semantic `data-*` attribute and tests assert on that rather than on Tailwind class strings, so the UI can be reskinned without invalidating tests.
 - **E2E** — Playwright spins up its own dev server on port 3100 (so it never collides with local dev on :3000) and uses a worker-scoped fixture that creates a real `User` + `Session` row and pre-sets the session cookie.
-- **CI** — GitHub Actions runs lint → build → unit → e2e against a `postgres:16` service container on every push to `main` and every PR. CI applies the schema with `prisma db push`, matching local dev.
+- **CI** — GitHub Actions runs lint → build → unit → e2e against a `postgres:16` service container on every push to `main` and every PR. CI applies the schema with `prisma migrate deploy` and then runs `prisma migrate status`, so a model added to `schema.prisma` without a migration fails the build instead of surfacing at deploy time.
 
 ## Further reading
 
