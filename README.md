@@ -1,19 +1,36 @@
 # Saffron Wealth
 
-A personal-wealth app built on the Boglehead and FIRE philosophy: track what you have, track what you spend, and close the gap between financial intention and real-time awareness. Set monthly budgets, track spending with color-coded progress bars, and get contextual alerts before you overspend.
+A personal-wealth app built on the Boglehead and FIRE philosophy: track what you have, track what you spend, and close the gap between financial intention and real-time awareness. Set monthly budgets, track spending with color-coded progress bars, track net worth across accounts, and get contextual alerts before you overspend.
 
-> **Status:** v0.2 — Monthly Budget module shipped on top of a production-grade auth foundation. Roadmap below covers net worth, investments, real estate, loans, projections, FIRE calculator, and retirement planning.
+> **Status:** v0.3 — Monthly Budget and Net Worth (Phases 1–3) shipped on a production-grade auth foundation. All first-class financial data is persisted to Postgres. Planning features (projections, FIRE calculator, retirement) are next — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Features
+
+### Net Worth (shipped)
+- **Total Assets / Total Liabilities / Net Worth** computed only from accounts, never from transactions
+- **12 account types across 5 buckets** — Cash; Investments (Brokerage, RSU, ESPP, HSA); Retirement (Traditional IRA, Roth IRA, 401(k), Roth 401(k)); Real Estate (Property); Debt (Credit Card, Loan/Mortgage)
+- **Add / edit / delete accounts**, including changing an account's type across the asset↔liability line (which re-signs its existing balance history)
+- **Net-worth-over-time chart** — hand-rolled SVG, range selector for 3M / 6M / YTD / 1Y / 3Y / 5Y / 10Y / MAX
+- **Append-only balance history** — `AccountBalanceEvent` distinguishes `asOf` (the balance's own date) from `recordedAt` (write time), so backfilled history and live edits coexist
+- **Archived accounts** in a collapsed group, excluded from totals, with a Restore action (soft delete via `archivedAt`)
+- **Monarch balance-history import** — one global CSV backfills every account's history, with a preview, in-file and cross-file dedup, and a "Type disagreements" block that surfaces stored-type-vs-imported-sign conflicts for the user to resolve rather than silently re-typing accounts
 
 ### Monthly Budget (shipped)
 - **Pre-commitment budgeting** — Set monthly budget targets for income and expense categories
 - **Auto-Set All** — Populate budgets from 12-month historical spending averages in one click
 - **Color-coded progress bars** — Green/yellow/red/deep-red for expenses; inverse model for income tracking
 - **Threshold alerts** — In-app notifications at 80% and 100% of expense budgets with remaining dollars and days; alerts auto-reset when a budget increase pushes spend back below the threshold
-- **Transaction management** — Add, delete, and filter transactions (type, category, date range, amount range, search)
+- **Monthly Review widget** — Budget / Cashflow tabs with a shared month navigator and Earned / Spent / Net summary cards pinned above the tab content
 - **Month navigation** — Review budget performance for any past or future month
-- **Cashflow projections** — Per-category spend-rate extrapolation to month-end (data model in place; UI tab available)
+
+### Cashflow (shipped)
+- **Budgeted income, budgeted expenses, and projected net** for the current month
+- **Per-category spend-rate extrapolation** to month-end, with a sub-label that distinguishes a live projection from the plan alone
+
+### Transactions (shipped)
+- **Add and delete transactions**, filter by type, category, date range, amount range, and free-text search
+- **Server-side paging and filtering** over a bounded hydration window, so the list scales past the import volume
+- **Monarch transaction CSV import** — parses the real 11-column export, upserts accounts and categories by name, and dedups on Monarch's stable `Id` via `Transaction.externalHash`. Transfer-like rows (transfers, balance adjustments, credit-card payments) are routed by category name rather than amount sign, so moving your own money never lands in income or expense
 
 ### Accounts & auth (shipped)
 - Email/password registration and sign-in (Argon2id hashing, HIBP k-anonymity check, common-password blocklist)
@@ -24,8 +41,9 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 - Per-account exponential backoff on failed logins (Postgres advisory locked), IP rate limiting (Upstash sliding window with in-memory fallback)
 - CSRF double-submit, secure cookie defaults, full audit log
 
-### Roadmap
-Net worth tracking · investment tracking · real estate tracking · loan tracking · net worth projections · FIRE calculator · retirement planning · persisting budgets and transactions to Postgres.
+### Not yet built
+
+Tracking is in good shape; **planning is one month deep**. The app can tell you where this month lands and nothing beyond that. Notably absent: investment holdings (accounts carry a balance only — no positions, cost basis, or asset allocation), loan amortization and payoff dates, a financial profile (salary, birth date, target retirement age), net-worth projections, a FIRE calculator, and retirement planning. Sequencing and rationale live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Tech Stack
 
@@ -35,6 +53,8 @@ Net worth tracking · investment tracking · real estate tracking · loan tracki
 | Language | TypeScript (strict mode) |
 | UI | React 19, Tailwind CSS 3 |
 | Database | PostgreSQL 16 via Prisma 5 |
+| Charts | Hand-rolled inline SVG (no charting library) |
+| CSV parsing | `papaparse` (a deliberate exception to the no-dependency house style — real Monarch exports contain quoted fields with embedded commas) |
 | Password hashing | Argon2id (`@node-rs/argon2`) |
 | Email | Resend (no-ops to console when unconfigured) |
 | Rate limiting | Upstash Redis (in-memory fallback for dev) |
@@ -47,7 +67,13 @@ Net worth tracking · investment tracking · real estate tracking · loan tracki
 
 ### Persistence model
 
-Auth, sessions, OAuth accounts, profile data, password-reset tokens, failed logins, and audit events are persisted in Postgres. **Categories, transactions, budgets, and alert dismissals are still seeded from in-memory mock data** (`lib/mock-data.ts`) and reset on page reload — wiring those to Postgres is the next major piece of work.
+Every first-class domain is persisted in Postgres: users, sessions, OAuth accounts, profile data, password-reset tokens, failed logins, audit events, **accounts, account balance history, categories, transactions, and budgets**.
+
+The one exception is **alert dismissals**, which live in React state in `AppProvider` and reset on reload — deliberately, since the cost of losing one is that a dismissed alert re-shows.
+
+`lib/mock-data.ts` still exists but is **test-fixture data only** now, used by `renderWithApp` and the E2E fixture. Production never falls back to it: the `(app)` layout always passes real (possibly empty) arrays.
+
+Money is stored as `Decimal(14,2)` in Postgres and converted to a JS `number` at the query-layer boundary, since `Prisma.Decimal` otherwise serializes to a JSON string and would silently break `.toFixed()` call sites downstream.
 
 ## Project Structure
 
@@ -60,41 +86,64 @@ app/
   (app)/                     Auth-gated route group
     layout.tsx               DB-backed session gate + sidebar/header chrome
     page.tsx                 Monthly Review (summary cards + tabbed budget/cashflow)
-    transactions/page.tsx    Transactions list + filters + add form
+    transactions/page.tsx    Transactions list + filters + add form + CSV import
+    net-worth/page.tsx       Net worth chart, summary, accounts by bucket
     profile/page.tsx         Account, password, picture, sessions
   (auth)/                    Unauthenticated route group
     login, register, password-reset, password-reset/[token]
   api/
+    accounts/                list/create, [id] patch/archive, balance-history import
+    transactions/            list/create, [id] delete, import
+    budgets/                 read/upsert budgets
     auth/                    login, register, logout, logout-all, me, oauth/google/*, password-reset/*
     profile/                 read/update profile, change password, upload picture
     cron/                    sweep-sessions (daily), sweep-audit-events (weekly)
 components/
-  Sidebar, TopHeader, SummaryCards, MonthlyReviewWidget, MonthNavigator
+  Sidebar, SidebarNavItem, TopHeader, SummaryCards, MonthlyReviewWidget, MonthNavigator
   BudgetCategoryList, BudgetCategoryRow, BudgetProgressBar, BudgetEditModal
   CashflowCard, AlertBanner, AlertPanel, AlertsButton
-  TransactionForm, TransactionList, TransactionFilters
+  TransactionForm, TransactionList, TransactionFilters, MonarchImportModal
+  NetWorthClient, NetWorthChart, NetWorthSummaryCards, AccountBucketGroup,
+  AccountRow, AccountEditModal, ArchivedAccountsGroup, BalanceHistoryImportModal
   auth/                      AuthCard, GoogleSignInButton, PasswordStrengthHint,
                              ProfilePictureUploader, AvatarFallback, AuthFormError
 lib/
-  types.ts                   Domain types (Category, Transaction, Budget, alerts, projections)
+  types.ts                   Domain types (Category, Transaction, Budget, Account, alerts, projections)
   budget-utils.ts            Pure business logic (period bounds, spend calc, alerts, projections)
-  app-context.tsx            React Context provider (seeded from mock-data)
-  mock-data.ts               Seed categories, transactions, budgets
+  account-utils.ts           Account taxonomy (type→bucket), net-worth math, balance formatting
+  net-worth-history.ts       Balance events → net-worth-over-time series
+  accounts.ts                Account query layer (Decimal→number at the boundary)
+  categories.ts              Category query layer
+  transactions.ts            Transaction query layer (server-side filter + page)
+  budgets.ts                 Budget query layer
+  csv.ts                     papaparse wrapper + header validation
+  monarch-transform.ts       Pure row→domain transforms shared by both imports
+  transaction-import.ts      Phase 2b import pipeline
+  balance-history-import.ts  Phase 3 import pipeline
+  *-validation.ts            Hand-rolled validation (account, budget, transaction)
+  app-context.tsx            React Context provider (hydrated from Postgres)
+  mock-data.ts               Test fixtures only — not a production fallback
   use-alert-state.ts         Derived-state hook for the alert bell + widget
   nav-config.ts              Sidebar nav registry
+  db-errors.ts               Prisma error → user-facing message mapping
   prisma.ts                  PrismaClient singleton
   auth/                      sessions, csrf, password, rate-limit, exponential-backoff,
                              hibp, blocklist, google-oauth, oauth-state, reset-tokens,
                              picture-storage, validation, audit-log, email, server
 prisma/
   schema.prisma              User, Session, OAuthAccount, PasswordResetToken,
-                             FailedLogin, AuthEvent
-  migrations/                Versioned SQL migrations
+                             FailedLogin, AuthEvent, Account, AccountBalanceEvent,
+                             Category, Transaction, Budget
+  migrations/                Versioned SQL migrations (auth models only — the
+                             financial models were applied via `db push`)
 proxy.ts                     Next.js Edge middleware (cookie shape check + CSRF cookie)
 middleware.ts                Re-exports from proxy.ts
 e2e/                         Playwright tests + worker-scoped auth fixture
 docs/
-  saffron-wealth-monthly-budget-prd.md   Product requirements & implementation log
+  ROADMAP.md                                    Now / Next / Later roadmap
+  saffron-wealth-monthly-budget-prd.md          Monthly Budget PRD + implementation log
+  saffron-wealth-net-worth-phase1-plan.md       Net Worth Phase 1 plan
+  saffron-wealth-net-worth-phase2-3-plan.md     Net Worth Phases 2b & 3 plan
 scripts/
   fetch-blocklist.mjs        Refreshes lib/auth/blocklist-data.ts
 CLAUDE.md                    In-depth project context for AI coding agents
@@ -104,7 +153,7 @@ CLAUDE.md                    In-depth project context for AI coding agents
 
 ### 1. Postgres
 
-Auth (sessions, users, password reset, OAuth, audit log) is backed by Postgres via Prisma. Start a local instance and create a database:
+All application data is backed by Postgres via Prisma. Start a local instance and create a database:
 
 ```bash
 brew services start postgresql@16
@@ -133,6 +182,15 @@ Open [http://localhost:3000](http://localhost:3000).
 
 You'll be redirected to `/login` — create an account at `/register`, then the (app) routes unlock.
 
+### 4. Load your data (optional)
+
+Both imports live behind buttons in the UI and accept Monarch Money CSV exports:
+
+- **Transactions** — Transactions page → import. Upserts accounts and categories by name.
+- **Balance history** — Net Worth page → import. One global file (`Date, Balance, Account`) that backfills the chart.
+
+Each import shows a preview before it writes, and both are safe to re-run: transactions dedup on Monarch's stable `Id`, and balance events dedup per account-and-date.
+
 ## Scripts
 
 | Command | Description |
@@ -154,11 +212,14 @@ A pre-push git hook runs `lint`, `typecheck`, and `test` before every push (inst
 
 ## Testing & CI
 
-- **Unit tests** — Vitest, one test file per `lib/auth/*` module plus `lib/budget-utils.test.ts` and `proxy.test.ts`.
+- **Unit tests** — Vitest. The bar is one test file per module in `lib/` and one colocated `*.test.tsx` per component. Where color or styling encodes meaningful state, components expose a semantic `data-*` attribute and tests assert on that rather than on Tailwind class strings, so the UI can be reskinned without invalidating tests.
 - **E2E** — Playwright spins up its own dev server on port 3100 (so it never collides with local dev on :3000) and uses a worker-scoped fixture that creates a real `User` + `Session` row and pre-sets the session cookie.
-- **CI** — GitHub Actions runs lint → build → unit → e2e against a `postgres:16` service container on every push to `main` and every PR.
+- **CI** — GitHub Actions runs lint → build → unit → e2e against a `postgres:16` service container on every push to `main` and every PR. CI applies the schema with `prisma db push`, matching local dev.
 
 ## Further reading
 
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — What's shipped, what's next, and why in that order
 - `docs/saffron-wealth-monthly-budget-prd.md` — Monthly Budget PRD and chronological implementation log
+- `docs/saffron-wealth-net-worth-phase1-plan.md` — Net Worth Phase 1 (accounts + current net worth)
+- `docs/saffron-wealth-net-worth-phase2-3-plan.md` — Net Worth Phases 2b & 3 (Monarch imports + over-time chart)
 - `CLAUDE.md` — In-depth architecture, auth subsystem, and conventions for AI coding agents
