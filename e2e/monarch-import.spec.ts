@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { test, expect } from "./fixtures";
 
-// Reuses Task 3's synthetic fixture (app/api/transactions/__tests__/fixtures/
+// Reuses the transaction import's synthetic fixture (app/api/transactions/__tests__/fixtures/
 // monarch-transactions-sample.csv) rather than authoring a second one — it's
 // already the vetted synthetic dataset for this exact import pipeline (see
 // CLAUDE.md's real-data ban), and .gitignore only allows *.csv under a

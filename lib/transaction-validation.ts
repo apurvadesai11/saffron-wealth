@@ -51,6 +51,13 @@ export function validateDate(raw: unknown): FieldError | null {
   if (typeof raw !== "string" || !DATE_PATTERN.test(raw)) {
     return { field: "date", message: "Enter a date in YYYY-MM-DD format." };
   }
+  // Local-time construction, deliberately, in a file that otherwise deals in
+  // UTC date strings: this is a round-trip validity check (does 2026-02-30
+  // survive being parsed?), and the Date never leaves this function. Reading
+  // the same fields back in the same calendar system is what makes the
+  // comparison meaningful — using Date.UTC here would work identically, and
+  // switching to it would only look more consistent, not be more correct. See
+  // CLAUDE.md, "Date conventions: where UTC ends and local begins".
   const [year, month, day] = raw.split("-").map(Number);
   const d = new Date(year, month - 1, day);
   if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
@@ -131,6 +138,11 @@ export function parseCreateTransactionBody(body: unknown): ParseResult<CreateTra
 // one is imported by client components for their inline validation.
 const LIMIT_MAX = 500;
 const SEARCH_MAX = 200;
+// Well past any real category count (the seeded set is ~15, a Monarch import
+// creates a few dozen). The point is that the bound is intentional: without it
+// an arbitrarily long `IN (...)` reached Postgres, held back only by URL
+// length, which is incidental.
+const CATEGORY_IDS_MAX = 100;
 
 export interface TransactionQueryParams {
   from?: string;
@@ -217,7 +229,13 @@ export function parseTransactionQueryParams(
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    if (ids.length > 0) value.categoryIds = ids;
+    // Counted after trimming, so a list padded with empty entries fails only
+    // if it really names too many categories.
+    if (ids.length > CATEGORY_IDS_MAX) {
+      fieldErrors.categoryIds = `Too many categories selected (maximum ${CATEGORY_IDS_MAX}).`;
+    } else if (ids.length > 0) {
+      value.categoryIds = ids;
+    }
   }
 
   const amountMin = readNumberParam(sp, "amountMin", fieldErrors);

@@ -6,26 +6,15 @@ import { prisma } from "./prisma";
 import { guessAccountType } from "./monarch-transform";
 import { getBucketForType, isLiability } from "./account-utils";
 import type { Account, AccountInput, AccountPatch, AccountType } from "./types";
+// Account.balanceAsOf and AccountBalanceEvent.asOf must land on the exact
+// calendar day a CSV row names; see lib/date-utils.ts.
+import { dateStringToUtcDate, utcDateToDateString } from "./date-utils";
 
-// Mirrors lib/transactions.ts's UTC-safe date <-> string helpers. Both
-// Account.balanceAsOf and AccountBalanceEvent.asOf need to land on the exact
-// calendar day a CSV row names — `new Date(y, m, d)` (local midnight) risks
-// shifting that day in negative-UTC-offset timezones.
-function dateStringToUtcDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-function utcDateToDateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-// AccountBalanceEvent.balance is the account's signed contribution to net
-// worth, not a magnitude the reader re-signs from the live type (see the
-// sign-convention note at the top of lib/net-worth-history.ts). Account.balance
-// stays in its bucket's natural direction — what you hold for an asset, what
-// you owe for a debt — so the two differ by exactly this negation on the debt
-// side. Both may be negative: an overdrawn checking account and a credited
-// card are real states, and clamping either one silently overstates net worth.
+// AccountBalanceEvent.balance is the signed contribution to net worth;
+// Account.balance is the value in its bucket's natural direction. They differ
+// by exactly this negation on the debt side. Neither is clamped — both can
+// legitimately be negative. See
+// docs/decisions/0011-signed-contribution-at-write-time.md.
 function contributionFor(type: AccountType, balance: Prisma.Decimal): Prisma.Decimal {
   return isLiability(getBucketForType(type)) ? balance.negated() : balance;
 }
@@ -51,7 +40,7 @@ export async function listAccounts(userId: string): Promise<Account[]> {
   return rows.map(mapAccount);
 }
 
-// The Restore surface's read side (Phase 3, Task 8): every account
+// The Restore surface's read side: every account
 // archivedAt has been set on, most-recently-archived first, so the Net
 // Worth page can render them in a collapsed group with a way back in.
 export async function listArchivedAccounts(userId: string): Promise<Account[]> {
@@ -91,7 +80,7 @@ export async function updateAccount(
   id: string,
   patch: AccountPatch,
 ): Promise<Account | null> {
-  // Restore (Phase 3, Task 8) is the one PATCH shape that must find an
+  // Restore is the one PATCH shape that must find an
   // ARCHIVED row — every other edit only ever targets an active one (an
   // archived account has no other PATCH path; it has to be restored first).
   // Keeping this as a branch on the existing lookup, rather than a separate
@@ -110,14 +99,10 @@ export async function updateAccount(
   // The type this account will have after the patch — what any new balance
   // event has to be signed against.
   const nextType = (patch.type ?? existing.type) as AccountType;
-  // A type change that crosses the asset/liability line is the one edit that
-  // SHOULD reinterpret existing history: the user is asserting the account
-  // was always this kind of thing, so its recorded contributions had the
-  // wrong sign all along. Applying it here, as an explicit write, is what
-  // lets the read path stay type-independent — the alternative (deriving the
-  // sign from the live type at read time) silently flipped the meaning of
-  // every already-written row, including rows a later import skipped as
-  // duplicates and so could never correct.
+  // A bucket-crossing type change is the one edit that SHOULD reinterpret
+  // existing history, and it is applied here as an explicit write — which is
+  // what lets the read path stay type-independent. See
+  // docs/decisions/0011-signed-contribution-at-write-time.md.
   const bucketCrossed =
     isLiability(getBucketForType(nextType)) !==
     isLiability(getBucketForType(existing.type as AccountType));
@@ -210,18 +195,11 @@ export async function resolveAccountIds(
           balance: new Prisma.Decimal(0),
         },
       });
-      // Deliberately NO opening-balance event here, unlike createAccount.
-      // An earlier version wrote a zero-balance event to give the future
-      // net-worth graph "a starting point" — but that graph now exists, and
-      // the event's asOf defaults to today, so for the 16 accounts that
-      // appear in BOTH Monarch exports it poisoned the chart's most-read
-      // point: either the zero won the carry-forward at the last sample date,
-      // or the balance import's real row for that day was dropped as an
-      // (accountId, asOf) duplicate. Presence-only dedup meant it never
-      // healed. A transaction export carries no balances, so the honest
-      // representation is no event at all — computeNetWorthSeries simply
-      // omits an account with no events, and the balance-history import
-      // supplies the real history when it runs.
+      // Deliberately NO opening-balance event here, unlike createAccount: a
+      // transaction export carries no balances, so no event is the honest
+      // representation. computeNetWorthSeries omits an account with no
+      // events, and the balance-history import supplies the real history.
+      // See docs/decisions/0008-balance-event-asof-without-unique-constraint.md.
       idByName.set(name, created.id);
     }
   }
@@ -229,7 +207,7 @@ export async function resolveAccountIds(
   return { idByName, newNames };
 }
 
-// ── Balance history import (Phase 3, Task 5) ───────────────────────────────
+// ── Balance history import ─────────────────────────────────────────────────
 // The global Monarch "balance history" export covers every account in one
 // file. Unlike resolveAccountIds above (built for the transaction import,
 // which has no balance to offer and so never touches an existing account),
@@ -266,15 +244,10 @@ export interface ResolvedBalanceHistoryAccount {
 // disagrees with the sign of the imported final balance, that shows up as a
 // `typeConflict` on the result for the preview to put in front of the user.
 //
-// This replaces Ruling 7 ("the imported sign overrides the stored type"),
-// which was wrong twice over. Its rationale was that the institution's sign
-// is ground truth, but guessAccountType only consults the sign on its
-// negative branch: a card-named account with a credited (positive) balance
-// re-guesses back to credit_card, so the override fired and changed nothing
-// in exactly the case it was meant for. Where it did change something, it
-// overwrote a type the user had deliberately set, and one month of statement
-// credit is not evidence that a credit card is a cash account. The type is a
-// stable property of the account; the sign belongs to the balance.
+// The type is a stable property of the account; the sign belongs to the
+// balance. An earlier version overwrote the type when the two disagreed —
+// see docs/decisions/0007-never-retype-an-existing-account.md for why that
+// was both a no-op in the case it was built for and destructive elsewhere.
 //
 // Read-only unless `write` is true, so preview and commit share this exact
 // code path and can never disagree about what's "new" or "archived"
@@ -334,21 +307,18 @@ export async function upsertAccountsFromBalanceHistory(
     const existing = pickExisting(group.name);
     const guessedType = guessAccountType(group.name, group.finalBalanceSigned);
     const guessedIsDebt = isLiability(getBucketForType(guessedType));
-    // Ruling 3: an account whose last row is older than the file's max date
-    // has stopped reporting — Monarch exports daily for every genuinely
-    // active account, so this is a reliable "closed" signal. Soft-archive
-    // rather than delete so its history still feeds a future graph.
+    // An account whose last row is older than the file's max date has stopped
+    // reporting — Monarch exports daily for every genuinely active account, so
+    // this is a reliable "closed" signal. Soft-archive rather than delete so
+    // its history still feeds the graph. See
+    // docs/decisions/0003-account-contribution-window.md.
     const archivedByThisImport = group.lastDate < fileMaxDate;
     const balanceAsOf = dateStringToUtcDate(group.lastDate);
 
     if (!existing) {
-      // Account.balance is the value in its bucket's natural direction: what
-      // you hold for an asset, what you owe for a debt. Both can legitimately
-      // be negative — an overdrawn checking account, and a card carrying a
-      // statement credit — so neither is clamped. Math.abs on the debt side
-      // used to read a $500 credit as $500 owed, disagreeing with the same
-      // account's event history by $1,000; Math.max on the asset side hid an
-      // overdraft and overstated net worth.
+      // Natural direction, unclamped: a card carrying a statement credit is
+      // a negative amount owed, and an overdrawn asset is negative too. See
+      // docs/decisions/0011-signed-contribution-at-write-time.md.
       const balance = guessedIsDebt
         ? -group.finalBalanceSigned
         : group.finalBalanceSigned;
@@ -394,17 +364,13 @@ export async function upsertAccountsFromBalanceHistory(
       ? -group.finalBalanceSigned
       : group.finalBalanceSigned;
 
-    // Monotone archiving: this import may ADD an archivedAt (an account
-    // whose data newly says "closed"), but must never CLEAR one that's
-    // already set. Ruling 3's archival is an inference from data absence;
-    // an already-set archivedAt might instead be an explicit user delete
-    // (DELETE /api/accounts/[id]), and an inference must never silently
-    // override an explicit action — a re-import resurrecting a balance the
-    // user deliberately removed is the same class of trust violation as
-    // Task 4's resurrected-transaction bug. "Monotone" rather than "never
-    // touch on update" specifically so Ruling 3 still fires going forward:
-    // an account that closes BETWEEN two imports still gets archived by the
-    // second one, it just can never be un-archived by a later one.
+    // Monotone archiving: this import may ADD an archivedAt, but must never
+    // CLEAR one already set. Archiving-by-absence is an inference (see
+    // docs/decisions/0003-account-contribution-window.md); an already-set
+    // archivedAt might be an explicit user delete, and an inference must not
+    // override an explicit action. Monotone rather than "never touch on
+    // update" so an account that closes BETWEEN two imports still gets
+    // archived by the second one — it just can never be un-archived.
     const archivedAtValue = existing.archivedAt ?? (archivedByThisImport ? importedAt : null);
 
     if (write) {
@@ -430,11 +396,12 @@ export async function upsertAccountsFromBalanceHistory(
   return results;
 }
 
-// Dedup lookup for the balance-history import's event insert: AccountBalanceEvent
-// has no unique constraint on (accountId, asOf) (Ruling 8 — Phase 1 legitimately
-// writes more than one event for the same account on the same calendar day), so
-// "have we already recorded this account on this day" has to be checked in
-// application code against a Set built from one query, not left to the DB.
+// Dedup lookup for the balance-history import's event insert.
+// AccountBalanceEvent deliberately has no unique constraint on
+// (accountId, asOf) — Phase 1 legitimately writes more than one event for one
+// account on one day — so "have we already recorded this account on this day"
+// is checked in application code against a Set built from one query. See
+// docs/decisions/0008-balance-event-asof-without-unique-constraint.md.
 // `userId` is redundant with `accountId` alone (every id already belongs to
 // exactly one user) but is required anyway, matching this file's convention
 // of scoping every query to {id, userId} rather than id alone.
@@ -460,11 +427,10 @@ export interface BalanceHistoryEventRow {
 // A full Monarch export is ~34,000 rows, and one row at a time would be
 // 34,000 round trips. ~5,000 per call keeps that in single digits.
 //
-// Note on what this is NOT protecting against: an unchunked createMany would
-// not actually produce one oversized statement — Prisma's query engine splits
-// createMany itself, measured at ~32,760 bind parameters per INSERT (7,600
-// transaction rows became 4 statements in 435ms). So this chunk is
-// belt-and-braces, not load-bearing. It's kept because 5,000 x 6 columns =
+// Belt-and-braces rather than load-bearing: an unchunked createMany would not
+// produce one oversized statement either, because Prisma's query engine splits
+// it at ~32,760 bind parameters (7,600 rows became 4 statements in 435ms).
+// Kept because 5,000 x 6 columns =
 // 30,000 parameters sits just under that engine cap, which makes the
 // statement count predictable rather than an implementation detail of
 // whatever Prisma version is installed.
@@ -491,7 +457,7 @@ export async function createBalanceHistoryEvents(
   return inserted;
 }
 
-// ── Net-worth-over-time series (Phase 3, Task 8) ───────────────────────────
+// ── Net-worth-over-time series ─────────────────────────────────────────────
 // Feeds lib/net-worth-history.ts's computeNetWorthSeries, which
 // app/(app)/net-worth/page.tsx calls server-side — the raw event log this
 // function returns never reaches the browser, only the derived
@@ -531,18 +497,15 @@ export interface BalanceEventSeriesRow {
 
 // Selects only the four columns computeNetWorthSeries reads (never
 // `SELECT *`) and orders in Postgres rather than pulling ~34,000 rows into
-// JS unsorted, per the Task 8 brief's volume note. Measured against a
-// synthetic 33-account/~34,000-event table on this app's dev Postgres:
-// Postgres chooses a scan on the plain `userId` index followed by an
-// in-memory quicksort over the [accountId, asOf] composite index from Task
-// 5 — the single-user WHERE clause already narrows the result set small
-// enough that the planner doesn't need the composite index for this shape
-// of query — but execution stays at single-digit milliseconds even at full
-// realistic volume (~6-16ms server-side; see Task 8's report for the exact
-// EXPLAIN ANALYZE output). computeNetWorthSeries also re-sorts each
-// account's own events after grouping regardless of input order, so this
-// ORDER BY isn't load-bearing for correctness either — it exists purely so
-// the query layer never has to redo that ordering work in JS.
+// JS unsorted. Measured on a synthetic 33-account / ~34,000-event table
+// against this app's dev Postgres at 6-16ms server-side: the planner scans
+// the plain `userId` index and quicksorts in memory, because the single-user
+// WHERE clause already narrows the set enough that it doesn't reach for the
+// [accountId, asOf] composite index.
+//
+// The ORDER BY is not load-bearing for correctness — computeNetWorthSeries
+// re-sorts each account's events after grouping regardless of input order. It
+// exists so the query layer never has to redo that work in JS.
 export async function listBalanceEventsForSeries(userId: string): Promise<BalanceEventSeriesRow[]> {
   const rows = await prisma.accountBalanceEvent.findMany({
     where: { userId },

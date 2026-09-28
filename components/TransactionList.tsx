@@ -37,7 +37,13 @@ export default function TransactionList({ transactions }: Props) {
               onClick={() => {
                 deleteTransaction(t.id).catch(e => console.error("Failed to delete transaction", e));
               }}
-              className="text-gray-300 hover:text-red-400 transition-colors text-xs"
+              // Same two defects as AccountRow's control had (item 14b):
+              // text-gray-300 is ~1.5:1 on white, under WCAG 1.4.11's 3:1 for
+              // a non-text control, and the bare glyph reserved roughly 10px
+              // against SC 2.5.8's 24x24 minimum. The wording stays "Delete"
+              // because deleteTransaction really does remove the row — unlike
+              // an account archive, this one is not recoverable.
+              className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-gray-500 hover:text-red-600 hover:bg-gray-100 transition-colors"
               aria-label={`Delete ${t.description}`}
             >
               ✕

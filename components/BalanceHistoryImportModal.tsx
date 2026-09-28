@@ -8,6 +8,7 @@ import type { BalanceHistoryImportSummary } from "@/lib/balance-history-import";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/account-utils";
 import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 
 interface ImportResult {
   eventsInserted: number;
@@ -30,9 +31,19 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
   const [step, setStep] = useState<Step>("pick");
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<BalanceHistoryImportSummary | null>(null);
+
+  // Accounts the import could not classify from their names. Derived rather
+  // than added to the server summary: newAccounts already carries every
+  // guessedType, so a second count on the wire would be one more thing that
+  // could disagree with the list beside it.
+  const uncategorizedCount =
+    summary?.newAccounts.filter((a) => a.guessedType === "uncategorized").length ?? 0;
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Confines Tab to this dialog and restores focus to whatever opened it.
+  useFocusTrap(dialogRef);
 
   // Autofocus the file input when the modal opens.
   useEffect(() => {
@@ -127,6 +138,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
       aria-label="Close modal"
     >
       <div
+        ref={dialogRef}
         className="bg-white rounded-2xl shadow-xl w-full max-w-lg"
         role="dialog"
         aria-modal="true"
@@ -222,8 +234,24 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                       <li key={c.name} className="px-3 py-1.5">
                         <span className="text-gray-800">{c.name}</span>
                         <span className="block text-xs text-gray-500">
-                          Saved as {ACCOUNT_TYPE_LABELS[c.storedType]}, but this file&apos;s
-                          balance looks like {ACCOUNT_TYPE_LABELS[c.suggestedType]}
+                          {/* When the name matches no rule the suggestion is
+                              'uncategorized', which is not a suggestion —
+                              saying "looks like Uncategorized" would be
+                              nonsense. The sign disagreement is still the
+                              thing worth reporting. */}
+                          {c.suggestedType === "uncategorized" ? (
+                            <>
+                              Saved as {ACCOUNT_TYPE_LABELS[c.storedType]}, but this
+                              file&apos;s balance has the opposite sign, and the name
+                              doesn&apos;t say what it is
+                            </>
+                          ) : (
+                            <>
+                              Saved as {ACCOUNT_TYPE_LABELS[c.storedType]}, but this
+                              file&apos;s balance looks like{" "}
+                              {ACCOUNT_TYPE_LABELS[c.suggestedType]}
+                            </>
+                          )}
                         </span>
                       </li>
                     ))}
@@ -246,15 +274,39 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                 ) : (
                   <ul className="text-sm divide-y divide-gray-50 border border-gray-100 rounded-lg">
                     {summary.newAccounts.map((a) => (
-                      <li key={a.name} className="flex items-center justify-between px-3 py-1.5">
+                      <li
+                        key={a.name}
+                        className="flex items-center justify-between px-3 py-1.5"
+                        data-uncategorized={a.guessedType === "uncategorized" ? "true" : undefined}
+                      >
                         <span className="text-gray-800">{a.name}</span>
-                        <span className="text-xs text-gray-400">
+                        <span
+                          className={
+                            a.guessedType === "uncategorized"
+                              ? "text-xs text-amber-700"
+                              : "text-xs text-gray-400"
+                          }
+                        >
                           {ACCOUNT_TYPE_LABELS[a.guessedType]}
                           {a.archived ? " · archived" : ""}
                         </span>
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {/* The import could not tell what these are. Counting an
+                    unrecognized account as an asset would inflate net worth
+                    with a number nobody confirmed, so they are held out of the
+                    totals until their owner says what they are. */}
+                {uncategorizedCount > 0 && (
+                  <p className="text-xs text-amber-700 mt-1.5" data-testid="uncategorized-note">
+                    {uncategorizedCount === 1
+                      ? "1 account couldn't be classified from its name."
+                      : `${uncategorizedCount} accounts couldn't be classified from their names.`}{" "}
+                    They&apos;re excluded from your net worth until you set a type — edit them
+                    on the Net Worth page after importing.
+                  </p>
                 )}
               </div>
             </div>

@@ -1,8 +1,8 @@
 // Two-pass transform + DB-aware planning for the Monarch "balance history"
-// import (Task 5, Phase 3). Mirrors lib/transaction-import.ts's shape: pure
-// CSV parsing lives in lib/csv.ts (Task 1), pure row/keyword transforms
+// import (the account upsert, Phase 3). Mirrors lib/transaction-import.ts's shape: pure
+// CSV parsing lives in lib/csv.ts (lib/csv.ts), pure row/keyword transforms
 // (parseAmount, guessAccountType, NON_ACCOUNT_NAMES) live in
-// lib/monarch-transform.ts (Task 2), and this module is the glue that needs
+// lib/monarch-transform.ts (lib/monarch-transform.ts), and this module is the glue that needs
 // the whole batch (grouping every row by account, finding the file's max
 // date) plus the DB (existing-account resolution, event dedup) that neither
 // of those pure modules can see.
@@ -31,7 +31,7 @@ type ImportDbClient = PrismaClient | Prisma.TransactionClient;
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-// Ruling 5: case-insensitive exact match against Monarch's insurance
+// the non-account denylist: case-insensitive exact match against Monarch's insurance
 // progress-counter rows, which aren't account balances at all.
 const NON_ACCOUNT_NAMES_LOWER = new Set(NON_ACCOUNT_NAMES.map((n) => n.toLowerCase()));
 
@@ -77,13 +77,13 @@ export interface BalanceHistoryImportSummary {
   eventRows: number;
   // Split against the DB, not just a raw count, so preview is actually
   // honest: re-exporting full history in month 2 should preview close to 0
-  // new rows, not the whole file (Task 3's reviewed shape does the same
+  // new rows, not the whole file (the transaction import's reviewed shape does the same
   // split for transactions — newTransactions/duplicateRows alongside
   // totalRows). A brand-new account's rows are always "new" without a DB
   // round trip, since it has no prior events by construction. Note these
   // two can sum to slightly less than `eventRows` when the file itself
   // contains a same-account-same-day repeat (see the in-file dedup note
-  // below) — matching Task 3's own totalRows, which likewise isn't
+  // below) — matching the transaction import's own totalRows, which likewise isn't
   // guaranteed to equal newTransactions + duplicateRows.
   newEventRows: number;
   duplicateEventRows: number;
@@ -117,7 +117,7 @@ export async function runBalanceHistoryImportPipeline(
   // Pass 1: read + drop. A row with an unparseable date/amount or an empty
   // account name is silently dropped (mirrors lib/transaction-import.ts's
   // parseRow precedent) — it's not a real balance. Medical-tracker rows
-  // parse fine but aren't accounts at all (Ruling 5), so they get their own
+  // parse fine but aren't accounts at all (the non-account denylist), so they get their own
   // counter instead of vanishing indistinguishably into malformed rows.
   const parsed: ParsedRow[] = [];
   let skippedNonAccountRows = 0;
@@ -148,9 +148,9 @@ export async function runBalanceHistoryImportPipeline(
   // per day, but a hand-edited or re-exported file could carry a revised
   // value for a day it already reported. Without this, both rows would
   // become separate event candidates for the exact same (accountId, asOf)
-  // key; since that key has no unique constraint (Ruling 8), both would
+  // key; since that key has no unique constraint (docs/decisions/0008-balance-event-asof-without-unique-constraint.md), both would
   // insert, land in the same createMany batch, and get an IDENTICAL
-  // recordedAt — leaving Task 6's asOf-tie tiebreak nothing to prefer
+  // recordedAt — leaving lib/net-worth-history.ts's asOf-tie tiebreak nothing to prefer
   // between them. Collapsing to the last-in-file value here is the same
   // last-wins rule already used for `lastDate`/`finalBalanceSigned` below.
   const lastIndexForKey = new Map<string, number>();
@@ -158,10 +158,11 @@ export async function runBalanceHistoryImportPipeline(
     lastIndexForKey.set(`${row.accountName}|${row.date}`, i);
   });
 
-  // Pass 2: group by account. `lastDate`/`finalBalanceSigned` feed Ruling
-  // 3's archive check and Ruling 4's sign-aware type guess; `rows` (deduped
-  // per the note above) feeds the event log below, once each account's
-  // FINAL resolved type is known.
+  // Pass 2: group by account. `lastDate`/`finalBalanceSigned` feed the archive
+  // check (docs/decisions/0003-account-contribution-window.md) and the
+  // sign-aware type guess (docs/decisions/0004-sign-before-keywords.md);
+  // `rows` (deduped per the note above) feeds the event log below, once each
+  // account's FINAL resolved type is known.
   const accountsByName = new Map<string, AccountAccumulator>();
   const accountNamesOrdered: string[] = [];
   let fileMinDate = "";
@@ -241,7 +242,7 @@ export async function runBalanceHistoryImportPipeline(
   ];
   const existingDays = await findExistingBalanceEventDays(userId, existingAccountIds, client);
 
-  // NOTE for Task 6: this dedup is presence-only, not value-comparing. If a
+  // NOTE for lib/net-worth-history.ts: this dedup is presence-only, not value-comparing. If a
   // day already has an event and this import carries a REVISED balance for
   // that same day, the revision is silently dropped — the existing (stale)
   // value is what stays in history. There is currently no way to

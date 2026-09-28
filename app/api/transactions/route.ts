@@ -1,60 +1,41 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getSession } from "@/lib/auth/server";
-import { validateCsrfFromRequest } from "@/lib/auth/csrf";
+import { NextResponse } from "next/server";
 import { createTransaction, queryTransactions } from "@/lib/transactions";
 import {
   parseCreateTransactionBody,
   parseTransactionQueryParams,
 } from "@/lib/transaction-validation";
-import { InvalidReferenceError } from "@/lib/db-errors";
-
-interface ErrorBody {
-  ok: false;
-  error: { code: string; message: string; fieldErrors?: Record<string, string> };
-}
-
-function err(
-  code: string,
-  message: string,
-  status: number,
-  fieldErrors?: Record<string, string>,
-) {
-  return NextResponse.json<ErrorBody>(
-    { ok: false, error: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } },
-    { status },
-  );
-}
+import { InvalidReferenceError, InvalidCursorError } from "@/lib/db-errors";
+import { withApiHandler } from "@/lib/api/handler";
+import { err } from "@/lib/api/errors";
 
 // Filtered, paged read for the Transactions page. Deliberately no CSRF check:
 // this is a safe read and every ordinary page load reaches it without the
-// header, unlike the mutating handlers below.
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
-
+// header, unlike the mutating handler below.
+export const GET = withApiHandler(
+  { logLabel: "api/transactions GET" },
+  async ({ req, session }) => {
     const parsed = parseTransactionQueryParams(req.nextUrl.searchParams);
     if (!parsed.ok) {
-      return err("VALIDATION_FAILED", "Invalid filter.", 400, parsed.fieldErrors);
+      return err("VALIDATION_FAILED", "Invalid filter.", 400, { fieldErrors: parsed.fieldErrors });
     }
 
-    const page = await queryTransactions(session.user.id, parsed.value);
-    return NextResponse.json({ ok: true, data: page });
-  } catch (e) {
-    console.error("[api/transactions] GET unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
-  }
-}
+    try {
+      const page = await queryTransactions(session.user.id, parsed.value);
+      return NextResponse.json({ ok: true, data: page });
+    } catch (e) {
+      // A cursor the caller no longer owns (or never did) is a bad request,
+      // not a server fault — it used to surface as a 500 from Prisma.
+      if (e instanceof InvalidCursorError) {
+        return err("INVALID_CURSOR", e.message, 400, { fieldErrors: { cursor: e.message } });
+      }
+      throw e;
+    }
+  },
+);
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
-    if (!validateCsrfFromRequest(req)) return err("CSRF_FAILED", "Invalid request.", 403);
-
+export const POST = withApiHandler(
+  { logLabel: "api/transactions POST", csrf: true },
+  async ({ req, session }) => {
     let body: unknown;
     try {
       body = await req.json();
@@ -64,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     const parsed = parseCreateTransactionBody(body);
     if (!parsed.ok) {
-      return err("VALIDATION_FAILED", "Please correct the errors and try again.", 400, parsed.fieldErrors);
+      return err("VALIDATION_FAILED", "Please correct the errors and try again.", 400, { fieldErrors: parsed.fieldErrors });
     }
 
     try {
@@ -72,15 +53,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, data: { transaction } }, { status: 201 });
     } catch (e) {
       if (e instanceof InvalidReferenceError) {
-        return err("VALIDATION_FAILED", e.message, 400, { [e.field]: e.message });
+        return err("VALIDATION_FAILED", e.message, 400, { fieldErrors: { [e.field]: e.message } });
       }
       throw e;
     }
-  } catch (e) {
-    console.error("[api/transactions] POST unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
-  }
-}
+  },
+);

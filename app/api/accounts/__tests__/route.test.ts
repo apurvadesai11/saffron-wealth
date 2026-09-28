@@ -30,7 +30,7 @@ afterEach(async () => {
 
 describe("GET /api/accounts", () => {
   it("returns 401 when not signed in", async () => {
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("UNAUTHENTICATED");
   });
@@ -41,7 +41,7 @@ describe("GET /api/accounts", () => {
     const { rawToken } = await seedSession(user.id);
     mocks.sessionToken = rawToken;
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     expect(res.status).toBe(200);
     expect((await res.json()).data.accounts).toEqual([]);
   });
@@ -62,7 +62,7 @@ describe("GET /api/accounts", () => {
     const { rawToken } = await seedSession(me.id);
     mocks.sessionToken = rawToken;
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     const body = await res.json();
     expect(body.data.accounts).toHaveLength(1);
     expect(body.data.accounts[0].name).toBe("My Brokerage");
@@ -77,7 +77,7 @@ describe("GET /api/accounts", () => {
     const { rawToken } = await seedSession(user.id);
     mocks.sessionToken = rawToken;
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     expect((await res.json()).data.accounts).toEqual([]);
   });
 });

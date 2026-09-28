@@ -14,6 +14,7 @@ import {
   getPendingAlerts,
   formatAlertMessage,
   getCashflowProjection,
+  getPeriodSpendByCategory,
 } from "./budget-utils";
 import type { Budget, Category, AlertRecord } from "./types";
 import { MOCK_CATEGORIES, MOCK_TRANSACTIONS, MOCK_BUDGETS } from "./mock-data";
@@ -458,5 +459,77 @@ describe('getHydrationWindowStart', () => {
     const [y, m, d] = getHydrationWindowStart(asOf).split('-').map(Number);
 
     expect(new Date(y, m - 1, d).getTime()).toBeLessThanOrEqual(oldestPeriodStart.getTime());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPeriodSpendByCategory — the batched variant of getCurrentPeriodSpend
+// ---------------------------------------------------------------------------
+//
+// getCurrentPeriodSpend filters the whole transaction array once per category.
+// Every multi-category caller (buildBudgetProgressList, getCashflowProjection,
+// use-alert-state, MonthlyReviewWidget, CashflowCard) called it in a loop, so
+// a 13-month hydration window after a Monarch import (~1,000 rows) across ~40
+// categories meant ~40,000 iterations and ~40,000 date parses per render pass.
+// This walks the array once instead. getCurrentPeriodSpend keeps its signature
+// and its single-category callers.
+describe("getPeriodSpendByCategory", () => {
+  const CATS = ["groceries", "housing", "entertainment"];
+
+  it("agrees with getCurrentPeriodSpend for every category", () => {
+    const batched = getPeriodSpendByCategory(MOCK_TRANSACTIONS, "monthly", FEB_14_2026);
+
+    for (const cat of MOCK_CATEGORIES) {
+      const one = getCurrentPeriodSpend(MOCK_TRANSACTIONS, cat.id, "monthly", FEB_14_2026);
+      expect(batched.get(cat.id) ?? 0).toBe(one);
+    }
+  });
+
+  it("returns 0 (via an absent key) for a category with no spend in the period", () => {
+    const spend = getPeriodSpendByCategory(MOCK_TRANSACTIONS, "monthly", FEB_14_2026);
+    expect(spend.get("no-such-category") ?? 0).toBe(0);
+  });
+
+  it("excludes transactions outside the period", () => {
+    const txs = [
+      { ...MOCK_TRANSACTIONS[0], id: "in", categoryId: "groceries", amount: 25, date: "2026-02-10" },
+      { ...MOCK_TRANSACTIONS[0], id: "out", categoryId: "groceries", amount: 99, date: "2026-01-10" },
+    ];
+    const spend = getPeriodSpendByCategory(txs, "monthly", FEB_14_2026);
+    expect(spend.get("groceries")).toBe(25);
+  });
+
+  // The actual complexity claim, asserted rather than asserted-about. A getter
+  // on `categoryId` counts array iterations: it is the first field either
+  // implementation touches per row, so one read == one visit. One pass over
+  // the array means one visit per transaction no matter how many categories
+  // exist; the per-category version visits every row once per category, which
+  // is the O(transactions x categories) shape this item is about.
+  //
+  // Counting `date` reads would not distinguish the two — getCurrentPeriodSpend
+  // short-circuits on categoryId before parsing a date, so both end up parsing
+  // each row's date exactly once. The traversal is the cost, not the parse.
+  it("visits each transaction once, not once per category", () => {
+    let visits = 0;
+    const txs = Array.from({ length: 50 }, (_, i) => {
+      const categoryId = CATS[i % CATS.length];
+      return {
+        ...MOCK_TRANSACTIONS[0],
+        id: `t-${i}`,
+        amount: 1,
+        date: `2026-02-${String((i % 28) + 1).padStart(2, "0")}`,
+        get categoryId() {
+          visits++;
+          return categoryId;
+        },
+      };
+    });
+
+    getPeriodSpendByCategory(txs, "monthly", FEB_14_2026);
+    expect(visits).toBe(50);
+
+    visits = 0;
+    for (const cat of CATS) getCurrentPeriodSpend(txs, cat, "monthly", FEB_14_2026);
+    expect(visits).toBe(50 * CATS.length);
   });
 });

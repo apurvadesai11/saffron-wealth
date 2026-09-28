@@ -22,7 +22,7 @@ import { seedUser, seedSession, cleanupUser } from "./helpers";
 
 // Synthetic Monarch-shaped balance-history fixture (no real personal data —
 // see CLAUDE.md's privacy rule). Three accounts exercise the three
-// structural cases the Task 5 brief calls out: "Everyday Checking" is an
+// structural cases the account upsert calls out: "Everyday Checking" is an
 // asset running to the file's max date (and dips negative on its first day,
 // to prove event history isn't clamped the way the account's current
 // balance is); "Sample Credit Card" is a debt with negative CSV balances;
@@ -286,7 +286,7 @@ describe("POST /api/accounts/balance-history", () => {
     // count) and eventsInserted (post-in-file-dedup) can legitimately
     // differ. Without the in-file dedup, eventsInserted would be 2: nothing
     // stops both from landing, since (accountId, asOf) has no unique
-    // constraint (Ruling 8).
+    // constraint (docs/decisions/0008-balance-event-asof-without-unique-constraint.md).
     expect(body.summary.eventRows).toBe(2);
     expect(body.eventsInserted).toBe(1);
 
@@ -377,7 +377,12 @@ describe("POST /api/accounts/balance-history", () => {
 
     const body = await res.json();
     expect(body.summary.typeConflicts).toEqual([
-      { name: "Sunset Rewards", storedType: "credit_card", suggestedType: "cash" },
+      // 15c: the name matches no keyword, so the "suggestion" is that the app
+      // cannot tell — which is the honest answer. It used to say 'cash', a
+      // confident guess with nothing behind it. The conflict is still
+      // reported, because a positive balance on a stored liability is the
+      // signal worth surfacing regardless of what the name says.
+      { name: "Sunset Rewards", storedType: "credit_card", suggestedType: "uncategorized" },
     ]);
   });
 
@@ -395,7 +400,7 @@ describe("POST /api/accounts/balance-history", () => {
     await archiveAccount(userId, created.id);
 
     // The fixture's "Everyday Checking" rows run all the way to the file
-    // max (2026-01-03) — Ruling 3's own inference would say "still
+    // max (2026-01-03) — archiving-by-absence would say "still
     // active," but the user's explicit delete must win and must never be
     // silently cleared by a later import's data-driven inference.
     const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
@@ -419,7 +424,7 @@ describe("POST /api/accounts/balance-history", () => {
     expect(before?.archivedAt).toBeNull();
 
     // The fixture's "Legacy Brokerage" rows stop one day before the file
-    // max — monotonicity only blocks CLEARING an archivedAt, so Ruling 3
+    // max — monotonicity only blocks CLEARING an archivedAt, so archiving-by-absence
     // must still be free to SET one on an existing, currently-active account.
     const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
     expect(res.status).toBe(200);
@@ -458,7 +463,7 @@ describe("POST /api/accounts/balance-history", () => {
     expect(summary.netWorth).toBe(120);
   });
 
-  it("Ruling 8 regression: a same-day double balance edit via updateAccount still succeeds", async () => {
+  it("no (accountId, asOf) unique constraint: a same-day double balance edit via updateAccount still succeeds", async () => {
     const user = await signIn();
     userId = user.id;
 
@@ -469,7 +474,7 @@ describe("POST /api/accounts/balance-history", () => {
       balance: 100,
     });
     // Two edits in the same test (same calendar day) must both succeed — the
-    // asOf column added for Task 5 must NOT carry a unique constraint that
+    // asOf column added for the account upsert must NOT carry a unique constraint that
     // would turn this normal Phase 1 flow into a 500.
     await expect(updateAccount(userId, account.id, { balance: 200 })).resolves.not.toBeNull();
     await expect(updateAccount(userId, account.id, { balance: 300 })).resolves.not.toBeNull();

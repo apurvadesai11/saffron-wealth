@@ -138,6 +138,40 @@ export function getCurrentPeriodSpend(
 }
 
 /**
+ * Current-period spend for every category that has any, in one pass.
+ *
+ * getCurrentPeriodSpend filters the whole transaction array per category, so a
+ * caller that needs every category pays O(transactions x categories). With a
+ * 13-month hydration window after a Monarch import (~1,000 rows) and ~40
+ * categories that is ~40,000 iterations per render pass, repeated on every
+ * keystroke in any consumer of the provider. This walks the array once.
+ *
+ * A category with no spend in the period is absent from the map rather than
+ * present as 0 — callers read `map.get(id) ?? 0`, which is also what makes the
+ * result usable for categories the caller has never heard of.
+ *
+ * getCurrentPeriodSpend stays for single-category callers (getPendingAlerts'
+ * feed, the one-off reads) and for its existing tests.
+ */
+export function getPeriodSpendByCategory(
+  transactions: Transaction[],
+  period: BudgetPeriod,
+  asOf: Date
+): Map<string, number> {
+  const [start, end] = getPeriodBounds(asOf, period);
+  const spend = new Map<string, number>();
+
+  for (const t of transactions) {
+    const categoryId = t.categoryId;
+    const d = parseLocalDate(t.date);
+    if (d < start || d > end) continue;
+    spend.set(categoryId, (spend.get(categoryId) ?? 0) + t.amount);
+  }
+
+  return spend;
+}
+
+/**
  * Historical average spend per period for `categoryId`.
  *
  * Looks back up to 12 complete periods (not including the current period).
@@ -316,8 +350,9 @@ export function getCashflowProjection(
   }
 
   // Rate-based projection: per-category spend rate × total days in period
+  const spendByCategory = getPeriodSpendByCategory(transactions, period, asOf);
   const projectedExpenses = expenseCategories.reduce((sum, cat) => {
-    const spent = getCurrentPeriodSpend(transactions, cat.id, period, asOf);
+    const spent = spendByCategory.get(cat.id) ?? 0;
     const rate = spent / daysElapsed;
     return sum + rate * totalDays;
   }, 0);
@@ -392,13 +427,14 @@ export function buildBudgetProgressList(
   asOf: Date
 ): BudgetProgress[] {
   const period: BudgetPeriod = 'monthly'; // v1 UI only shows monthly budgets
+  const spendByCategory = getPeriodSpendByCategory(transactions, period, asOf);
 
   return categories
     .flatMap(cat => {
       const budget = budgets.find(b => b.categoryId === cat.id && b.period === period);
       if (!budget) return []; // no budget set → not shown (FR-06)
 
-      const spent = getCurrentPeriodSpend(transactions, cat.id, period, asOf);
+      const spent = spendByCategory.get(cat.id) ?? 0;
       const percent = getProgressPercent(spent, budget.amount);
 
       const barColor =

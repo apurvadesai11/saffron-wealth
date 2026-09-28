@@ -1,4 +1,14 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+
+// The archive control is a two-step confirm now (item 14a): the row's control
+// opens the confirm, and "Yes, archive" commits it. Wording says archive
+// because archiveAccount never removes the row.
+async function archiveAccount(page: Page, name: string) {
+  await page.getByRole("button", { name: `Archive ${name}` }).click();
+  await page.getByRole("button", { name: /^Yes, archive/ }).click();
+}
+
 
 // Accounts persist in Postgres and are scoped to the worker's authed user, so
 // unlike the in-memory transaction/budget smoke tests, state here is NOT reset
@@ -10,7 +20,7 @@ test.describe("Sidebar navigation", () => {
     await page.goto("/");
     await page.getByRole("link", { name: /Net Worth/ }).click();
     await expect(page).toHaveURL("/net-worth");
-    // exact: true — Task 8's NetWorthChart adds its own "Net Worth Over
+    // exact: true — the Net Worth page's NetWorthChart adds its own "Net Worth Over
     // Time" heading, which would otherwise substring-match too.
     await expect(page.getByRole("heading", { name: "Net Worth", exact: true })).toBeVisible();
 
@@ -24,7 +34,7 @@ test.describe("Net Worth page", () => {
     await page.goto("/net-worth");
     await expect(page.getByText("Total Assets")).toBeVisible();
     await expect(page.getByText("Total Liabilities")).toBeVisible();
-    // exact: true — Task 8's NetWorthChart adds its own "Net Worth Over
+    // exact: true — the Net Worth page's NetWorthChart adds its own "Net Worth Over
     // Time" heading, which would otherwise substring-match too.
     await expect(page.getByRole("heading", { name: "Net Worth", exact: true })).toBeVisible();
   });
@@ -73,7 +83,7 @@ test.describe("Net Worth page", () => {
   });
 
   // "Delete" is a soft-archive (see lib/accounts.ts's archiveAccount) — as of
-  // Task 8 the deleted account no longer vanishes outright, it moves into
+  // the Net Worth page the deleted account no longer vanishes outright, it moves into
   // the collapsed "Archived" group (with a Restore path back). This test
   // used to assert the name disappeared everywhere on the page; that
   // assertion is now specifically about the ACTIVE bucket groups, since the
@@ -93,7 +103,7 @@ test.describe("Net Worth page", () => {
     await expect(modal).not.toBeVisible();
     await expect(page.getByText(name)).toBeVisible();
 
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await archiveAccount(page, name);
     await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
 
     const archivedGroup = page.locator('[data-state="archived-group"]');
@@ -166,7 +176,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     await addAccount(page, name, "4321");
     const withAccount = await latestChartValue(page);
 
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await archiveAccount(page, name);
     await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
 
     await expect(chart(page)).not.toHaveAttribute("data-latest-value", withAccount ?? "");
@@ -189,7 +199,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     await addAccount(page, name, "2468");
     const withAccount = await latestChartValue(page);
 
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await archiveAccount(page, name);
     // Wait for the CHART to reflect the archive, not just the account list.
     // The list updates optimistically from local state before the refresh
     // lands, so reading the chart at that moment captures the pre-archive

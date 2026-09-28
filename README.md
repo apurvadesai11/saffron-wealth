@@ -79,12 +79,11 @@ Money is stored as `Decimal(14,2)` in Postgres and converted to a JS `number` at
 
 ```
 app/
-  layout.tsx                 Root layout (fonts, metadata, <Providers>)
-  providers.tsx              Client component shim wrapping AppProvider
+  layout.tsx                 Root layout (fonts, metadata, global styles)
   error.tsx                  Error boundary
   globals.css                Tailwind + theme variables (light mode only)
   (app)/                     Auth-gated route group
-    layout.tsx               DB-backed session gate + sidebar/header chrome
+    layout.tsx               DB-backed session gate, AppProvider, sidebar/header chrome
     page.tsx                 Monthly Review (summary cards + tabbed budget/cashflow)
     transactions/page.tsx    Transactions list + filters + add form + CSV import
     net-worth/page.tsx       Net worth chart, summary, accounts by bucket
@@ -105,9 +104,12 @@ components/
   TransactionForm, TransactionList, TransactionFilters, MonarchImportModal
   NetWorthClient, NetWorthChart, NetWorthSummaryCards, AccountBucketGroup,
   AccountRow, AccountEditModal, ArchivedAccountsGroup, BalanceHistoryImportModal
+  __tests__/                 renderWithApp helper + contrast assertions
   auth/                      AuthCard, GoogleSignInButton, PasswordStrengthHint,
                              ProfilePictureUploader, AvatarFallback, AuthFormError
 lib/
+  api/                       Shared route plumbing: withApiHandler, the error
+                             envelope, the CSV import handler
   types.ts                   Domain types (Category, Transaction, Budget, Account, alerts, projections)
   budget-utils.ts            Pure business logic (period bounds, spend calc, alerts, projections)
   account-utils.ts           Account taxonomy (type→bucket), net-worth math, balance formatting
@@ -125,11 +127,17 @@ lib/
   mock-data.ts               Test fixtures only — not a production fallback
   use-alert-state.ts         Derived-state hook for the alert bell + widget
   nav-config.ts              Sidebar nav registry
+  date-utils.ts              UTC-safe "YYYY-MM-DD" <-> Date (persistence layer)
+  money.ts                   The one round-to-cent helper
+  use-focus-trap.ts          Tab containment + focus restore for modals
+  security-headers.ts        CSP and the rest of the response header set
   db-errors.ts               Prisma error → user-facing message mapping
   prisma.ts                  PrismaClient singleton
-  auth/                      sessions, csrf, password, rate-limit, exponential-backoff,
-                             hibp, blocklist, google-oauth, oauth-state, reset-tokens,
-                             picture-storage, validation, audit-log, email, server
+  auth/                      sessions, csrf, password, password-rules, rate-limit,
+                             exponential-backoff, hibp, blocklist, google-oauth,
+                             oauth-state, reset-tokens, email-change-tokens,
+                             picture-storage, request-info, safe-next, validation,
+                             audit-log, email, server, session-cookie
 prisma/
   schema.prisma              User, Session, OAuthAccount, PasswordResetToken,
                              FailedLogin, AuthEvent, Account, AccountBalanceEvent,
@@ -139,13 +147,18 @@ prisma/
 proxy.ts                     Next.js Edge middleware (cookie shape check + CSRF cookie)
 middleware.ts                Re-exports from proxy.ts
 e2e/                         Playwright tests + worker-scoped auth fixture
+  smoke, net-worth, net-worth-history, monarch-import, auth-middleware,
+  security-headers, accessibility
 docs/
+  decisions/                                    Decision records (one per ruling)
   ROADMAP.md                                    Now / Next / Later roadmap
+  audit-remediation-plan.md                     Full-repo audit + remediation plan
   saffron-wealth-monthly-budget-prd.md          Monthly Budget PRD + implementation log
   saffron-wealth-net-worth-phase1-plan.md       Net Worth Phase 1 plan
   saffron-wealth-net-worth-phase2-3-plan.md     Net Worth Phases 2b & 3 plan
 scripts/
   fetch-blocklist.mjs        Refreshes lib/auth/blocklist-data.ts
+  check-env-parity.mjs       Fails CI when code and .env.example disagree
 CLAUDE.md                    In-depth project context for AI coding agents
 ```
 

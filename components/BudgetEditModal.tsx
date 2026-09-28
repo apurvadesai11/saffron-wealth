@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Budget, Category } from "@/lib/types";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 
 interface HistoricalAverage {
   average: number;
@@ -28,6 +29,9 @@ export default function BudgetEditModal({
   );
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Confines Tab to this dialog and restores focus to whatever opened it.
+  useFocusTrap(dialogRef);
 
   // Autofocus input when modal opens
   useEffect(() => {
@@ -77,6 +81,7 @@ export default function BudgetEditModal({
     >
       {/* Card — stop propagation so clicks inside don't close */}
       <div
+        ref={dialogRef}
         className="bg-white rounded-2xl shadow-xl w-full max-w-md"
         role="dialog"
         aria-modal="true"

@@ -77,7 +77,7 @@ describe("BalanceHistoryImportModal — preview → confirm → success", () => 
     expect(screen.getByText("Everyday Checking")).toBeInTheDocument();
     expect(screen.getByText("Legacy Brokerage")).toBeInTheDocument();
     // The archived flag on a new account is surfaced right in the preview —
-    // this is exactly the visibility Task 8's Archived-group work is about.
+    // this is exactly the visibility the Net Worth page's Archived-group work is about.
     expect(screen.getByText(/Brokerage · archived/)).toBeInTheDocument();
     expect(screen.getByText("Cash")).toBeInTheDocument();
 

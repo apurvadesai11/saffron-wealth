@@ -8,6 +8,7 @@ import {
   CAT_GROCERIES,
   CAT_SALARY,
 } from "./__tests__/test-utils";
+import { contrastRatio, textGrayClass, TAILWIND_GRAY, WHITE } from "./__tests__/contrast";
 import type { Transaction } from "@/lib/types";
 
 // In production, `TransactionsPage` reads the transactions slice from context
@@ -87,5 +88,26 @@ describe("TransactionList", () => {
       screen.getByRole("button", { name: /Delete Coffee/i }),
     );
     expect(screen.queryByText("Coffee")).not.toBeInTheDocument();
+  });
+});
+
+// 14b — the plan asks for this control to be audited for the same contrast and
+// hit-target problems AccountRow's had. The wording is not in scope here:
+// deleteTransaction really does remove the row, so "Delete" is accurate.
+describe("TransactionList delete control accessibility", () => {
+  const MIN_UI_CONTRAST = 3;
+
+  it("clears WCAG 1.4.11's 3:1 and reserves a 24x24 hit target", () => {
+    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} />, {
+      categories: CATS,
+      transactions: [EXPENSE_TX],
+    });
+    const [control] = screen.getAllByRole("button", { name: /^Delete / });
+
+    const cls = textGrayClass(control);
+    expect(cls).not.toBeNull();
+    expect(contrastRatio(TAILWIND_GRAY[cls!], WHITE)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    expect(control.className).toMatch(/min-h-6/);
+    expect(control.className).toMatch(/min-w-6/);
   });
 });

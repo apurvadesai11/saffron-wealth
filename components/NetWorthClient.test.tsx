@@ -177,8 +177,10 @@ describe("NetWorthClient — refresh after archiving", () => {
     );
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Delete Chase Checking" }),
+      screen.getByRole("button", { name: "Archive Chase Checking" }),
     );
+    // Two-step now (item 14a): the row's control asks, the confirm commits.
+    await userEvent.click(screen.getByRole("button", { name: /^Yes, archive/ }));
 
     await waitFor(() => expect(routerMocks.refresh).toHaveBeenCalledTimes(1));
   });
@@ -196,8 +198,10 @@ describe("NetWorthClient — refresh after archiving", () => {
     );
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Delete Chase Checking" }),
+      screen.getByRole("button", { name: "Archive Chase Checking" }),
     );
+    // Two-step now (item 14a): the row's control asks, the confirm commits.
+    await userEvent.click(screen.getByRole("button", { name: /^Yes, archive/ }));
 
     await waitFor(() => expect(screen.getByText("Delete failed.")).toBeInTheDocument());
     expect(routerMocks.refresh).not.toHaveBeenCalled();

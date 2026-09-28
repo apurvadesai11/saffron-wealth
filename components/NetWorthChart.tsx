@@ -167,7 +167,7 @@ function makeYScale(domain: [number, number], top: number, bottom: number): (v: 
 }
 
 // One pass, array-join instead of repeated string concatenation — the
-// series can be ~2,250 points (Task 6's real-data estimate) and this runs
+// series can be ~2,250 points (lib/net-worth-history.ts's real-data estimate) and this runs
 // on every range toggle.
 export function buildPathD(coords: Array<{ x: number; y: number }>): string {
   if (coords.length < 2) return ""; // a single point has no line to draw

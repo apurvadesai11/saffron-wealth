@@ -142,7 +142,7 @@ describe("PATCH /api/accounts/[id]", () => {
     expect((await res.json()).data.account.type).toBe("credit_card");
   });
 
-  // Restore round trip (Phase 3, Task 8): archive → PATCH {archivedAt: null}
+  // Restore round trip: archive → PATCH {archivedAt: null}
   // clears it. This is the only PATCH shape allowed to touch an already-
   // archived row — every other PATCH in this file targets an active one.
   it("restores an archived account by PATCHing archivedAt: null", async () => {

@@ -633,7 +633,8 @@ Testing gotchas (learned the hard way — repeat at your peril):
   the UI reskin without invalidating tests.
 - **`parseLocalDate` for `YYYY-MM-DD`.** `new Date("YYYY-MM-DD")` parses as
   UTC midnight and shifts the displayed day in negative timezones. The helper
-  in `lib/budget-utils.ts` splits and constructs in local time.
+  in `lib/budget-utils.ts` splits and constructs in local time. See the date
+  conventions section below for which side of the boundary that belongs to.
 - **Comments explain WHY, not WHAT.** See
   `lib/auth/exponential-backoff.ts:11-12`, `proxy.ts:3-12`,
   `lib/auth/picture-storage.ts:13-17` for the tone.
@@ -648,6 +649,57 @@ Testing gotchas (learned the hard way — repeat at your peril):
 - **Two route groups: `(app)` and `(auth)`.** Both render under the same root
   layout, but `(app)` has an additional layout that runs `getSession()` and
   draws the Sidebar + TopHeader chrome.
+
+### Decision records
+
+`docs/decisions/` holds one short record per decision the code leans on, with
+the context and the rejected alternative. Source comments state the current
+invariant and link there rather than carrying the argument inline — which is
+what the numbered "Ruling N" references used to do, from files that never
+defined them.
+
+Its index also maps the "Task N" references that appear in comments to the
+plan sections they came from. If you find yourself writing a comment that
+explains why something *isn't* done the obvious way, and the explanation is
+longer than the code, it belongs in a record with a link from the code.
+
+A decision that was later overturned keeps its record, marked **Superseded** —
+see `0007-never-retype-an-existing-account.md`, which documents both the rule
+and the one it replaced.
+
+### Date conventions: where UTC ends and local begins
+
+Two date conventions live in this codebase. Both are correct, and they are
+**not** being unified — each has reasoning the other would break. A future
+author reading one file will get the other wrong unless they know the boundary,
+so here it is:
+
+- **Persistence and query layers are UTC.** `lib/date-utils.ts`
+  (`dateStringToUtcDate` / `utcDateToDateString`), used by `lib/transactions.ts`
+  and `lib/accounts.ts`. The columns these feed — `Transaction.date`,
+  `Account.balanceAsOf`, `AccountBalanceEvent.asOf` — are all `@db.Date` with no
+  time component, and the value must land on the exact calendar day named.
+  `new Date(y, m, d)` builds *local* midnight, which serializes to the previous
+  calendar day in any negative-UTC-offset timezone.
+
+- **Period and calendar math is local.** `parseLocalDate` and everything built
+  on it in `lib/budget-utils.ts`. A budget month is whatever month the user is
+  standing in; deriving period bounds in UTC would put someone in UTC-8 into
+  next month's budget for the last 16 hours of every month.
+
+- **`"YYYY-MM-DD"` strings are the interchange format across the boundary.**
+  Every value crossing between the two layers is a string, never a `Date`. That
+  is what keeps round-trips consistent despite the two conventions, and it is
+  why this is a maintenance hazard rather than a live bug.
+
+One place that looks like a violation and is not: `validateDate` in
+`lib/transaction-validation.ts` constructs a local `Date` to check that a date
+string is a real calendar day. It is a round-trip check, the `Date` never
+escapes the function, and reading the fields back in the same calendar system is
+what makes the comparison meaningful.
+
+If you add a date, decide which side of the boundary it is on first. If it
+touches the database, it is UTC.
 
 ### Gotchas & non-obvious decisions
 
@@ -755,7 +807,13 @@ A few likely places that need a touch:
   `vi.hoisted` + `vi.mock("next/headers")` for the session cookie, and
   `helpers.ts` for `seedUser`/`seedSession`/`makeRequest`.
 - **New auth primitive?** Add a sibling file in `lib/auth/` and a matching
-  `*.test.ts`. The bar in this directory is "one test file per module."
+  `*.test.ts`. The bar in this directory is "one test file per module" — and it
+  is now actually met, with two deliberate exceptions:
+  `csrf-shared.ts` (two string constants) and `blocklist-data.ts` (a literal
+  array of weak passwords, exercised through `blocklist.ts`'s own tests). Both
+  are pure data, so a test would restate the file rather than pin behavior. Any
+  module with a branch, a regex or a derived value gets a test, including small
+  ones — `csrf-client.ts` is ten lines and has both.
 - **New React component?** Colocate a `*.test.tsx` next to it. Use
   `renderWithApp` from `components/__tests__/test-utils.tsx` if the
   component reads `useApp()`; plain `render` from RTL otherwise. If color

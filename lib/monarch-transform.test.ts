@@ -7,6 +7,7 @@ import {
   inferCategoryType,
   buildExternalHash,
   guessAccountType,
+  ASSET_TYPE_RULES,
 } from "./monarch-transform";
 
 describe("TRANSFER_LIKE_CATEGORIES", () => {
@@ -16,7 +17,7 @@ describe("TRANSFER_LIKE_CATEGORIES", () => {
 });
 
 describe("NON_ACCOUNT_NAMES", () => {
-  it("is the two medical trackers from Ruling 5", () => {
+  it("is the two medical tracker rows, and only those", () => {
     expect(NON_ACCOUNT_NAMES).toEqual([
       "Individual innetwork medical deductible",
       "Individual innetwork medical outofpocket",
@@ -175,8 +176,12 @@ describe("guessAccountType", () => {
     expect(guessAccountType("Everyday Checking")).toBe("cash");
   });
 
-  it("row 13: no keyword match -> cash (documented accepted miss for '1200 maple')", () => {
-    expect(guessAccountType("1200 maple")).toBe("cash");
+  // 15c: the catch-all used to return 'cash', which silently counted any
+  // unrecognized account as money you have. For a net-worth tracker that is
+  // the wrong direction to fail in, so an unknown name is now explicitly
+  // unknown, excluded from totals, and surfaced in the import preview.
+  it("row 13: no keyword match -> uncategorized, not cash", () => {
+    expect(guessAccountType("1200 maple")).toBe("uncategorized");
   });
 
   // Named specific cases from the brief, beyond the per-row floor.
@@ -200,5 +205,164 @@ describe("guessAccountType", () => {
 
   it("'Advantage Savings' -> cash", () => {
     expect(guessAccountType("Advantage Savings")).toBe("cash");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 15b — word-boundary matching
+// ---------------------------------------------------------------------------
+//
+// `lower.includes(keyword)` matched a keyword anywhere inside a word, so "citi"
+// matched "Citibank Checking" and classified a cash asset as a credit card —
+// which moves it into the debt bucket and inverts its sign in the net-worth
+// calculation. A wrong number, not a cosmetic mislabel.
+describe("guessAccountType keyword boundaries", () => {
+  it("'Citibank Checking' -> cash, not credit_card", () => {
+    expect(guessAccountType("Citibank Checking")).toBe("cash");
+  });
+
+  it("does not match a keyword buried inside a longer word", () => {
+    // "ira" inside "Iraq"; "hsa" inside "Kishsaver"; "cash" inside "Cashmere".
+    expect(guessAccountType("Iraq Reconstruction Fund")).toBe("uncategorized");
+    expect(guessAccountType("Kishsaver Holdings")).toBe("uncategorized");
+    expect(guessAccountType("Cashmere Trading")).toBe("uncategorized");
+  });
+
+  it("still matches a keyword that stands as its own word", () => {
+    expect(guessAccountType("My IRA")).toBe("traditional_ira");
+    expect(guessAccountType("Further HSA (...5678)")).toBe("hsa");
+    expect(guessAccountType("Everyday Checking")).toBe("cash");
+  });
+
+  // A Visa-branded debit card is a cash account. Word boundaries alone don't
+  // fix this one — "Visa" really is a word here — so the credit-card rule
+  // carries an explicit exclusion.
+  it("'Visa Debit Checking' -> cash, not credit_card", () => {
+    expect(guessAccountType("Visa Debit Checking")).toBe("cash");
+  });
+
+  it("a real Visa credit card still classifies as credit_card", () => {
+    expect(guessAccountType("Visa Signature")).toBe("credit_card");
+  });
+
+  // Punctuation is a boundary, not part of a word: these keywords end or
+  // begin with non-alphanumerics.
+  it("matches keywords containing punctuation", () => {
+    expect(guessAccountType("ACME, INC. 401(K) PLAN", 50000)).toBe("401k");
+    expect(
+      guessAccountType("1200 MAPLE STREET (Orig. $500,000.00) (...1111)", -500000),
+    ).toBe("loan_mortgage");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 15a — institution names out of source
+// ---------------------------------------------------------------------------
+describe("ASSET_TYPE_RULES contains no specific institution or product names", () => {
+  it("names only generic account-kind and card-network terms", () => {
+    const keywords = ASSET_TYPE_RULES.flatMap((r) => r.keywords);
+    // These were one person's own accounts, in a shared source constant.
+    for (const personal of ["sapphire", "bankamericard", "circle card", "red card", "citi"]) {
+      expect(keywords).not.toContain(personal);
+    }
+  });
+});
+
+// 15c acceptance: "Re-importing a file after classifying accounts does not
+// re-classify them." This already held — upsertAccountsFromBalanceHistory
+// never overwrites an existing account's type — but nothing pinned it, and it
+// is the property that makes 'uncategorized' safe to assign: the user's
+// correction has to survive the next import or the whole mechanism is a
+// treadmill. Asserted here at the unit level; the DB path is covered in
+// app/api/accounts/__tests__/balance-history.test.ts.
+describe("guessAccountType is only ever consulted for a new account", () => {
+  it("is deterministic, so a re-import of the same name guesses the same thing", () => {
+    // Belt and braces for the above: if the guess itself drifted between runs,
+    // "never re-typed" would be load-bearing in a way nobody had checked.
+    for (const name of ["Citibank Checking", "Visa Debit Checking", "1200 maple", "My IRA"]) {
+      expect(guessAccountType(name)).toBe(guessAccountType(name));
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: word-boundary matching must not break the table's stem keywords
+// ---------------------------------------------------------------------------
+//
+// ASSET_TYPE_RULES was authored against `includes()`, so several entries are
+// STEMS rather than whole words: "invest" was meant to catch "Investments",
+// "house" to catch "Houses", "credit card" to catch "Credit Cards". Applying a
+// trailing word boundary to every keyword turned all of those into misses, and
+// a miss now means `uncategorized` — excluded from net worth entirely. That is
+// a wrong money number, and strictly worse than the mislabelling the boundary
+// rule was added to fix.
+describe("guessAccountType stem keywords still match inflected names", () => {
+  it("matches plurals", () => {
+    expect(guessAccountType("Roth IRAs")).toBe("roth_ira");
+    expect(guessAccountType("Rollover IRAs")).toBe("traditional_ira");
+    expect(guessAccountType("Credit Cards")).toBe("credit_card");
+    expect(guessAccountType("Houses")).toBe("property");
+  });
+
+  it("matches -ment and -ments on the 'invest' stem", () => {
+    expect(guessAccountType("Fidelity Investments")).toBe("brokerage");
+    expect(guessAccountType("Vanguard Investment Account")).toBe("brokerage");
+    expect(guessAccountType("Investments")).toBe("brokerage");
+  });
+
+  it("matches -ing", () => {
+    expect(guessAccountType("Betterment Investing")).toBe("brokerage");
+  });
+
+  it("matches plural liability names on the negative-balance branch", () => {
+    expect(guessAccountType("Student Loans", -5000)).toBe("loan_mortgage");
+    expect(guessAccountType("Personal Loans", -12000)).toBe("loan_mortgage");
+    expect(guessAccountType("Mortgages", -300000)).toBe("loan_mortgage");
+  });
+
+  // The precedence the plan names as an acceptance criterion: "roth 401" must
+  // beat "401k". The existing test used "Roth 401(k) Plan", where the
+  // parenthesis makes the boundary pass — so the bare-suffix spelling, which
+  // is what a real export uses, was regressing invisibly.
+  it("keeps 'roth 401' ahead of '401k' for every spelling", () => {
+    expect(guessAccountType("Roth 401k")).toBe("roth_401k");
+    expect(guessAccountType("Roth 401K Plan")).toBe("roth_401k");
+    expect(guessAccountType("Roth 401(k) Plan")).toBe("roth_401k");
+    expect(guessAccountType("Roth401k")).toBe("roth_401k");
+  });
+
+  // The whole point of the boundary rule, which must survive the fix: a
+  // keyword buried inside an unrelated word is still not a match.
+  it("still refuses a keyword embedded in an unrelated word", () => {
+    expect(guessAccountType("Iraq Reconstruction Fund")).toBe("uncategorized");
+    expect(guessAccountType("Kishsaver Holdings")).toBe("uncategorized");
+    expect(guessAccountType("Cashmere Trading")).toBe("uncategorized");
+    expect(guessAccountType("Sloans Consulting")).toBe("uncategorized");
+  });
+});
+
+// A Visa-branded debit card was the case excludeKeywords was added for, but it
+// stopped at the single keyword "debit" — so every deposit product sold under a
+// card-network brand still landed in the Debt bucket, with its sign inverted.
+// These are real, widely held accounts.
+describe("guessAccountType does not read a deposit product as a card", () => {
+  it("classifies brand-named savings and checking as cash", () => {
+    expect(guessAccountType("Discover Online Savings Account", 12000)).toBe("cash");
+    expect(guessAccountType("Discover Bank Checking", 3000)).toBe("cash");
+    expect(guessAccountType("Amex High Yield Savings", 9000)).toBe("cash");
+    expect(guessAccountType("American Express Savings", 9000)).toBe("cash");
+  });
+
+  it("still classifies a genuine card as a card", () => {
+    expect(guessAccountType("Discover It Card")).toBe("credit_card");
+    expect(guessAccountType("Amex Platinum")).toBe("credit_card");
+    expect(guessAccountType("Visa Signature")).toBe("credit_card");
+    expect(guessAccountType("Chase Visa")).toBe("credit_card");
+  });
+
+  // A card-named account with a negative balance never reaches the keyword
+  // table at all — the sign branch decides first — so this is unaffected.
+  it("leaves the negative-balance branch alone", () => {
+    expect(guessAccountType("Discover Online Savings Account", -500)).toBe("credit_card");
   });
 });

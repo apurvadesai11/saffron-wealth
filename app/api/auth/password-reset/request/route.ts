@@ -7,6 +7,7 @@ import { clientIp, userAgent } from "@/lib/auth/request-info";
 import { normalizeEmail, validateEmail } from "@/lib/auth/validation";
 import { createPasswordResetToken } from "@/lib/auth/reset-tokens";
 import { sendPasswordResetEmail } from "@/lib/auth/email";
+import { err, internalError } from "@/lib/api/errors";
 
 // Uniform success response used regardless of whether the email exists.
 // Prevents enumeration via this endpoint.
@@ -32,26 +33,17 @@ export async function POST(req: NextRequest) {
 
     const rl = await rateLimit("password-reset-request", ip ?? "unknown");
     if (!rl.ok) {
-      return NextResponse.json(
-        { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
-        { status: 429 },
-      );
+      return err("RATE_LIMITED", "Too many requests.", 429);
     }
     if (!validateCsrfFromRequest(req)) {
-      return NextResponse.json(
-        { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
-        { status: 403 },
-      );
+      return err("CSRF_FAILED", "Invalid request.", 403);
     }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return NextResponse.json(
-        { ok: false, error: { code: "BAD_REQUEST", message: "Invalid JSON body." } },
-        { status: 400 },
-      );
+      return err("BAD_REQUEST", "Invalid JSON body.", 400);
     }
     const rawEmail =
       typeof (body as { email?: unknown })?.email === "string"
@@ -96,10 +88,7 @@ export async function POST(req: NextRequest) {
     return uniformSuccess();
   } catch (e) {
     console.error("[api/auth/password-reset/request] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }
 

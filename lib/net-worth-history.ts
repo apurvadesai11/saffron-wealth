@@ -1,58 +1,32 @@
-// Net-worth-over-time series math (Phase 3). Pure — no Prisma, no fetch, no
-// React. Task 8's server-side caller queries AccountBalanceEvent, converts
-// Decimal/Date columns to number/"YYYY-MM-DD" strings, and calls this with
-// plain objects; the client then slices the returned MAX series by range.
+// Net-worth-over-time series math. Pure — no Prisma, no fetch, no React. The
+// server-side caller queries AccountBalanceEvent, converts Decimal/Date columns
+// to number/"YYYY-MM-DD" strings, and calls this with plain objects; the client
+// slices the returned MAX series by range.
 //
-// Ruling 3 — the rule this whole file exists to get right: an account's
-// contribution window starts at firstDate (never before it existed) and, for
-// an ARCHIVED account, closes before its archive date too. Real imported
-// history has accounts that stop reporting while frozen at a large non-zero
-// balance (a mortgage paid off, an ESPP liquidated) — reading "most recent
-// event <= D" with no upper bound would carry that frozen balance into every
-// later sample date, including today, i.e. a phantom mortgage in the CURRENT
-// net worth. Task 5 archives exactly those accounts, so gating the upper
-// bound closes their window and zeroes them out today.
+// Three invariants this file exists to get right. The reasoning behind each,
+// including what was tried and rejected, is in docs/decisions/:
 //
-// Amendment (Task 8 review finding): the upper bound is
-// min(lastDate, dayBefore(archivedAt)), not lastDate alone. archiveAccount
-// (lib/accounts.ts) never writes a closing AccountBalanceEvent, so an
-// account created and archived on the SAME calendar day has lastDate equal
-// to its own archive date — "date > lastDate" alone doesn't exclude that
-// day, so the series would still count it on the very day the live summary
-// card (computeNetWorth, via listAccounts) already excludes it
-// unconditionally. Comparing directly against archivedAt's date closes that
-// gap: an archived account contributes on date D iff D >= firstDate && D <=
-// lastDate && D < archivedAtDate. In the ordinary case — an account that
-// stopped reporting well before a later import archived it — archivedAtDate
-// is far later than lastDate, so this min is still just lastDate and the
-// mortgage example above is unchanged.
+// 1. An account contributes its most recent balance at or before a sample
+//    date, and nothing outside its window. The window opens at firstDate; it
+//    closes at min(lastDate, dayBefore(archivedAt)) for an archived account
+//    and never for an active one.
+//    See docs/decisions/0003-account-contribution-window.md.
 //
-// Amendment: an ACTIVE account has no upper bound — its last known balance
-// carries forward to the end of the series. This exists because Phase 1's
-// createAccount writes exactly one opening-balance event, so a hand-entered
-// account's own lastDate is its creation day; closing its window there would
-// make it vanish from every later chart point (including "today") while it
-// still counts in the live summary card. Carry-forward-inside-the-window
-// (for accounts with sparse events) applies regardless of archived state;
-// only the "does the window ever end" question depends on it.
+// 2. AccountBalanceEvent.balance IS the account's signed contribution to net
+//    worth on that date — negative reduces it. The bucket is applied once, at
+//    write time, by whoever wrote the event. This file therefore never reads
+//    account.type to decide a sign, so an account that later changes bucket
+//    cannot have its existing history retroactively reinterpreted.
+//    See docs/decisions/0007-never-retype-an-existing-account.md.
 //
-// Sign convention: AccountBalanceEvent.balance IS the account's signed
-// contribution to net worth on that date — negative reduces it. The writers
-// (createAccount, updateAccount, and the balance-history import) apply the
-// account's bucket once, at write time, when the user's own assertion about
-// what the account is is fresh. This file therefore never consults
-// account.type, and an account that later changes bucket cannot have its
-// existing history retroactively reinterpreted. An earlier version negated
-// by the CURRENT type at read time, which meant a bucket change flipped the
-// meaning of every row already written — including rows a later import
-// skipped as duplicates and so could never correct.
+// 3. Where two events share an asOf, the later recordedAt wins. There is no
+//    unique constraint on (accountId, asOf), by design.
+//    See docs/decisions/0009-same-day-events-tiebreak-on-recordedat.md.
 //
-// Ruling 9 — Task 5's import has no unique constraint on (accountId, asOf):
-// Phase 1 legitimately appends a new event on every balance edit, so a user
-// changing a balance twice in one day is normal, not a data bug. When two
-// events share an asOf, the later recordedAt is the one that should carry.
+// An account with no events is omitted entirely rather than contributing zero.
 
 import type { AccountType } from "./types";
+import { roundToCent } from "./money";
 
 export interface NetWorthPoint {
   date: string;
@@ -75,17 +49,13 @@ interface AccountInput {
 // One account's events reduced to what the sweep needs: the order carry-
 // forward should walk them in, and the window derived from that order.
 interface AccountSeries {
-  // Gates whether the archive-date upper bound below applies at all — see
-  // the Ruling 3 amendment above.
+  // Gates whether the archive-date upper bound applies at all.
   archived: boolean;
-  // Date portion ("YYYY-MM-DD") of archivedAt — only meaningful when
-  // `archived` is true. This IS compared against sample dates now (Ruling 3
-  // amendment); an earlier version of this file claimed the timestamp was
-  // "never compared against anything," which was itself the tell that it
-  // carried information the logic below was throwing away.
+  // Date portion ("YYYY-MM-DD") of archivedAt, meaningful only when
+  // `archived`. Compared directly against sample dates — see invariant 1.
   archivedAtDate: string | null;
-  // asOf ascending, tiebroken by recordedAt ascending (Ruling 9) — so for a
-  // repeated asOf, the last entry in this array is the one that should win.
+  // asOf ascending, tiebroken by recordedAt ascending, so for a repeated asOf
+  // the LAST entry here is the one that wins (invariant 3).
   events: { asOf: string; balance: number }[];
   firstDate: string;
   lastDate: string;
@@ -115,6 +85,11 @@ export function computeNetWorthSeries(
     // An event whose account isn't in the roster has no type to key the
     // asset/liability taxonomy off of — drop it rather than guess a bucket.
     if (!account) continue;
+    // An unclassified account contributes to no total, here for the same
+    // reason as in computeNetWorth — and for one more: if the series counted
+    // it while the summary card did not, the chart's last point and the card
+    // would differ by exactly that account's balance.
+    if (account.type === "uncategorized") continue;
 
     // Lexicographic comparison is valid for "YYYY-MM-DD" and avoids building
     // a Date per event in what's otherwise a hot sort.
@@ -157,20 +132,18 @@ export function computeNetWorthSeries(
 
     for (const [accountId, acct] of series) {
       if (date < acct.firstDate) continue; // never existed yet — lower bound is unconditional
-      // Ruling 3 (amended): an archived account's window closes at
-      // min(lastDate, dayBefore(archivedAtDate)) — active accounts have no
-      // upper bound and carry forward below. The archivedAtDate half of
-      // this OR exists specifically for same-day create-then-archive:
-      // archiveAccount never writes a closing event, so lastDate alone can
-      // equal today even though the account is already archived as of
-      // today, which "date > lastDate" alone would fail to exclude.
+      // An archived account's window closes at
+      // min(lastDate, dayBefore(archivedAtDate)); an active one has no upper
+      // bound and carries forward below. The archivedAtDate half of this OR is
+      // for same-day create-then-archive, where lastDate alone equals today
+      // even though the account is archived as of today (invariant 1).
       if (acct.archived && (date > acct.lastDate || date >= acct.archivedAtDate!)) continue;
 
       let idx = cursor.get(accountId)!;
-      // Advance while the NEXT event is still on-or-before this date — the
-      // last event stepped onto is the carry-forward value for `date`. When
-      // several events share an asOf (Ruling 9), this walks through all of
-      // them and stops on the last (latest-recordedAt) one.
+      // Advance while the NEXT event is still on-or-before this date; the
+      // last event stepped onto is the carry-forward value. Events sharing an
+      // asOf are walked through to the last (latest-recordedAt) one
+      // (invariant 3).
       while (idx + 1 < acct.events.length && acct.events[idx + 1].asOf <= date) {
         idx++;
       }
@@ -179,17 +152,12 @@ export function computeNetWorthSeries(
       total += acct.events[idx].balance;
     }
 
-    // Round once, here, per point — not accumulated across dates (each
-    // point is an independent sum of ~30 account balances, not a running
-    // total), but summing that many Decimal-turned-number values can still
-    // land a fraction of a cent off true due to binary float rounding.
-    // Money is displayed to the cent, so snap back to the cent explicitly
-    // rather than let e.g. 1234567.9999999998 leak into the chart/tooltip.
-    // `|| 0` specifically: when the true total is $0.00 and the float dust
-    // lands negative (e.g. 0.3 - 0.1 - 0.2), Math.round produces -0, which
-    // Intl.NumberFormat renders as "-$0.00" and which Object.is/toBe treats
-    // as distinct from 0.
-    points.push({ date, value: Math.round(total * 100) / 100 || 0 });
+    // Round once, here, per point — not accumulated across dates: each point
+    // is an independent sum of ~30 account balances, not a running total.
+    // The convention and the reasoning behind the -0 guard live in
+    // lib/money.ts, shared with computeNetWorth so the chart's last point and
+    // the summary card cannot drift apart.
+    points.push({ date, value: roundToCent(total) });
   }
 
   return points;

@@ -18,18 +18,7 @@ import {
   getBackoffStatus,
   acquireLoginLock,
 } from "@/lib/auth/exponential-backoff";
-
-interface ErrorBody {
-  ok: false;
-  error: { code: string; message: string; retryAfterSeconds?: number };
-}
-
-function err(code: string, message: string, status: number, retryAfterSeconds?: number) {
-  return NextResponse.json<ErrorBody>(
-    { ok: false, error: { code, message, ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}) } },
-    { status },
-  );
-}
+import { err, internalError } from "@/lib/api/errors";
 
 const UNIFORM_INVALID = () =>
   err("INVALID_CREDENTIALS", "Email or password is incorrect.", 401);
@@ -143,7 +132,7 @@ export async function POST(req: NextRequest) {
         "TOO_MANY_FAILED_ATTEMPTS",
         "Too many failed attempts. Please wait before retrying.",
         429,
-        result.retrySec,
+        { retryAfterSeconds: result.retrySec },
       );
     }
 
@@ -173,9 +162,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e) {
     console.error("[api/auth/login] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }

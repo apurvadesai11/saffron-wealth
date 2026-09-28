@@ -23,10 +23,15 @@ vi.mock("@/lib/auth/picture-storage", async () => {
     ...actual,
     processAvatarImage: vi.fn(async (b: Buffer) => b),
     uploadAvatar: vi.fn(async () => "https://example.test/uploads/fake.webp"),
+    // Mocked so the tests can assert the route asks for the delete; the guard
+    // and both backends are covered for real in
+    // lib/auth/picture-storage.test.ts.
+    deleteAvatar: vi.fn(async () => true),
   };
 });
 
 import { POST } from "../picture/route";
+import { deleteAvatar } from "@/lib/auth/picture-storage";
 import { seedUser, seedSession, makeRequest, cleanupUser } from "./helpers";
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 import { NextRequest } from "next/server";
@@ -40,7 +45,10 @@ const ONE_PX_PNG = Buffer.from(
 );
 
 let userId: string;
-beforeEach(() => { mocks.sessionToken = null; });
+beforeEach(() => {
+  mocks.sessionToken = null;
+  vi.mocked(deleteAvatar).mockClear();
+});
 afterEach(async () => {
   if (userId) await cleanupUser(userId);
   userId = "";
@@ -160,6 +168,60 @@ describe("POST /api/profile/picture", () => {
     const body = await res.json();
     expect(body.data.profilePicture).toBe("https://example.test/uploads/fake.webp");
 
+    const refreshed = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(refreshed?.profilePicture).toBe("https://example.test/uploads/fake.webp");
+  });
+
+  // Every upload wrote a new blob under a fresh UUID and this route overwrote
+  // the pointer, so the old blob stayed at a permanent public URL forever.
+  it("deletes the previous avatar after the new pointer is stored", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { profilePicture: "/uploads/avatars/previous.webp" },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await POST(multipartRequest({ csrf: "csrf", file: ONE_PX_PNG }));
+
+    expect(res.status).toBe(200);
+    expect(deleteAvatar).toHaveBeenCalledWith("/uploads/avatars/previous.webp");
+    // The pointer moved before the delete was attempted: never the other way
+    // round, or a mid-flight failure leaves a broken image.
+    const refreshed = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(refreshed?.profilePicture).toBe("https://example.test/uploads/fake.webp");
+  });
+
+  it("does not attempt a delete for a user with no previous avatar", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await POST(multipartRequest({ csrf: "csrf", file: ONE_PX_PNG }));
+
+    expect(res.status).toBe(200);
+    expect(deleteAvatar).not.toHaveBeenCalled();
+  });
+
+  // An orphaned blob is a smaller problem than a failed upload, so a delete
+  // that blows up must not reach the user.
+  it("still succeeds when deleting the previous avatar throws", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { profilePicture: "/uploads/avatars/previous.webp" },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+    vi.mocked(deleteAvatar).mockRejectedValueOnce(new Error("blob store down"));
+
+    const res = await POST(multipartRequest({ csrf: "csrf", file: ONE_PX_PNG }));
+
+    expect(res.status).toBe(200);
     const refreshed = await prisma.user.findUnique({ where: { id: user.id } });
     expect(refreshed?.profilePicture).toBe("https://example.test/uploads/fake.webp");
   });

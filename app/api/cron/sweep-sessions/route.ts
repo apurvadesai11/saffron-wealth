@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { err } from "@/lib/api/errors";
 
 // Removes expired sessions and consumed/expired password-reset tokens.
 // Triggered by Vercel Cron (see vercel.json). Protected by CRON_SECRET so it
@@ -9,10 +10,7 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const provided = authHeader?.replace(/^Bearer\s+/i, "");
   if (!expected || provided !== expected) {
-    return NextResponse.json(
-      { ok: false, error: { code: "UNAUTHORIZED", message: "Bad cron secret." } },
-      { status: 401 },
-    );
+    return err("UNAUTHORIZED", "Bad cron secret.", 401);
   }
 
   const now = new Date();

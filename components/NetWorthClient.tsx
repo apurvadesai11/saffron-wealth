@@ -30,7 +30,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
 
   // A committed balance-history import can create, update, and archive many
   // accounts in one request, with no per-row response shape to merge in the
-  // way handleSave/handleDelete/handleRestore below do for a single account
+  // way handleSave/handleArchive/handleRestore below do for a single account
   // — and the chart's `series` prop specifically must never be recomputed
   // from a raw event log on the client (that derivation is server-only; see
   // app/(app)/net-worth/page.tsx). router.refresh() re-runs that page and
@@ -90,7 +90,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     }
   }
 
-  async function handleDelete(account: Account) {
+  async function handleArchive(account: Account) {
     setError(null);
     const csrf = readCsrfCookie() ?? "";
     try {
@@ -190,7 +190,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
               key={group.bucket}
               group={group}
               onEdit={(account) => setEditingAccount(account)}
-              onDelete={handleDelete}
+              onArchive={handleArchive}
             />
           ))
         )}

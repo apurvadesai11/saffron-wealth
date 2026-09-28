@@ -11,6 +11,7 @@ import type {
   AccountBucketGroup,
   NetWorthSummary,
 } from "./types";
+import { roundToCent } from "./money";
 
 // Display order of buckets on the Net Worth page. Assets first, debt last.
 export const BUCKET_ORDER: AccountBucket[] = [
@@ -19,6 +20,8 @@ export const BUCKET_ORDER: AccountBucket[] = [
   "retirement",
   "real_estate",
   "debt",
+  // Last: the page reads assets, then debt, then what needs attention.
+  "uncategorized",
 ];
 
 // The taxonomy, defined bucket-first so it reads top-down and can't drift out of
@@ -30,6 +33,7 @@ export const ACCOUNT_TYPES_BY_BUCKET: Record<AccountBucket, AccountType[]> = {
   retirement: ["traditional_ira", "roth_ira", "401k", "roth_401k"],
   real_estate: ["property"],
   debt: ["credit_card", "loan_mortgage"],
+  uncategorized: ["uncategorized"],
 };
 
 // Derived reverse index: type → bucket.
@@ -49,6 +53,7 @@ export const ACCOUNT_BUCKET_LABELS: Record<AccountBucket, string> = {
   retirement: "Retirement",
   real_estate: "Real Estate",
   debt: "Debt",
+  uncategorized: "Uncategorized",
 };
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -64,6 +69,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   property: "Property",
   credit_card: "Credit Card",
   loan_mortgage: "Loan/Mortgage",
+  uncategorized: "Uncategorized",
 };
 
 export function isValidAccountType(value: unknown): value is AccountType {
@@ -106,13 +112,27 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
   let totalAssets = 0;
   let totalLiabilities = 0;
   for (const a of accounts) {
+    // An unclassified account contributes to neither total. Counting it as an
+    // asset (the old catch-all) inflated net worth with a number the user had
+    // never confirmed meant what the app assumed. It stays visible on the
+    // page — groupAccountsByBucket gives it its own bucket — so the exclusion
+    // is something the user can act on rather than a silent omission.
+    if (getBucketForType(a.type) === "uncategorized") continue;
+
     if (isLiability(getBucketForType(a.type))) {
       totalLiabilities += a.balance;
     } else {
       totalAssets += a.balance;
     }
   }
-  return { totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+  // Rounded here, and each total independently, so this agrees with
+  // computeNetWorthSeries' per-point rounding for the same data — the chart's
+  // last point and the summary card are the same number. See lib/money.ts.
+  return {
+    totalAssets: roundToCent(totalAssets),
+    totalLiabilities: roundToCent(totalLiabilities),
+    netWorth: roundToCent(totalAssets - totalLiabilities),
+  };
 }
 
 // Groups accounts under their bucket in BUCKET_ORDER, omitting empty buckets.
@@ -125,7 +145,7 @@ export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[]
         bucket,
         label: ACCOUNT_BUCKET_LABELS[bucket],
         accounts: bucketAccounts,
-        bucketTotal: bucketAccounts.reduce((sum, a) => sum + a.balance, 0),
+        bucketTotal: roundToCent(bucketAccounts.reduce((sum, a) => sum + a.balance, 0)),
       },
     ];
   });

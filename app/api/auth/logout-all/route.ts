@@ -1,27 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getSession } from "@/lib/auth/server";
-import { validateCsrfFromRequest } from "@/lib/auth/csrf";
+import { NextResponse } from "next/server";
 import { revokeAllSessionsForUser } from "@/lib/auth/sessions";
 import { clearSessionCookie } from "@/lib/auth/session-cookie";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { ok: false, error: { code: "UNAUTHENTICATED", message: "Not signed in." } },
-        { status: 401 },
-      );
-    }
-    if (!validateCsrfFromRequest(req)) {
-      return NextResponse.json(
-        { ok: false, error: { code: "CSRF_FAILED", message: "Invalid request." } },
-        { status: 403 },
-      );
-    }
-
+export const POST = withApiHandler(
+  { logLabel: "api/auth/logout-all", csrf: true },
+  async ({ req, session }) => {
     await revokeAllSessionsForUser(session.user.id);
     await recordAuthEvent({
       type: "session_revoked",
@@ -34,11 +20,5 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({ ok: true });
     clearSessionCookie(res);
     return res;
-  } catch (e) {
-    console.error("[api/auth/logout-all] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
-  }
-}
+  },
+);

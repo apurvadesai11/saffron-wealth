@@ -1,38 +1,22 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth/server";
-import { validateCsrfFromRequest } from "@/lib/auth/csrf";
-import { rateLimit } from "@/lib/auth/rate-limit";
 import {
   uploadAvatar,
+  deleteAvatar,
   validateImageBuffer,
   processAvatarImage,
   MAX_AVATAR_BYTES,
 } from "@/lib/auth/picture-storage";
-
-function err(code: string, message: string, status: number) {
-  return NextResponse.json(
-    { ok: false, error: { code, message } },
-    { status },
-  );
-}
+import { withApiHandler } from "@/lib/api/handler";
+import { err } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session) return err("UNAUTHENTICATED", "Not signed in.", 401);
-    if (!validateCsrfFromRequest(req)) return err("CSRF_FAILED", "Invalid request.", 403);
-
-    // A sharp decode, resize and WebP re-encode per request.
-    // Keyed by user id, not IP: this route is authenticated, the user id is the
-    // thing whose resources are being spent, and IP is client-supplied.
-    const rl = await rateLimit("picture", session.user.id);
-    if (!rl.ok) {
-      return err("RATE_LIMITED", "Too many requests. Try again shortly.", 429);
-    }
-
+// Rate-limited because each request is a sharp decode, resize and WebP
+// re-encode — real CPU per call.
+export const POST = withApiHandler(
+  { logLabel: "api/profile/picture", csrf: true, rateLimit: "picture" },
+  async ({ req, session }) => {
     // Hard-stop oversized requests before reading the full body.
     const contentLength = Number(req.headers.get("content-length") ?? "0");
     if (contentLength > MAX_AVATAR_BYTES + 8 * 1024) {
@@ -54,11 +38,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const validation = await validateImageBuffer(buffer);
     if (!validation.ok) {
-      return err(
-        "INVALID_IMAGE",
-        validation.reason ?? "Image rejected.",
-        400,
-      );
+      return err("INVALID_IMAGE", validation.reason ?? "Image rejected.", 400);
     }
 
     let processed: Buffer;
@@ -72,25 +52,39 @@ export async function POST(req: NextRequest) {
     try {
       publicUrl = await uploadAvatar(processed);
     } catch (uploadErr) {
-
       console.error("[profile/picture] upload failed", uploadErr);
       return err("UPLOAD_FAILED", "Could not save the image. Try again.", 500);
     }
+
+    // Read before the update: the old pointer is the only handle on the old
+    // blob, and the update overwrites it.
+    const previous = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { profilePicture: true },
+    });
 
     await prisma.user.update({
       where: { id: session.user.id },
       data: { profilePicture: publicUrl },
     });
 
+    // Strictly after the pointer has moved. Deleting first would leave a
+    // broken image if the update then failed. deleteAvatar ignores anything we
+    // did not write — notably OAuth users' lh3.googleusercontent.com URLs —
+    // and never throws on a storage failure, but the await is guarded anyway
+    // so a future change there cannot turn an orphaned blob into a failed
+    // upload. An orphan is the cheaper outcome.
+    if (previous?.profilePicture) {
+      try {
+        await deleteAvatar(previous.profilePicture);
+      } catch (deleteErr) {
+        console.error("[profile/picture] deleting previous avatar failed", deleteErr);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       data: { profilePicture: publicUrl },
     });
-  } catch (e) {
-    console.error("[api/profile/picture] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
-  }
-}
+  },
+);

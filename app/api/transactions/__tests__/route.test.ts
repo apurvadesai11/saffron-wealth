@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 
@@ -323,5 +324,44 @@ describe("POST /api/transactions at the Decimal(14,2) boundary", () => {
       }),
     );
     expect(res.status).toBe(400);
+  });
+
+  // 20a — a cursor naming a row the caller doesn't own used to reach Prisma's
+  // `cursor:` and throw, surfacing as a 500 on what is really a bad request.
+  // A stale cursor (row deleted between pages) is an ordinary client state.
+  it("returns 400 INVALID_CURSOR for a cursor that names no row of the caller's", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(
+      makeRequest({
+        method: "GET",
+        url: `http://localhost/api/transactions?cursor=${randomUUID()}`,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("INVALID_CURSOR");
+    expect(body.error.fieldErrors.cursor).toBeTruthy();
+  });
+
+  it("returns 400, not 500, for a malformed cursor", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const res = await GET(
+      makeRequest({
+        method: "GET",
+        url: "http://localhost/api/transactions?cursor=not-an-id",
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("INVALID_CURSOR");
   });
 });

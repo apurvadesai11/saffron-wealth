@@ -19,6 +19,7 @@ const ALL_TYPES: AccountType[] = [
   "traditional_ira", "roth_ira", "401k", "roth_401k",
   "property",
   "credit_card", "loan_mortgage",
+  "uncategorized",
 ];
 
 // Minimal Account fixture — only the fields the pure helpers read matter.
@@ -54,8 +55,15 @@ describe("taxonomy maps", () => {
     }
   });
 
-  it("BUCKET_ORDER contains all five buckets in display order", () => {
-    expect(BUCKET_ORDER).toEqual(["cash", "investments", "retirement", "real_estate", "debt"]);
+  it("BUCKET_ORDER contains every bucket in display order, uncategorized last", () => {
+    expect(BUCKET_ORDER).toEqual([
+      "cash",
+      "investments",
+      "retirement",
+      "real_estate",
+      "debt",
+      "uncategorized",
+    ]);
   });
 
   it("has a human label for every bucket and type", () => {
@@ -145,5 +153,116 @@ describe("groupAccountsByBucket", () => {
 
   it("returns an empty array for no accounts", () => {
     expect(groupAccountsByBucket([])).toEqual([]);
+  });
+});
+
+// 20c — computeNetWorthSeries rounded each point to the cent, with a thorough
+// comment explaining why (including the -0 guard). computeNetWorth summed
+// floats with no rounding at all, so the chart's last point and the summary
+// card could differ by a rounding step on the same data.
+//
+// Uses the file's own acct(type, balance) helper and real AccountType values;
+// "checking" is not one of them (the cash-bucket type is "cash"), and an
+// unrecognized type silently lands in the asset branch.
+describe("computeNetWorth rounding", () => {
+  it("snaps totals to the cent instead of leaking float dust", () => {
+    // 0.1 + 0.2 === 0.30000000000000004
+    const result = computeNetWorth([acct("cash", 0.1), acct("brokerage", 0.2)]);
+
+    expect(result.totalAssets).toBe(0.3);
+    expect(result.netWorth).toBe(0.3);
+  });
+
+  it("never produces -0, which renders as \"-$0.00\"", () => {
+    const result = computeNetWorth([
+      acct("cash", 0.3),
+      acct("brokerage", -0.1),
+      acct("hsa", -0.2),
+    ]);
+
+    expect(Object.is(result.totalAssets, -0)).toBe(false);
+    expect(Object.is(result.netWorth, -0)).toBe(false);
+    expect(result.netWorth).toBe(0);
+  });
+
+  it("rounds liabilities and the net independently of the assets total", () => {
+    const result = computeNetWorth([
+      acct("cash", 1000.005),
+      acct("credit_card", 0.005),
+    ]);
+
+    expect(result.totalAssets).toBe(1000.01);
+    expect(result.totalLiabilities).toBe(0.01);
+    expect(result.netWorth).toBe(1000);
+  });
+});
+
+describe("groupAccountsByBucket rounding", () => {
+  it("snaps bucketTotal to the cent", () => {
+    const groups = groupAccountsByBucket([acct("cash", 0.1), acct("cash", 0.2)]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].bucket).toBe("cash");
+    expect(groups[0].bucketTotal).toBe(0.3);
+  });
+
+  it("never produces -0 for a bucket that nets to zero", () => {
+    const groups = groupAccountsByBucket([
+      acct("cash", 0.3, { id: "a" }),
+      acct("cash", -0.1, { id: "b" }),
+      acct("cash", -0.2, { id: "c" }),
+    ]);
+
+    expect(Object.is(groups[0].bucketTotal, -0)).toBe(false);
+    expect(groups[0].bucketTotal).toBe(0);
+  });
+});
+
+// 15c — an unrecognized account used to default to 'cash', which counted it as
+// money you have. It is now 'uncategorized': visible, but excluded from every
+// total until its owner classifies it. For a net-worth tracker, silently
+// inflating the number is the wrong direction to fail in.
+describe("uncategorized accounts are excluded from totals", () => {
+  it("does not count an uncategorized balance as an asset", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("uncategorized", 999),
+    ]);
+
+    expect(result.totalAssets).toBe(100);
+    expect(result.netWorth).toBe(100);
+  });
+
+  it("does not count it as a liability either", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("uncategorized", -999),
+    ]);
+
+    expect(result.totalLiabilities).toBe(0);
+    expect(result.netWorth).toBe(100);
+  });
+
+  it("is not a liability bucket", () => {
+    expect(isLiability(getBucketForType("uncategorized"))).toBe(false);
+  });
+
+  // Still visible on the page — excluded from the math, not hidden from the
+  // user, or they could never fix it.
+  it("still groups for display, with its own bucket", () => {
+    const groups = groupAccountsByBucket([
+      acct("cash", 100),
+      acct("uncategorized", 999),
+    ]);
+
+    const uncategorized = groups.find((g) => g.bucket === "uncategorized");
+    expect(uncategorized).toBeDefined();
+    expect(uncategorized!.accounts).toHaveLength(1);
+    expect(uncategorized!.bucketTotal).toBe(999);
+  });
+
+  // It sorts last so the page reads assets, debt, then "needs attention".
+  it("sorts after every real bucket", () => {
+    expect(BUCKET_ORDER[BUCKET_ORDER.length - 1]).toBe("uncategorized");
   });
 });

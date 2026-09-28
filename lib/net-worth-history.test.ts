@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeNetWorthSeries } from "./net-worth-history";
-import type { AccountType } from "./types";
+import { computeNetWorth } from "./account-utils";
+import type { Account, AccountType } from "./types";
 
 // Minimal event fixture — computeNetWorthSeries only reads these four fields.
 function ev(
@@ -50,9 +51,9 @@ describe("computeNetWorthSeries", () => {
     expect(mid?.value).toBe(100 + 5000);
   });
 
-  it("Ruling 3: an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
+  it("an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
     // Mirrors the real scenario: a mortgage that stops reporting (paid off /
-    // account closed and archived by Task 5's import) while still frozen at
+    // account closed and archived by the account upsert's import) while still frozen at
     // a large balance. Stored as its contribution to net worth, so an owed
     // $450k mortgage is -450000.
     const points = computeNetWorthSeries(
@@ -195,7 +196,7 @@ describe("computeNetWorthSeries", () => {
     expect(byDate.get("2026-03-01")).toBe(30); // "a" updates to 30; "b" already closed (archived)
   });
 
-  it("Ruling 9: two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
+  it("two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
     const points = computeNetWorthSeries(
       [
         // Same-day double-edit: user set the balance to 100, then to 200
@@ -258,7 +259,7 @@ describe("computeNetWorthSeries", () => {
     expect(points).toEqual([{ date: "2026-01-01", value: 100 }]);
   });
 
-  describe("archivedAt window semantics (Ruling 3, amended)", () => {
+  describe("archivedAt window semantics", () => {
     // Each case below isolates one cell of the archived x before/after-window
     // matrix, using a second single-event "anchor" account purely to create
     // a sample date at the point of interest (computeNetWorthSeries only
@@ -304,7 +305,7 @@ describe("computeNetWorthSeries", () => {
       expect(points.find((p) => p.date === "2026-02-01")?.value).toBe(100);
     });
 
-    // Task 8 review finding: archiveAccount (lib/accounts.ts) never writes a
+    // the Net Worth page review finding: archiveAccount (lib/accounts.ts) never writes a
     // closing AccountBalanceEvent, so an account created and archived on the
     // SAME calendar day has lastDate === its own archive date. Pre-fix,
     // "date > lastDate" alone doesn't exclude that day (equal isn't
@@ -375,5 +376,129 @@ describe("type-independent event sign", () => {
     const asAsset = computeNetWorthSeries(events, [acct("x", "property")]);
 
     expect(asAsset).toEqual(asDebt);
+  });
+});
+
+// 20c — the chart and the summary card are two independent sums of the same
+// money, and they used two different rounding conventions: this file rounded
+// every point to the cent, computeNetWorth rounded nothing. On data whose
+// float sum lands a fraction of a cent off, the chart's last point and the
+// card disagreed. Both now go through roundToCent (lib/money.ts).
+//
+// The two functions take different inputs and different sign conventions:
+// AccountBalanceEvent.balance is the account's *signed* contribution to net
+// worth (a liability's event is negative), while Account.balance is the value
+// in its bucket's natural direction (a liability's balance is positive, the
+// amount owed, and computeNetWorth subtracts it). The fixture below builds
+// both views of one portfolio so the comparison is apples to apples.
+describe("chart and summary card agree", () => {
+  // These balances are chosen because they *discriminate*: summed as floats
+  // without rounding, assets come to 8.099999999999998 and the net to
+  // 8.099999999999998, while the series' single rounded point is 8.1. With
+  // computeNetWorth unrounded, the card and the chart differ. Values that
+  // happen to sum exactly (e.g. 1.005 + 2.005 - 0.01) prove nothing here.
+  const PORTFOLIO = [
+    { id: "chk", type: "cash" as AccountType, balance: 8.1 },
+    { id: "brk", type: "brokerage" as AccountType, balance: 0.2 },
+    { id: "ira", type: "roth_ira" as AccountType, balance: 0.1 },
+    // Liability: Account.balance is the amount owed (positive) and
+    // computeNetWorth subtracts it, while the balance *event* carries the
+    // signed contribution and so is negative. Two views, one portfolio.
+    { id: "cc", type: "credit_card" as AccountType, balance: 0.3 },
+  ];
+
+  const DATE = "2026-02-14";
+
+  function asAccounts(): Account[] {
+    return PORTFOLIO.map((a) => ({
+      id: a.id,
+      name: a.id,
+      type: a.type,
+      institution: null,
+      balance: a.balance,
+      balanceAsOf: `${DATE}T00:00:00.000Z`,
+      createdAt: `${DATE}T00:00:00.000Z`,
+      updatedAt: `${DATE}T00:00:00.000Z`,
+    }));
+  }
+
+  function asEvents(date = DATE) {
+    return PORTFOLIO.map((a) =>
+      ev(a.id, date, a.type === "credit_card" ? -a.balance : a.balance),
+    );
+  }
+
+  const roster = () => PORTFOLIO.map((a) => acct(a.id, a.type));
+
+  it("the last series point equals the card's net worth", () => {
+    const points = computeNetWorthSeries(asEvents(), roster());
+    const summary = computeNetWorth(asAccounts());
+
+    expect(points).toHaveLength(1);
+    expect(summary.netWorth).toBe(8.1);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+  });
+
+  it("still agrees once the series has carried balances forward over months", () => {
+    const events = [
+      ...asEvents("2026-01-01"),
+      // One account reports again later; everything else carries forward, so
+      // the final point is a fresh sum of four carried values.
+      ev("chk", DATE, 8.1),
+    ];
+    const points = computeNetWorthSeries(events, roster());
+    const summary = computeNetWorth(asAccounts());
+
+    expect(points.length).toBeGreaterThan(1);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+  });
+
+  // Guards the -0 case on both sides at once: a portfolio that nets to exactly
+  // zero must read "$0.00" on the card and plot as 0 on the chart, never
+  // "-$0.00".
+  it("agrees on a portfolio that nets to zero, without -0", () => {
+    const accounts: Account[] = [
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
+      { id: "cc", name: "cc", type: "credit_card", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
+    ];
+    const points = computeNetWorthSeries(
+      [ev("chk", DATE, 0.3), ev("cc", DATE, -0.3)],
+      [acct("chk", "cash"), acct("cc", "credit_card")],
+    );
+    const summary = computeNetWorth(accounts);
+
+    expect(summary.netWorth).toBe(0);
+    expect(Object.is(summary.netWorth, -0)).toBe(false);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+    expect(Object.is(points[points.length - 1].value, -0)).toBe(false);
+  });
+});
+
+// 15c — the series has to exclude uncategorized accounts for the same reason
+// computeNetWorth does, and for the extra reason that if it didn't, the chart
+// and the card would disagree by exactly that account's balance.
+describe("uncategorized accounts are excluded from the series", () => {
+  it("omits an uncategorized account's events from every point", () => {
+    const points = computeNetWorthSeries(
+      [ev("chk", "2026-02-14", 100), ev("unk", "2026-02-14", 999)],
+      [acct("chk", "cash"), acct("unk", "uncategorized")],
+    );
+
+    expect(points).toEqual([{ date: "2026-02-14", value: 100 }]);
+  });
+
+  it("keeps the chart's last point equal to the card with one uncategorized account present", () => {
+    const accounts: Account[] = [
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 100, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+      { id: "unk", name: "unk", type: "uncategorized", institution: null, balance: 999, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+    ];
+    const points = computeNetWorthSeries(
+      [ev("chk", "2026-02-14", 100), ev("unk", "2026-02-14", 999)],
+      [acct("chk", "cash"), acct("unk", "uncategorized")],
+    );
+    const summary = computeNetWorth(accounts);
+
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+    expect(summary.netWorth).toBe(100);
   });
 });

@@ -7,18 +7,7 @@ import { rateLimit } from "@/lib/auth/rate-limit";
 import { findUsableEmailChangeToken } from "@/lib/auth/email-change-tokens";
 import { createSession } from "@/lib/auth/sessions";
 import { setSessionCookie } from "@/lib/auth/session-cookie";
-
-interface ErrorBody {
-  ok: false;
-  error: { code: string; message: string };
-}
-
-function err(code: string, message: string, status: number) {
-  return NextResponse.json<ErrorBody>(
-    { ok: false, error: { code, message } },
-    { status },
-  );
-}
+import { err, internalError } from "@/lib/api/errors";
 
 // Deliberately identical for "no such token", "already used" and "expired" —
 // distinguishing them would tell a holder of a guessed token which guesses are
@@ -139,9 +128,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e) {
     console.error("[api/auth/email-change/confirm] unhandled error", e);
-    return NextResponse.json(
-      { ok: false, error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
-      { status: 500 },
-    );
+    return internalError();
   }
 }

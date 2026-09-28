@@ -38,7 +38,10 @@ const EXPECTED_FRESH_SUMMARY = {
   newAccounts: [
     { name: "Everyday Checking", guessedType: "cash" },
     { name: "Sunset Credit Card", guessedType: "credit_card" },
-    { name: "Travel Card, Signature", guessedType: "cash" },
+    // 15c: no keyword matches this name, and the catch-all no longer guesses
+    // 'cash'. It is a travel credit card in reality, which is exactly why
+    // defaulting an unrecognized account to an asset was the wrong call.
+    { name: "Travel Card, Signature", guessedType: "uncategorized" },
   ],
   newCategories: [
     { name: "Groceries", inferredType: "expense" },
@@ -199,7 +202,7 @@ describe("POST /api/transactions/import", () => {
       [
         ["Everyday Checking", "cash"],
         ["Sunset Credit Card", "credit_card"],
-        ["Travel Card, Signature", "cash"],
+        ["Travel Card, Signature", "uncategorized"],
       ].sort(),
     );
     // Import has no balance to offer — every new account opens at 0.

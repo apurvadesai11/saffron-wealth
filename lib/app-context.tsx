@@ -2,7 +2,9 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   Dispatch,
@@ -10,7 +12,6 @@ import {
   ReactNode,
 } from "react";
 import { Category, Transaction, Budget } from "./types";
-import { MOCK_CATEGORIES, MOCK_TRANSACTIONS, MOCK_BUDGETS } from "./mock-data";
 import { readCsrfCookie } from "./auth/csrf-client";
 import { CSRF_HEADER_NAME } from "./auth/csrf-shared";
 
@@ -52,17 +53,35 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 let localId = 0; // offline-mode id counter (tests only — see AppProviderProps.offline)
 
+// Yesterday, relative to a "YYYY-MM-DD" string. The gap fetch stops one day
+// short of the current window start so it never re-downloads rows already
+// in state. Built in UTC so the arithmetic can't shift a day.
+//
+// Module scope, not a closure inside the provider: it captures nothing, and
+// hoisting it keeps ensureTransactionsFrom's dependency list to what actually
+// varies.
+function dayBefore(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return prev.toISOString().slice(0, 10);
+}
+
 interface AppProviderProps {
   children: ReactNode;
   // Real data from Postgres, fetched server-side by app/(app)/layout.tsx and
   // passed down. Also doubles as test-fixture injection: component tests call
   // renderWithApp() with these instead of touching module-scoped mock data.
-  // Omitted only when neither applies, which falls back to MOCK_* — that
-  // path is a safety net for stray test callers, never exercised in
-  // production (the (app) layout always passes real, possibly empty, arrays).
-  seedCategories?: Category[];
-  seedTransactions?: Transaction[];
-  seedBudgets?: Budget[];
+  //
+  // Required, deliberately. These were optional and fell back to the
+  // lib/mock-data arrays, so a regression that dropped one prop would render
+  // fabricated balances that look exactly like real ones — the one failure
+  // mode in a wealth tracker a user cannot detect. Mock data is a test
+  // fixture, so test callers pass it explicitly (see renderWithApp); an
+  // empty array is how "this user has no data" is expressed. There is no
+  // third state, and now no way to ask for one.
+  seedCategories: Category[];
+  seedTransactions: Transaction[];
+  seedBudgets: Budget[];
   // Lower bound of the seeded transaction window ("YYYY-MM-DD"). Omitted
   // means the seed is the user's whole history, which is what component
   // tests and the importers' own callers want.
@@ -81,13 +100,11 @@ export function AppProvider({
   transactionsFrom,
   offline = false,
 }: AppProviderProps) {
-  const [transactions, setTransactions] = useState<Transaction[]>(
-    seedTransactions ?? MOCK_TRANSACTIONS,
-  );
-  const [budgets, setBudgets] = useState<Budget[]>(seedBudgets ?? MOCK_BUDGETS);
+  const [transactions, setTransactions] = useState<Transaction[]>(seedTransactions);
+  const [budgets, setBudgets] = useState<Budget[]>(seedBudgets);
   const [windowFrom, setWindowFrom] = useState<string | null>(transactionsFrom ?? null);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
-  const categories = seedCategories ?? MOCK_CATEGORIES;
+  const categories = seedCategories;
 
   // useState's initializer only runs on mount, so a later re-render carrying
   // a fresh seed prop (e.g. app/(app)/layout.tsx re-fetching after
@@ -149,9 +166,10 @@ export function AppProvider({
   const [pendingRefreshBaseline, setPendingRefreshBaseline] = useState<number | null>(null);
   const mutationVersionRef = useRef(0);
 
-  function beginRefresh() {
+  // Reads a ref and calls a setState, so it never needs rebuilding.
+  const beginRefresh = useCallback(() => {
     setPendingRefreshBaseline(mutationVersionRef.current);
-  }
+  }, []);
 
   const seedTransactionsChanged = seedTransactions !== prevSeedTransactions;
   const seedBudgetsChanged = seedBudgets !== prevSeedBudgets;
@@ -162,25 +180,16 @@ export function AppProvider({
     const safeToAdopt =
       pendingRefreshBaseline === null || mutationVersionRef.current === pendingRefreshBaseline;
     if (safeToAdopt) {
-      if (seedTransactionsChanged && seedTransactions) {
+      if (seedTransactionsChanged) {
         setTransactions(seedTransactions);
         // A fresh seed carries a fresh window, so any older rows fetched
         // on demand during the previous seed's lifetime are gone with it.
         // Narrowing the claim back is the honest move — consumers re-ask.
         setWindowFrom(transactionsFrom ?? null);
       }
-      if (seedBudgetsChanged && seedBudgets) setBudgets(seedBudgets);
+      if (seedBudgetsChanged) setBudgets(seedBudgets);
     }
     if (pendingRefreshBaseline !== null) setPendingRefreshBaseline(null);
-  }
-
-  // Yesterday, relative to a "YYYY-MM-DD" string. The gap fetch stops one day
-  // short of the current window start so it never re-downloads rows already
-  // in state. Built in UTC so the arithmetic can't shift a day.
-  function dayBefore(dateStr: string): string {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const prev = new Date(Date.UTC(y, m - 1, d - 1));
-    return prev.toISOString().slice(0, 10);
   }
 
   // In-flight requests keyed by target `from`, so a consumer calling this
@@ -188,7 +197,14 @@ export function AppProvider({
   // range while the first is still running.
   const inFlightRef = useRef(new Map<string, Promise<void>>());
 
-  async function ensureTransactionsFrom(from: string) {
+  // windowFrom is in the dependency list rather than read through a ref: the
+  // gap boundary (`dayBefore(windowFrom)`) and the already-covered check
+  // (`from >= windowFrom`) must both see the current window, and a stale
+  // closure would silently fetch the wrong range. Rebuilding the callback when
+  // the window moves is the same value the unmemoized version saw on every
+  // render, so behavior is unchanged. Dedup survives the identity change
+  // because the in-flight map is a ref, not a closure variable.
+  const ensureTransactionsFrom = useCallback(async (from: string) => {
     // Null window means "everything is here"; a `from` at or after the
     // current start is already covered. Lexicographic comparison is valid
     // for "YYYY-MM-DD".
@@ -240,9 +256,9 @@ export function AppProvider({
       });
     inFlightRef.current.set(from, guarded);
     return guarded;
-  }
+  }, [windowFrom]);
 
-  async function addTransaction(t: Omit<Transaction, "id">) {
+  const addTransaction = useCallback(async (t: Omit<Transaction, "id">) => {
     if (offline) {
       setTransactions(prev => [{ ...t, id: `local-${++localId}` }, ...prev]);
       mutationVersionRef.current++;
@@ -260,9 +276,9 @@ export function AppProvider({
     }
     setTransactions(prev => [data.data.transaction as Transaction, ...prev]);
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  async function deleteTransaction(id: string) {
+  const deleteTransaction = useCallback(async (id: string) => {
     if (offline) {
       setTransactions(prev => prev.filter(t => t.id !== id));
       mutationVersionRef.current++;
@@ -279,9 +295,9 @@ export function AppProvider({
     }
     setTransactions(prev => prev.filter(t => t.id !== id));
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  async function saveBudgets(entries: Budget[]) {
+  const saveBudgets = useCallback(async (entries: Budget[]) => {
     if (offline) {
       setBudgets(prev => {
         const next = [...prev];
@@ -309,10 +325,13 @@ export function AppProvider({
     }
     setBudgets(data.data.budgets as Budget[]);
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  return (
-    <AppContext.Provider value={{
+  // Without this, every useApp() consumer re-rendered whenever the provider
+  // did — a fresh object plus five fresh closures per render — regardless of
+  // whether the data that consumer reads had changed.
+  const value = useMemo<AppContextValue>(
+    () => ({
       categories,
       transactions,
       budgets,
@@ -324,7 +343,23 @@ export function AppProvider({
       beginRefresh,
       dismissedKeys,
       setDismissedKeys,
-    }}>
+    }),
+    [
+      categories,
+      transactions,
+      budgets,
+      windowFrom,
+      ensureTransactionsFrom,
+      saveBudgets,
+      addTransaction,
+      deleteTransaction,
+      beginRefresh,
+      dismissedKeys,
+    ],
+  );
+
+  return (
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );

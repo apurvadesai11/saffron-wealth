@@ -8,12 +8,16 @@ import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach } from "vitest";
 import { prisma } from "./prisma";
 import { listTransactions, queryTransactions } from "./transactions";
+import { InvalidCursorError } from "./db-errors";
 
 let userId: string | undefined;
+let otherUserId: string | undefined;
 
 afterEach(async () => {
   if (userId) await prisma.user.delete({ where: { id: userId } }).catch(() => {});
+  if (otherUserId) await prisma.user.delete({ where: { id: otherUserId } }).catch(() => {});
   userId = undefined;
+  otherUserId = undefined;
 });
 
 async function seedUser() {
@@ -263,5 +267,75 @@ describe("queryTransactions", () => {
     } finally {
       await prisma.user.delete({ where: { id: other.id } }).catch(() => {});
     }
+  });
+});
+
+// 20a — the client-supplied cursor went straight into Prisma's `cursor:`.
+// buildWhere includes userId, so there was never a cross-tenant read; the
+// defect is that a foreign or stale id made Prisma throw, which the route
+// surfaced as a 500 instead of a clean 400.
+describe("queryTransactions cursor validation", () => {
+  async function seedOtherUser() {
+    const email = `tx-query-other-${randomUUID()}@example.test`;
+    const user = await prisma.user.create({
+      data: { email, emailNormalized: email.toLowerCase(), firstName: "Other", lastName: "User" },
+    });
+    otherUserId = user.id;
+    return user;
+  }
+
+  it("rejects a cursor that names no row at all", async () => {
+    const user = await seedUser();
+
+    await expect(
+      queryTransactions(user.id, { cursor: randomUUID() }),
+    ).rejects.toThrow(InvalidCursorError);
+  });
+
+  it("rejects a syntactically invalid cursor without reaching Prisma's cursor", async () => {
+    const user = await seedUser();
+
+    await expect(
+      queryTransactions(user.id, { cursor: "not-an-id" }),
+    ).rejects.toThrow(InvalidCursorError);
+  });
+
+  // The important one: another user's real transaction id. The where clause
+  // already prevented reading their rows, but the request should be a clean
+  // 400 rather than an error surfaced from the database driver.
+  it("rejects another user's transaction id", async () => {
+    const mine = await seedUser();
+    const theirs = await seedOtherUser();
+    const theirCat = await seedCategory(theirs.id, "Theirs", "expense");
+    const theirTx = await seedTransaction(theirs.id, theirCat.id, {
+      date: "2026-09-01",
+      amount: 10,
+      description: "Not mine",
+    });
+
+    await expect(
+      queryTransactions(mine.id, { cursor: theirTx.id }),
+    ).rejects.toThrow(InvalidCursorError);
+  });
+
+  it("accepts a cursor pointing at the caller's own row", async () => {
+    const user = await seedUser();
+    const cat = await seedCategory(user.id, "Groceries", "expense");
+    for (let i = 1; i <= 3; i++) {
+      await seedTransaction(user.id, cat.id, {
+        date: `2026-09-0${i}`,
+        amount: i,
+        description: `Tx ${i}`,
+      });
+    }
+
+    const first = await queryTransactions(user.id, { limit: 1 });
+    const second = await queryTransactions(user.id, {
+      limit: 1,
+      cursor: first.nextCursor ?? undefined,
+    });
+
+    expect(second.transactions).toHaveLength(1);
+    expect(second.transactions[0].description).toBe("Tx 2");
   });
 });

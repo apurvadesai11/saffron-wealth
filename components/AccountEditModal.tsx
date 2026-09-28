@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Account, AccountInput, AccountType } from "@/lib/types";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import {
   BUCKET_ORDER,
   ACCOUNT_TYPES_BY_BUCKET,
@@ -25,6 +26,18 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
   const [balance, setBalance] = useState(account ? String(account.balance) : "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Confines Tab to this dialog and restores focus to whatever opened it.
+  useFocusTrap(dialogRef);
+
+  // 'uncategorized' is what the import assigns when it recognizes nothing, and
+  // it contributes to no net-worth total. That makes it a state to move OUT of,
+  // not a type a person picks — so it is offered only when this account already
+  // carries it, which is what lets the select show the real current value and
+  // lets the user correct it.
+  const bucketsForSelect = BUCKET_ORDER.filter(
+    (bucket) => bucket !== "uncategorized" || account?.type === "uncategorized",
+  );
 
   // Autofocus name field when the modal opens.
   useEffect(() => {
@@ -75,6 +88,7 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
       aria-label="Close modal"
     >
       <div
+        ref={dialogRef}
         className="bg-white rounded-2xl shadow-xl w-full max-w-md"
         role="dialog"
         aria-modal="true"
@@ -126,7 +140,7 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
               onChange={(e) => setType(e.target.value as AccountType)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {BUCKET_ORDER.map((bucket) => (
+              {bucketsForSelect.map((bucket) => (
                 <optgroup key={bucket} label={ACCOUNT_BUCKET_LABELS[bucket]}>
                   {ACCOUNT_TYPES_BY_BUCKET[bucket].map((t) => (
                     <option key={t} value={t}>
