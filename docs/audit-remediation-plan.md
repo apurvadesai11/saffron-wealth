@@ -15,8 +15,14 @@
   say so inline below: item 17's "confirm red in CI", item 12's "no route test
   edits", and item 18's comment-ratio target for `lib/accounts.ts`.
 
-Test baseline moved from 50 files / 610 tests at audit time to **74 files /
-956 tests**. Lint and typecheck clean. `npm run test:e2e` passes 62–63 of 64;
+A fresh-context review of the whole branch followed, and found one **critical
+regression introduced by item 15b** plus three Important findings; all four are
+fixed (commit `d51c917`) with a failing test each. See "What the final review
+caught" below — the regression is worth reading, because the fix for one defect
+made a worse one.
+
+Test baseline moved from 50 files / 610 tests at audit time to **75 files /
+976 tests**. Lint and typecheck clean. `npm run test:e2e` passes 62–63 of 64;
 the two intermittent failures in `e2e/net-worth.spec.ts` are pre-existing
 (reproduced on `phase-2-correctness` with no Phase 3 code) and are a shared-
 fixture isolation problem, not a regression — see the note at the end of this
@@ -1512,4 +1518,55 @@ One more thing found and not fixed, from item 14: `TransactionList`'s delete
 control has no confirmation step, and unlike the account archive it is a **hard
 delete with no Restore path**. Same adjacency risk that motivated item 14a,
 worse consequence. Item 14's criteria only asked for that control to be
-"audited for the same issues" (contrast and hit target), which was done.
+"audited for the same issues" (contrast and hit target), which was done. The
+asymmetry is now the wrong way round — the recoverable action takes two clicks
+and the irreversible one takes one — so this deserves its own item.
+
+---
+
+## What the final review caught
+
+A fresh reviewer read the branch against this plan. Five of the seven areas it
+was asked to check came back clean with specifics. Two produced findings, and
+one of them was a regression that this plan's own item introduced.
+
+**Item 15b's word-boundary rule was a net regression, not a fix.**
+`ASSET_TYPE_RULES` was written against `includes()`, so several of its entries
+are **stems**: `invest` was meant to catch "Investments", `house` to catch
+"Houses", `credit card` to catch "Credit Cards". Applying a trailing word
+boundary to every keyword turned all of those into misses — and because item
+15c had just made a miss mean `uncategorized`, those accounts stopped counting
+toward net worth at all:
+
+| Account name | Before Phase 3 | After item 15 | Effect |
+|---|---|---|---|
+| `Fidelity Investments` | `brokerage` | `uncategorized` | dropped from net worth |
+| `Investments` | `brokerage` | `uncategorized` | dropped |
+| `Roth IRAs` | `roth_ira` | `uncategorized` | dropped |
+| `Credit Cards` | `credit_card` | `uncategorized` | dropped |
+| `Houses` | `property` | `uncategorized` | dropped |
+| `Student Loans` (−) | `loan_mortgage` | `credit_card` | wrong type |
+| `Roth 401k` | `roth_401k` | `401k` | wrong type |
+
+That last row violates a criterion this document states verbatim — *"`roth 401`
+must beat `401k`"* — and it was invisible to the suite because the test used
+`"Roth 401(k) Plan"`, where the parenthesis happens to satisfy the lookahead.
+
+**The lesson worth keeping:** the two examples this plan gives for 15b
+(`"citi"` in `"Citibank Checking"`, `"visa"` in `"Visa Debit Checking"`) are
+both *leading*-boundary failures. The plan prescribed word-boundary matching as
+if both ends were symmetric. They are not, and the trailing end is where the
+table's stems live. A fix that makes the app report a wrong total is worse than
+the mislabelling it replaced.
+
+The trailing boundary now tolerates the inflections those stems were written
+for, and `excludeKeywords` — which had been added for `"debit"` alone — also
+excludes `checking`, `savings` and `banking`, because brand-named deposit
+products (`Discover Online Savings Account`, `Amex High Yield Savings`) were
+still being read as credit cards, sign-negated, and shown as liabilities.
+
+Two more Important findings, both fixed: activating item 14's new archive
+confirm dropped keyboard focus onto `<body>` (inside the item whose subject is
+keyboard access), and item 15c's `uncategorized` bucket rendered identically to
+the counted buckets, giving a list that does not sum to the summary cards with
+no explanation on the page.
