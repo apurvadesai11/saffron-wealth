@@ -31,6 +31,9 @@ export default function ProfilePage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSaved, setProfileSaved] = useState(false);
+  // The email is no longer applied by the PATCH — it waits on confirmation
+  // from the new address, so the UI must not imply it already took effect.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   // Password fields
   const [currentPassword, setCurrentPassword] = useState("");
@@ -66,6 +69,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setProfileError(null);
     setProfileSaved(false);
+    setPendingEmail(null);
     setProfileSaving(true);
     try {
       const csrf = readCsrfCookie() ?? "";
@@ -82,8 +86,16 @@ export default function ProfilePage() {
         setProfileError(data?.error?.message ?? "Save failed.");
         return;
       }
-      setUser(data.data.user as User);
-      setProfileSaved(true);
+      const saved = data.data.user as User;
+      setUser(saved);
+      // Reset the field to the address actually on the account. Leaving the
+      // typed value in place would show the new address as though it were live.
+      setEmail(saved.email);
+      if (data.data.emailChangePending) {
+        setPendingEmail(data.data.pendingEmail as string);
+      } else {
+        setProfileSaved(true);
+      }
     } catch {
       setProfileError("Network error.");
     } finally {
@@ -213,12 +225,25 @@ export default function ProfilePage() {
               disabled={profileSaving}
             />
             <p className="text-xs text-gray-400 mt-1.5">
-              Changing your email will sign you out of other devices.
+              A new address has to be confirmed from its own inbox before it
+              takes effect. Confirming signs you out of other devices.
             </p>
           </div>
           <AuthFormError message={profileError} />
           {profileSaved ? (
             <p className="text-xs text-emerald-600">Saved.</p>
+          ) : null}
+          {pendingEmail ? (
+            <p
+              className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+              role="status"
+              data-email-change-pending={pendingEmail}
+            >
+              Check <span className="font-medium">{pendingEmail}</span> for a
+              confirmation link. Your address stays{" "}
+              <span className="font-medium">{user?.email}</span> until you use
+              it, and the link expires in 15 minutes.
+            </p>
           ) : null}
           <button
             type="submit"

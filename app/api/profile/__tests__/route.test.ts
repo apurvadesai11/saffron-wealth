@@ -167,7 +167,14 @@ describe("PATCH /api/profile", () => {
     await cleanupUser(other.id);
   });
 
-  it("changes email, revokes all old sessions, and issues a fresh one via Set-Cookie", async () => {
+  // This route used to apply the new address and reissue a session on the
+  // spot. It no longer does: an unverified email change let an attacker park
+  // on an address they did not control, which the Google callback's
+  // match-by-email then trusted. The change is now staged and applied only at
+  // POST /api/auth/email-change/confirm. The full flow, including the
+  // takeover chain it closes, is covered in
+  // app/api/auth/__tests__/email-change.test.ts.
+  it("stages an email change instead of applying it, leaving sessions alone", async () => {
     const user = await seedUser();
     userId = user.id;
     await seedSession(user.id);
@@ -182,13 +189,24 @@ describe("PATCH /api/profile", () => {
     });
     const res = await PATCH(req);
     expect(res.status).toBe(200);
-    expect((await res.json()).data.user.email).toBe(newEmail);
 
+    const body = await res.json();
+    expect(body.data.emailChangePending).toBe(true);
+    expect(body.data.pendingEmail).toBe(newEmail);
+    // Still the old address, both in the response and in the database.
+    expect(body.data.user.email).toBe(user.email);
+    const stored = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { email: true },
+    });
+    expect(stored?.email).toBe(user.email);
+
+    // Nothing to revoke yet — the account has not actually changed hands.
     const sessions = await prisma.session.findMany({ where: { userId: user.id } });
-    expect(sessions).toHaveLength(1);
+    expect(sessions).toHaveLength(2);
 
-    const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toMatch(/sw_session=/i);
+    // And no new session cookie, since no new identity was established.
+    expect(res.headers.get("set-cookie") ?? "").not.toMatch(/sw_session=/i);
   });
 
   it("treats case-only email 'change' as a no-op (sessions untouched)", async () => {

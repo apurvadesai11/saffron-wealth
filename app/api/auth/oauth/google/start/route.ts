@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   buildGoogleAuthorizeUrl,
   googleCallbackRedirectUri,
+  googleOauthConfigStatus,
 } from "@/lib/auth/google-oauth";
 import {
   OAUTH_STATE_COOKIE,
@@ -11,6 +12,14 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
+    // Diagnose a half-configured set here rather than letting it fail at
+    // token exchange, after the user has already round-tripped to Google.
+    const config = googleOauthConfigStatus();
+    if (!config.ok) {
+      console.error(`[oauth/google/start] not configured: ${config.reason}`);
+      return NextResponse.redirect(new URL("/login?oauth=unconfigured", req.url));
+    }
+
     const state = generateOauthState();
     const redirectUri = googleCallbackRedirectUri(req.url);
 

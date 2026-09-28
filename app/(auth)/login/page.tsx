@@ -8,6 +8,7 @@ import AuthFormError from "@/components/auth/AuthFormError";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
+import { safeNext } from "@/lib/auth/safe-next";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   denied: "Sign-in with Google was cancelled.",
@@ -26,7 +27,7 @@ const inputClass =
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/";
+  const next = safeNext(searchParams.get("next"));
   const oauthError = searchParams.get("oauth");
   const justReset = searchParams.get("reset") === "ok";
 

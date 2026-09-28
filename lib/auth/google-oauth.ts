@@ -30,8 +30,8 @@ export function buildGoogleAuthorizeUrl(
   state: string,
   redirectUri: string,
 ): string {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not configured");
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  if (!clientId) throw new Error("GOOGLE_OAUTH_CLIENT_ID is not configured");
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -48,10 +48,10 @@ export async function exchangeGoogleCode(
   code: string,
   redirectUri: string,
 ): Promise<GoogleTokenResponse> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    throw new Error("GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET not configured");
+    throw new Error("GOOGLE_OAUTH_CLIENT_ID/GOOGLE_OAUTH_CLIENT_SECRET not configured");
   }
   const body = new URLSearchParams({
     code,
@@ -96,7 +96,35 @@ export async function fetchGoogleProfile(accessToken: string): Promise<GooglePro
   };
 }
 
+// The redirect_uri sent to Google has to byte-match one registered in the
+// Google console. GOOGLE_OAUTH_REDIRECT_URI is that registered value, so it
+// wins outright when set; otherwise we derive it from APP_BASE_URL, falling
+// back to the request origin for local dev. Deriving it was the only behavior
+// before, which made the documented GOOGLE_OAUTH_REDIRECT_URI dead config.
 export function googleCallbackRedirectUri(reqUrl: string): string {
-  const baseUrl = process.env.NEXTAUTH_URL ?? new URL(reqUrl).origin;
+  const explicit = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  if (explicit) return explicit;
+  const baseUrl = process.env.APP_BASE_URL ?? new URL(reqUrl).origin;
   return `${baseUrl}/api/auth/oauth/google/callback`;
+}
+
+/**
+ * Whether Google sign-in is fully configured.
+ *
+ * Returns a reason rather than a bare boolean so the start route can log which
+ * half is missing. A half-configured set (id present, secret absent) otherwise
+ * fails at the token-exchange step, well after the user has already been sent
+ * to Google and back, where the error surfaces as a generic failure.
+ */
+export function googleOauthConfigStatus():
+  | { ok: true }
+  | { ok: false; reason: string } {
+  const id = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const secret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  if (!id && !secret) {
+    return { ok: false, reason: "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are both unset" };
+  }
+  if (!id) return { ok: false, reason: "GOOGLE_OAUTH_CLIENT_SECRET is set but GOOGLE_OAUTH_CLIENT_ID is missing" };
+  if (!secret) return { ok: false, reason: "GOOGLE_OAUTH_CLIENT_ID is set but GOOGLE_OAUTH_CLIENT_SECRET is missing" };
+  return { ok: true };
 }

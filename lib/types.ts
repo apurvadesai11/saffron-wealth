@@ -80,7 +80,9 @@ export type AuthEventType =
   | 'password_reset_completed'
   | 'session_revoked'
   | 'google_oauth_signin'
+  | 'oauth_account_linked'
   | 'hibp_unavailable'
+  | 'email_change_requested'
   | 'email_change';
 
 // Computed view model used by budget list UI components
