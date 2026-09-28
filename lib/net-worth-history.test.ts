@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeNetWorthSeries } from "./net-worth-history";
-import type { AccountType } from "./types";
+import { computeNetWorth } from "./account-utils";
+import type { Account, AccountType } from "./types";
 
 // Minimal event fixture — computeNetWorthSeries only reads these four fields.
 function ev(
@@ -375,5 +376,100 @@ describe("type-independent event sign", () => {
     const asAsset = computeNetWorthSeries(events, [acct("x", "property")]);
 
     expect(asAsset).toEqual(asDebt);
+  });
+});
+
+// 20c — the chart and the summary card are two independent sums of the same
+// money, and they used two different rounding conventions: this file rounded
+// every point to the cent, computeNetWorth rounded nothing. On data whose
+// float sum lands a fraction of a cent off, the chart's last point and the
+// card disagreed. Both now go through roundToCent (lib/money.ts).
+//
+// The two functions take different inputs and different sign conventions:
+// AccountBalanceEvent.balance is the account's *signed* contribution to net
+// worth (a liability's event is negative), while Account.balance is the value
+// in its bucket's natural direction (a liability's balance is positive, the
+// amount owed, and computeNetWorth subtracts it). The fixture below builds
+// both views of one portfolio so the comparison is apples to apples.
+describe("chart and summary card agree", () => {
+  // These balances are chosen because they *discriminate*: summed as floats
+  // without rounding, assets come to 8.099999999999998 and the net to
+  // 8.099999999999998, while the series' single rounded point is 8.1. With
+  // computeNetWorth unrounded, the card and the chart differ. Values that
+  // happen to sum exactly (e.g. 1.005 + 2.005 - 0.01) prove nothing here.
+  const PORTFOLIO = [
+    { id: "chk", type: "cash" as AccountType, balance: 8.1 },
+    { id: "brk", type: "brokerage" as AccountType, balance: 0.2 },
+    { id: "ira", type: "roth_ira" as AccountType, balance: 0.1 },
+    // Liability: Account.balance is the amount owed (positive) and
+    // computeNetWorth subtracts it, while the balance *event* carries the
+    // signed contribution and so is negative. Two views, one portfolio.
+    { id: "cc", type: "credit_card" as AccountType, balance: 0.3 },
+  ];
+
+  const DATE = "2026-02-14";
+
+  function asAccounts(): Account[] {
+    return PORTFOLIO.map((a) => ({
+      id: a.id,
+      name: a.id,
+      type: a.type,
+      institution: null,
+      balance: a.balance,
+      balanceAsOf: `${DATE}T00:00:00.000Z`,
+      createdAt: `${DATE}T00:00:00.000Z`,
+      updatedAt: `${DATE}T00:00:00.000Z`,
+    }));
+  }
+
+  function asEvents(date = DATE) {
+    return PORTFOLIO.map((a) =>
+      ev(a.id, date, a.type === "credit_card" ? -a.balance : a.balance),
+    );
+  }
+
+  const roster = () => PORTFOLIO.map((a) => acct(a.id, a.type));
+
+  it("the last series point equals the card's net worth", () => {
+    const points = computeNetWorthSeries(asEvents(), roster());
+    const summary = computeNetWorth(asAccounts());
+
+    expect(points).toHaveLength(1);
+    expect(summary.netWorth).toBe(8.1);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+  });
+
+  it("still agrees once the series has carried balances forward over months", () => {
+    const events = [
+      ...asEvents("2026-01-01"),
+      // One account reports again later; everything else carries forward, so
+      // the final point is a fresh sum of four carried values.
+      ev("chk", DATE, 8.1),
+    ];
+    const points = computeNetWorthSeries(events, roster());
+    const summary = computeNetWorth(asAccounts());
+
+    expect(points.length).toBeGreaterThan(1);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+  });
+
+  // Guards the -0 case on both sides at once: a portfolio that nets to exactly
+  // zero must read "$0.00" on the card and plot as 0 on the chart, never
+  // "-$0.00".
+  it("agrees on a portfolio that nets to zero, without -0", () => {
+    const accounts: Account[] = [
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
+      { id: "cc", name: "cc", type: "credit_card", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
+    ];
+    const points = computeNetWorthSeries(
+      [ev("chk", DATE, 0.3), ev("cc", DATE, -0.3)],
+      [acct("chk", "cash"), acct("cc", "credit_card")],
+    );
+    const summary = computeNetWorth(accounts);
+
+    expect(summary.netWorth).toBe(0);
+    expect(Object.is(summary.netWorth, -0)).toBe(false);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
+    expect(Object.is(points[points.length - 1].value, -0)).toBe(false);
   });
 });

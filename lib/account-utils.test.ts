@@ -147,3 +147,65 @@ describe("groupAccountsByBucket", () => {
     expect(groupAccountsByBucket([])).toEqual([]);
   });
 });
+
+// 20c — computeNetWorthSeries rounded each point to the cent, with a thorough
+// comment explaining why (including the -0 guard). computeNetWorth summed
+// floats with no rounding at all, so the chart's last point and the summary
+// card could differ by a rounding step on the same data.
+//
+// Uses the file's own acct(type, balance) helper and real AccountType values;
+// "checking" is not one of them (the cash-bucket type is "cash"), and an
+// unrecognized type silently lands in the asset branch.
+describe("computeNetWorth rounding", () => {
+  it("snaps totals to the cent instead of leaking float dust", () => {
+    // 0.1 + 0.2 === 0.30000000000000004
+    const result = computeNetWorth([acct("cash", 0.1), acct("brokerage", 0.2)]);
+
+    expect(result.totalAssets).toBe(0.3);
+    expect(result.netWorth).toBe(0.3);
+  });
+
+  it("never produces -0, which renders as \"-$0.00\"", () => {
+    const result = computeNetWorth([
+      acct("cash", 0.3),
+      acct("brokerage", -0.1),
+      acct("hsa", -0.2),
+    ]);
+
+    expect(Object.is(result.totalAssets, -0)).toBe(false);
+    expect(Object.is(result.netWorth, -0)).toBe(false);
+    expect(result.netWorth).toBe(0);
+  });
+
+  it("rounds liabilities and the net independently of the assets total", () => {
+    const result = computeNetWorth([
+      acct("cash", 1000.005),
+      acct("credit_card", 0.005),
+    ]);
+
+    expect(result.totalAssets).toBe(1000.01);
+    expect(result.totalLiabilities).toBe(0.01);
+    expect(result.netWorth).toBe(1000);
+  });
+});
+
+describe("groupAccountsByBucket rounding", () => {
+  it("snaps bucketTotal to the cent", () => {
+    const groups = groupAccountsByBucket([acct("cash", 0.1), acct("cash", 0.2)]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].bucket).toBe("cash");
+    expect(groups[0].bucketTotal).toBe(0.3);
+  });
+
+  it("never produces -0 for a bucket that nets to zero", () => {
+    const groups = groupAccountsByBucket([
+      acct("cash", 0.3, { id: "a" }),
+      acct("cash", -0.1, { id: "b" }),
+      acct("cash", -0.2, { id: "c" }),
+    ]);
+
+    expect(Object.is(groups[0].bucketTotal, -0)).toBe(false);
+    expect(groups[0].bucketTotal).toBe(0);
+  });
+});

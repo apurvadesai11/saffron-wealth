@@ -633,7 +633,8 @@ Testing gotchas (learned the hard way — repeat at your peril):
   the UI reskin without invalidating tests.
 - **`parseLocalDate` for `YYYY-MM-DD`.** `new Date("YYYY-MM-DD")` parses as
   UTC midnight and shifts the displayed day in negative timezones. The helper
-  in `lib/budget-utils.ts` splits and constructs in local time.
+  in `lib/budget-utils.ts` splits and constructs in local time. See the date
+  conventions section below for which side of the boundary that belongs to.
 - **Comments explain WHY, not WHAT.** See
   `lib/auth/exponential-backoff.ts:11-12`, `proxy.ts:3-12`,
   `lib/auth/picture-storage.ts:13-17` for the tone.
@@ -648,6 +649,40 @@ Testing gotchas (learned the hard way — repeat at your peril):
 - **Two route groups: `(app)` and `(auth)`.** Both render under the same root
   layout, but `(app)` has an additional layout that runs `getSession()` and
   draws the Sidebar + TopHeader chrome.
+
+### Date conventions: where UTC ends and local begins
+
+Two date conventions live in this codebase. Both are correct, and they are
+**not** being unified — each has reasoning the other would break. A future
+author reading one file will get the other wrong unless they know the boundary,
+so here it is:
+
+- **Persistence and query layers are UTC.** `lib/date-utils.ts`
+  (`dateStringToUtcDate` / `utcDateToDateString`), used by `lib/transactions.ts`
+  and `lib/accounts.ts`. The columns these feed — `Transaction.date`,
+  `Account.balanceAsOf`, `AccountBalanceEvent.asOf` — are all `@db.Date` with no
+  time component, and the value must land on the exact calendar day named.
+  `new Date(y, m, d)` builds *local* midnight, which serializes to the previous
+  calendar day in any negative-UTC-offset timezone.
+
+- **Period and calendar math is local.** `parseLocalDate` and everything built
+  on it in `lib/budget-utils.ts`. A budget month is whatever month the user is
+  standing in; deriving period bounds in UTC would put someone in UTC-8 into
+  next month's budget for the last 16 hours of every month.
+
+- **`"YYYY-MM-DD"` strings are the interchange format across the boundary.**
+  Every value crossing between the two layers is a string, never a `Date`. That
+  is what keeps round-trips consistent despite the two conventions, and it is
+  why this is a maintenance hazard rather than a live bug.
+
+One place that looks like a violation and is not: `validateDate` in
+`lib/transaction-validation.ts` constructs a local `Date` to check that a date
+string is a real calendar day. It is a round-trip check, the `Date` never
+escapes the function, and reading the fields back in the same calendar system is
+what makes the comparison meaningful.
+
+If you add a date, decide which side of the boundary it is on first. If it
+touches the database, it is UTC.
 
 ### Gotchas & non-obvious decisions
 

@@ -11,6 +11,7 @@ import type {
   AccountBucketGroup,
   NetWorthSummary,
 } from "./types";
+import { roundToCent } from "./money";
 
 // Display order of buckets on the Net Worth page. Assets first, debt last.
 export const BUCKET_ORDER: AccountBucket[] = [
@@ -112,7 +113,14 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
       totalAssets += a.balance;
     }
   }
-  return { totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+  // Rounded here, and each total independently, so this agrees with
+  // computeNetWorthSeries' per-point rounding for the same data — the chart's
+  // last point and the summary card are the same number. See lib/money.ts.
+  return {
+    totalAssets: roundToCent(totalAssets),
+    totalLiabilities: roundToCent(totalLiabilities),
+    netWorth: roundToCent(totalAssets - totalLiabilities),
+  };
 }
 
 // Groups accounts under their bucket in BUCKET_ORDER, omitting empty buckets.
@@ -125,7 +133,7 @@ export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[]
         bucket,
         label: ACCOUNT_BUCKET_LABELS[bucket],
         accounts: bucketAccounts,
-        bucketTotal: bucketAccounts.reduce((sum, a) => sum + a.balance, 0),
+        bucketTotal: roundToCent(bucketAccounts.reduce((sum, a) => sum + a.balance, 0)),
       },
     ];
   });

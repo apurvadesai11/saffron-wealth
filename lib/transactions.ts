@@ -1,7 +1,7 @@
 // Server-only query layer for transactions.
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "./prisma";
-import { InvalidReferenceError } from "./db-errors";
+import { InvalidReferenceError, InvalidCursorError } from "./db-errors";
 import type { Transaction, CategoryType } from "./types";
 // Transaction.date is `@db.Date`; see lib/date-utils.ts for why the
 // conversions are UTC-only on both the read and the write path.
@@ -118,6 +118,21 @@ export async function queryTransactions(
 ): Promise<TransactionPage> {
   const where = buildWhere(userId, q);
   const limit = Math.min(Math.max(q.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+
+  // The cursor is client-supplied and goes straight into Prisma's `cursor:`,
+  // which throws if the row doesn't exist. `where` is userId-scoped so a
+  // foreign cursor was never a cross-tenant read — but it produced a 500 on
+  // what is really a bad request, and a stale cursor (the row deleted between
+  // pages) is an ordinary thing for a client to hold. Checking ownership
+  // explicitly is cheap (one indexed lookup on the primary key) and says what
+  // it means, rather than pattern-matching a Prisma error code.
+  if (q.cursor) {
+    const cursorRow = await prisma.transaction.findFirst({
+      where: { id: q.cursor, userId },
+      select: { id: true },
+    });
+    if (!cursorRow) throw new InvalidCursorError();
+  }
 
   const [rows, total] = await Promise.all([
     prisma.transaction.findMany({

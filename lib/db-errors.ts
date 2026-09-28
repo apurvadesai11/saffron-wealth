@@ -11,3 +11,15 @@ export class InvalidReferenceError extends Error {
     this.field = field;
   }
 }
+
+// Thrown by queryTransactions when the caller-supplied pagination cursor names
+// no row the caller owns. The where clause is userId-scoped, so a foreign
+// cursor never read another user's data — it made Prisma throw, which the
+// route surfaced as a 500 on what is really a bad request. Routes catch this
+// to produce a 400 INVALID_CURSOR.
+export class InvalidCursorError extends Error {
+  constructor(message = "Invalid pagination cursor.") {
+    super(message);
+    this.name = "InvalidCursorError";
+  }
+}

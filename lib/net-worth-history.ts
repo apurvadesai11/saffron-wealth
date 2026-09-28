@@ -53,6 +53,7 @@
 // events share an asOf, the later recordedAt is the one that should carry.
 
 import type { AccountType } from "./types";
+import { roundToCent } from "./money";
 
 export interface NetWorthPoint {
   date: string;
@@ -179,17 +180,12 @@ export function computeNetWorthSeries(
       total += acct.events[idx].balance;
     }
 
-    // Round once, here, per point — not accumulated across dates (each
-    // point is an independent sum of ~30 account balances, not a running
-    // total), but summing that many Decimal-turned-number values can still
-    // land a fraction of a cent off true due to binary float rounding.
-    // Money is displayed to the cent, so snap back to the cent explicitly
-    // rather than let e.g. 1234567.9999999998 leak into the chart/tooltip.
-    // `|| 0` specifically: when the true total is $0.00 and the float dust
-    // lands negative (e.g. 0.3 - 0.1 - 0.2), Math.round produces -0, which
-    // Intl.NumberFormat renders as "-$0.00" and which Object.is/toBe treats
-    // as distinct from 0.
-    points.push({ date, value: Math.round(total * 100) / 100 || 0 });
+    // Round once, here, per point — not accumulated across dates: each point
+    // is an independent sum of ~30 account balances, not a running total.
+    // The convention and the reasoning behind the -0 guard live in
+    // lib/money.ts, shared with computeNetWorth so the chart's last point and
+    // the summary card cannot drift apart.
+    points.push({ date, value: roundToCent(total) });
   }
 
   return points;

@@ -265,3 +265,35 @@ describe("amountMin/amountMax query params at the boundary", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+// 20b — every other field in this file has an explicit bound; categoryIds was
+// missed, so an arbitrarily long `IN (...)` reached Postgres. Bounded in
+// practice only by URL length, which is incidental rather than intentional.
+describe("parseTransactionQueryParams — categoryIds cap", () => {
+  function idsParam(n: number) {
+    return new URLSearchParams({
+      categoryIds: Array.from({ length: n }, (_, i) => `cat-${i}`).join(","),
+    });
+  }
+
+  it("accepts a list at the cap", () => {
+    const result = parseTransactionQueryParams(idsParam(100));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.categoryIds).toHaveLength(100);
+  });
+
+  it("rejects a list past the cap with a field error", () => {
+    const result = parseTransactionQueryParams(idsParam(101));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.fieldErrors.categoryIds).toMatch(/too many/i);
+  });
+
+  // The cap counts what survives trimming, not raw comma count — otherwise
+  // "a,,,,,,b" would fail for no reason a user could see.
+  it("counts only non-empty ids", () => {
+    const sp = new URLSearchParams({ categoryIds: `${",".repeat(400)}a,b` });
+    const result = parseTransactionQueryParams(sp);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.categoryIds).toEqual(["a", "b"]);
+  });
+});
