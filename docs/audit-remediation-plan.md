@@ -2,7 +2,25 @@
 
 **Source:** full-repo code review, 2026-09-27 (code quality, architecture, security, usability)
 **Scope:** 20 identified items, sequenced into 3 phases
-**Status:** not started
+**Status:** Phase 3 complete except item 15a. Phases 1 and 2 landed earlier.
+
+- **Phase 1** (items 1–5) — landed, branch `phase-1-security-blockers`.
+- **Phase 2** (items 6–10) — landed, branch `phase-2-correctness`.
+- **Phase 3** (items 11–20) — landed on `phase-3-architecture-quality-ux`, one
+  commit per item. **Item 15a is deliberately not done**: moving the
+  institution keyword table and `NON_ACCOUNT_NAMES` into per-user mapping data
+  needs an `AccountNameRule` migration plus UI to manage it, which is a feature
+  rather than a fix. 15b and 15c (the correctness halves) are done, as this
+  plan anticipated. Three other acceptance criteria were not met as written and
+  say so inline below: item 17's "confirm red in CI", item 12's "no route test
+  edits", and item 18's comment-ratio target for `lib/accounts.ts`.
+
+Test baseline moved from 50 files / 610 tests at audit time to **74 files /
+956 tests**. Lint and typecheck clean. `npm run test:e2e` passes 62–63 of 64;
+the two intermittent failures in `e2e/net-worth.spec.ts` are pre-existing
+(reproduced on `phase-2-correctness` with no Phase 3 code) and are a shared-
+fixture isolation problem, not a regression — see the note at the end of this
+document.
 
 ---
 
@@ -898,12 +916,12 @@ imported dataset — this should be a before/after number, not an assertion.
 
 ### Acceptance criteria
 
-- [ ] Context value and all five callbacks memoized
-- [ ] `ensureTransactionsFrom` still dedups concurrent calls for the same range and
+- [x] Context value and all five callbacks memoized
+- [x] `ensureTransactionsFrom` still dedups concurrent calls for the same range and
       computes the correct gap; `lib/app-context.test.tsx` still passes
-- [ ] Per-category spend is O(transactions + categories), not O(transactions × categories)
-- [ ] Measured render-count reduction recorded in the PR description
-- [ ] `lib/budget-utils.test.ts` (462 lines) passes unchanged
+- [x] Per-category spend is O(transactions + categories), not O(transactions × categories)
+- [x] Measured render-count reduction recorded in the PR description
+- [x] `lib/budget-utils.test.ts` (462 lines) passes unchanged
 
 ---
 
@@ -949,13 +967,13 @@ string, or response body shape — the client reads `data.error.message` and
 
 ### Acceptance criteria
 
-- [ ] One `err()` and one `ErrorBody` in the codebase
-- [ ] Both import routes are thin config over one shared handler
-- [ ] One copy of the UTC date helpers
-- [ ] Zero changes to any status code, error code, or response shape
-- [ ] All route tests pass without modification — if a test needs editing, the refactor
+- [x] One `err()` and one `ErrorBody` in the codebase
+- [x] Both import routes are thin config over one shared handler
+- [x] One copy of the UTC date helpers
+- [x] Zero changes to any status code, error code, or response shape
+- [~] All route tests pass without modification — **six call sites edited**, type-only: wrapping a no-params route makes `GET` a one-argument function, so `await GET()` became `await GET(makeRequest({ method: "GET" }))`. Next.js rejects both an optional second parameter for a dynamic route and an optional first parameter for any route, so the arity cannot be hidden. No assertion changed and all 82 route tests passed at runtime before any call site was touched, so the criterion's stated rationale ("needing to change those means behavior changed") does not apply.
       changed behavior and should be reconsidered
-- [ ] Net line count reduced; record the number
+- [x] Net line count reduced; record the number
 
 ---
 
@@ -1002,11 +1020,11 @@ Either way, `lib/mock-data.ts` stays — it's legitimately used by `renderWithAp
 
 ### Acceptance criteria
 
-- [ ] `MOCK_*` is unreachable from `lib/app-context.tsx` in a non-test environment
-- [ ] `grep -n "MOCK_" lib/app-context.tsx` returns nothing (preferred option)
-- [ ] `renderWithApp` still supplies fixture data; all component tests pass
-- [ ] `e2e/fixtures.ts` unaffected
-- [ ] README's persistence claim is now enforced by code, not just asserted
+- [x] `MOCK_*` is unreachable from `lib/app-context.tsx` in a non-test environment
+- [x] `grep -n "MOCK_" lib/app-context.tsx` returns nothing (preferred option)
+- [x] `renderWithApp` still supplies fixture data; all component tests pass
+- [x] `e2e/fixtures.ts` unaffected
+- [x] README's persistence claim is now enforced by code, not just asserted
 
 ---
 
@@ -1059,17 +1077,17 @@ keyboard users tab straight out into the page behind the overlay.
 
 ### Acceptance criteria
 
-- [ ] Archiving an account requires an explicit confirm
-- [ ] Wording says "archive", not "delete", and matches the actual behavior
-- [ ] Control contrast ≥ 3:1; hit target ≥ 24×24px
-- [ ] `TransactionList.tsx` delete control audited for the same issues
-- [ ] Tab and Shift+Tab stay within an open modal in all four
-- [ ] Focus returns to the triggering element on close
-- [ ] `components/AccountRow.test.tsx` updated for the confirm flow
-- [ ] Focus containment asserted in Playwright, not walked by hand: press `Tab` past the
+- [x] Archiving an account requires an explicit confirm
+- [x] Wording says "archive", not "delete", and matches the actual behavior
+- [x] Control contrast ≥ 3:1; hit target ≥ 24×24px
+- [x] `TransactionList.tsx` delete control audited for the same issues
+- [x] Tab and Shift+Tab stay within an open modal in all four
+- [x] Focus returns to the triggering element on close
+- [x] `components/AccountRow.test.tsx` updated for the confirm flow
+- [x] Focus containment asserted in Playwright, not walked by hand: press `Tab` past the
       last focusable element and assert `:focus` is still inside the dialog, then close and
       assert `:focus` is back on the trigger. One spec covering all four modals.
-- [ ] Contrast checked with a computed-value assertion or an axe run, not by eye
+- [x] Contrast checked with a computed-value assertion or an axe run, not by eye
 
 ---
 
@@ -1120,12 +1138,12 @@ are correctness fixes and independently valuable — and treat 15a as a follow-o
 
 ### Acceptance criteria
 
-- [ ] No institution names in source constants
-- [ ] `"Citibank Checking"` classifies as `cash`, not `credit_card`; add a regression test
-- [ ] Unrecognized accounts classify as `uncategorized`, excluded from net-worth totals
-- [ ] Import preview surfaces uncategorized accounts for user classification
-- [ ] Existing rule-precedence tests in `lib/monarch-transform.test.ts` (204 lines) pass
-- [ ] Re-importing a file after classifying accounts does not re-classify them
+- [~] No institution names in source constants — **partly**: `sapphire`, `bankamericard`, `circle card`, `red card` and `citi` are gone from `ASSET_TYPE_RULES`, leaving only generic account-kind and card-network terms. `NON_ACCOUNT_NAMES` still holds two literal rows from one insurance export; making it user-managed is 15a.
+- [x] `"Citibank Checking"` classifies as `cash`, not `credit_card`; add a regression test
+- [x] Unrecognized accounts classify as `uncategorized`, excluded from net-worth totals
+- [x] Import preview surfaces uncategorized accounts for user classification
+- [x] Existing rule-precedence tests in `lib/monarch-transform.test.ts` (204 lines) pass
+- [x] Re-importing a file after classifying accounts does not re-classify them
 
 ---
 
@@ -1180,10 +1198,10 @@ behavior.
 
 ### Acceptance criteria
 
-- [ ] Every non-trivial module in `lib/auth/` has a test file
-- [ ] `NetWorthClient.tsx` has a test file
-- [ ] Both import pipelines have direct unit tests for transform and dedup
-- [ ] If any module is deliberately left untested, `CLAUDE.md`'s stated bar is amended to
+- [x] Every non-trivial module in `lib/auth/` has a test file
+- [x] `NetWorthClient.tsx` has a test file
+- [x] Both import pipelines have direct unit tests for transform and dedup
+- [x] If any module is deliberately left untested, `CLAUDE.md`'s stated bar is amended to
       say so — don't leave the convention and the reality disagreeing
 
 ---
@@ -1223,9 +1241,9 @@ While there, consider:
 
 ### Acceptance criteria
 
-- [ ] `npm run typecheck` runs in CI and fails the build on a type error
-- [ ] Verified by pushing a deliberate type error on a scratch branch and confirming red
-- [ ] Step ordering is correct (after `prisma generate`)
+- [x] `npm run typecheck` runs in CI and fails the build on a type error
+- [~] Verified by pushing a deliberate type error on a scratch branch and confirming red — **not done**: the workflow only triggers on push/PR to `main`, so this would mean opening a PR with a broken commit. Verified locally instead (a `const x: number = "s"` in a `*.test.ts` left `npm run build` at exit 0 while `tsc --noEmit` reported TS2322), plus a YAML parse and step-order assertion.
+- [x] Step ordering is correct (after `prisma generate`)
 
 ---
 
@@ -1295,13 +1313,13 @@ in `docs/`. A future reader hits a reference they can't resolve.
 
 ### Acceptance criteria
 
-- [ ] README Project Structure matches the real tree
-- [ ] `lib/types.ts:122` matches the code
-- [ ] `docs/decisions/` exists with one ADR per referenced ruling
-- [ ] No source comment references an undefined "Ruling N" or "Task N"
-- [ ] Comment-to-code ratio in `lib/accounts.ts` and `lib/net-worth-history.ts` materially
+- [x] README Project Structure matches the real tree
+- [x] `lib/types.ts:122` matches the code
+- [x] `docs/decisions/` exists with one ADR per referenced ruling
+- [x] No source comment references an undefined "Ruling N" or "Task N"
+- [~] Comment-to-code ratio in `lib/accounts.ts` and `lib/net-worth-history.ts` materially reduced with no loss of reasoning — `net-worth-history.ts` 50% → 40% (197 → 164 lines), `accounts.ts` 34% → 30% (549 → 521 lines). The second is a smaller cut than intended: what remains inline there is current behavior a reader needs at the call site, and cutting further would have lost reasoning rather than relocating it.
       reduced with no loss of reasoning
-- [ ] `CLAUDE.md` points at `docs/decisions/`
+- [x] `CLAUDE.md` points at `docs/decisions/`
 
 ---
 
@@ -1348,11 +1366,11 @@ Details that matter:
 
 ### Acceptance criteria
 
-- [ ] Replacing an avatar deletes the previous blob
-- [ ] Delete failures are logged and non-fatal
-- [ ] Google-hosted URLs are never passed to the delete path
-- [ ] Works on both the Vercel Blob and local-filesystem backends
-- [ ] `lib/auth/picture-storage.test.ts` covers the delete path and the Google-URL guard
+- [x] Replacing an avatar deletes the previous blob
+- [x] Delete failures are logged and non-fatal
+- [x] Google-hosted URLs are never passed to the delete path
+- [x] Works on both the Vercel Blob and local-filesystem backends
+- [x] `lib/auth/picture-storage.test.ts` covers the delete path and the Google-URL guard
 
 ---
 
@@ -1429,14 +1447,14 @@ breaking the reasoning behind the other — not worth it.
 
 ### Acceptance criteria
 
-- [ ] Invalid or foreign cursor returns 400, not 500
-- [ ] `categoryIds` capped with a field error beyond the cap
-- [ ] `computeNetWorth`, `groupAccountsByBucket`, and `computeNetWorthSeries` all use one
+- [x] Invalid or foreign cursor returns 400, not 500
+- [x] `categoryIds` capped with a field error beyond the cap
+- [x] `computeNetWorth`, `groupAccountsByBucket`, and `computeNetWorthSeries` all use one
       shared round-to-cent helper
-- [ ] Chart's last point equals the summary card's net worth for the same data; regression
+- [x] Chart's last point equals the summary card's net worth for the same data; regression
       test added
-- [ ] Date-convention boundary documented in `CLAUDE.md`
-- [ ] Tests added for the cursor and cap cases
+- [x] Date-convention boundary documented in `CLAUDE.md`
+- [x] Tests added for the cursor and cap cases
 
 ---
 
@@ -1455,3 +1473,43 @@ was planned.
 Sequencing constraints and the items most likely to need renegotiation are documented up
 front, under **Cross-phase dependencies** and **Where this plan may be wrong** — read
 those before starting a phase, not after.
+
+---
+
+## Found while closing Phase 3: the E2E suite is intermittently red, and was before
+
+`npm run test:e2e` passes 62–63 of 64. Two tests in `e2e/net-worth.spec.ts` —
+"archiving an account drops it from both the totals and the chart" and
+"restoring an account returns it to both the totals and the chart" — fail
+non-deterministically.
+
+**This is not a Phase 3 regression.** Evidence gathered before concluding that:
+
+- All ten Phase 3 commits were checked individually. The three agreement tests
+  pass at every one of them, including HEAD, when that spec file is run alone.
+- The full suite was run twice on `phase-2-correctness`, with no Phase 3 code
+  present: one failure, then two, on the same tests.
+- The Phase 3 suite was run with the new `e2e/accessibility.spec.ts` excluded:
+  still one to two failures. The new spec is not the cause.
+
+**Root cause.** `playwright.config.ts` sets `fullyParallel: true` with several
+local workers. `e2e/fixtures.ts` creates one `User` per worker and deletes it
+only when that worker finishes, and no spec cleans up the accounts it creates —
+so accounts accumulate across every test sharing a worker's user. The agreement
+tests assert on `data-latest-value`, which is a **user-global aggregate**, after
+mutating a single account. Their premise — that the only thing moving the chart
+is the archive under test — holds only when no other test sharing that user has
+left accounts in a state that makes the pre- and post-archive aggregates
+coincide. Under `workers: 1` in CI, every test shares one user, which is the
+maximum accumulation.
+
+**Not fixed here**, deliberately: no item in this plan covers it, and the fix is
+a change to the shared fixture design — a per-test user, per-test account
+cleanup, or scoping the assertion to the account under test — that touches every
+spec. Worth its own item.
+
+One more thing found and not fixed, from item 14: `TransactionList`'s delete
+control has no confirmation step, and unlike the account archive it is a **hard
+delete with no Restore path**. Same adjacency risk that motivated item 14a,
+worse consequence. Item 14's criteria only asked for that control to be
+"audited for the same issues" (contrast and hit target), which was done.
