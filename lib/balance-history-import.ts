@@ -158,10 +158,11 @@ export async function runBalanceHistoryImportPipeline(
     lastIndexForKey.set(`${row.accountName}|${row.date}`, i);
   });
 
-  // Pass 2: group by account. `lastDate`/`finalBalanceSigned` feed Ruling
-  // 3's archive check and docs/decisions/0004-sign-before-keywords.md's sign-aware type guess; `rows` (deduped
-  // per the note above) feeds the event log below, once each account's
-  // FINAL resolved type is known.
+  // Pass 2: group by account. `lastDate`/`finalBalanceSigned` feed the archive
+  // check (docs/decisions/0003-account-contribution-window.md) and the
+  // sign-aware type guess (docs/decisions/0004-sign-before-keywords.md);
+  // `rows` (deduped per the note above) feeds the event log below, once each
+  // account's FINAL resolved type is known.
   const accountsByName = new Map<string, AccountAccumulator>();
   const accountNamesOrdered: string[] = [];
   let fileMinDate = "";

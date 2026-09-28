@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Account } from "@/lib/types";
 import {
   ACCOUNT_TYPE_LABELS,
@@ -26,6 +26,20 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
   // control sits next to the row's edit button, which makes a misclick likely
   // rather than theoretical.
   const [confirming, setConfirming] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // The control the user activated is unmounted and replaced by the confirm.
+  // Without moving focus, activating it by keyboard drops focus onto <body>,
+  // leaving the confirm they just asked for reachable only by tabbing from the
+  // top of the document. `wasConfirming` so cancelling hands focus back to the
+  // trigger rather than leaving it nowhere, and so the initial render doesn't
+  // steal focus from whatever has it.
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+    else if (wasConfirming.current) triggerRef.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
 
   const liability = isLiability(getBucketForType(account.type));
   const { text: balanceText, sign: balanceSign } = describeAccountBalance(
@@ -63,9 +77,12 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
           {balanceText}
         </span>
         {confirming ? (
-          <span className="flex items-center gap-2 text-xs">
+          // role="alert" so the confirm is announced; a swap this small is
+          // otherwise a silent change for a screen-reader user.
+          <span className="flex items-center gap-2 text-xs" role="alert">
             <span className="text-gray-600">Archive?</span>
             <button
+              ref={confirmRef}
               onClick={() => {
                 setConfirming(false);
                 onArchive();
@@ -87,6 +104,7 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
           // min-h-6/min-w-6 is 24x24 CSS px, the SC 2.5.8 target minimum —
           // the bare glyph reserved roughly 10px.
           <button
+            ref={triggerRef}
             onClick={() => setConfirming(true)}
             className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-gray-500 hover:text-red-600 hover:bg-gray-100 transition-colors"
             aria-label={`Archive ${account.name}`}

@@ -21,6 +21,14 @@ function focusableWithin(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
     // offsetParent is null for a `display: none` subtree, which is the cheap
     // way to skip controls that are in the DOM but not on screen.
+    //
+    // Browser-only, deliberately: happy-dom has no layout and returns
+    // `undefined` here for BOTH attached and hidden elements, so this filter
+    // passes everything in unit tests. The strict `!== null` is what keeps it
+    // that way — a loose `!= null` would treat happy-dom's `undefined` as
+    // hidden and filter out every control, breaking the trap in every unit
+    // test while changing nothing in a real browser. The hidden-control case
+    // is covered by e2e/accessibility.spec.ts instead.
     (el) => el.offsetParent !== null || el === document.activeElement,
   );
 }

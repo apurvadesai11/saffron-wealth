@@ -169,11 +169,13 @@ model Account {
 // `userId` is denormalized to support per-user history queries and a possible
 // future pivot to soft-delete without a data migration.
 //
-// `asOf` (Phase 3, Task 5) is the calendar date the balance is true as of —
+// `asOf` is the calendar date the balance is true as of —
 // for Phase 1's create/edit paths that's just "now" (the @default), but the
 // balance-history import sets it to the CSV's own Date so history isn't
 // dated by when the import ran. `recordedAt` stays the audit/insert
-// timestamp; Task 6 tiebreaks same-`asOf` events by it. Deliberately NO
+// timestamp; lib/net-worth-history.ts tiebreaks same-`asOf` events by it
+// (docs/decisions/0009-same-day-events-tiebreak-on-recordedat.md).
+// Deliberately NO
 // `@@unique([accountId, asOf])` — Phase 1 legitimately writes more than one
 // event for the same account on the same calendar day (editing a balance
 // twice in one sitting), so uniqueness has to be enforced in application

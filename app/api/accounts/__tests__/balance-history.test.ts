@@ -22,7 +22,7 @@ import { seedUser, seedSession, cleanupUser } from "./helpers";
 
 // Synthetic Monarch-shaped balance-history fixture (no real personal data —
 // see CLAUDE.md's privacy rule). Three accounts exercise the three
-// structural cases the the account upsert brief calls out: "Everyday Checking" is an
+// structural cases the account upsert calls out: "Everyday Checking" is an
 // asset running to the file's max date (and dips negative on its first day,
 // to prove event history isn't clamped the way the account's current
 // balance is); "Sample Credit Card" is a debt with negative CSV balances;
@@ -400,7 +400,7 @@ describe("POST /api/accounts/balance-history", () => {
     await archiveAccount(userId, created.id);
 
     // The fixture's "Everyday Checking" rows run all the way to the file
-    // max (2026-01-03) — docs/decisions/0003-account-contribution-window.md's own inference would say "still
+    // max (2026-01-03) — archiving-by-absence would say "still
     // active," but the user's explicit delete must win and must never be
     // silently cleared by a later import's data-driven inference.
     const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
@@ -424,7 +424,7 @@ describe("POST /api/accounts/balance-history", () => {
     expect(before?.archivedAt).toBeNull();
 
     // The fixture's "Legacy Brokerage" rows stop one day before the file
-    // max — monotonicity only blocks CLEARING an archivedAt, so docs/decisions/0003-account-contribution-window.md
+    // max — monotonicity only blocks CLEARING an archivedAt, so archiving-by-absence
     // must still be free to SET one on an existing, currently-active account.
     const res = await POST(multipartRequest({ mode: "commit", csrf: "csrf" }));
     expect(res.status).toBe(200);
@@ -463,7 +463,7 @@ describe("POST /api/accounts/balance-history", () => {
     expect(summary.netWorth).toBe(120);
   });
 
-  it("docs/decisions/0008-balance-event-asof-without-unique-constraint.md regression: a same-day double balance edit via updateAccount still succeeds", async () => {
+  it("no (accountId, asOf) unique constraint: a same-day double balance edit via updateAccount still succeeds", async () => {
     const user = await signIn();
     userId = user.id;
 

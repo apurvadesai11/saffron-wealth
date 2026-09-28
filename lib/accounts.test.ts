@@ -271,7 +271,9 @@ describe("balance event sign at write time", () => {
   });
 });
 
-// Replaces docs/decisions/0007-never-retype-an-existing-account.md ("an imported balance's sign overrides the stored type").
+// The import never re-types an existing account. This replaced an earlier rule
+// where an imported balance's sign overrode the stored type — see
+// docs/decisions/0007-never-retype-an-existing-account.md.
 // That rule did not do what its rationale claimed: guessAccountType only
 // consults the sign on its NEGATIVE branch, so a card-named account with a
 // credited balance re-guessed straight back to credit_card and the override

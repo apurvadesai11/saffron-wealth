@@ -114,6 +114,39 @@ describe("AccountRow archive confirmation", () => {
     expect(screen.getByRole("button", { name: /^Yes, archive/ })).toBeInTheDocument();
   });
 
+  // The control the user just activated is unmounted and replaced. Without
+  // moving focus, activating it by keyboard drops focus to <body>, so the
+  // confirm the user asked for is unreachable without tabbing from the top of
+  // the document — inside the very item that exists to fix keyboard access.
+  it("moves focus to the confirm when it appears", async () => {
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /^Yes, archive/ }),
+    );
+  });
+
+  it("announces the confirm, so it is not a silent change for a screen reader", async () => {
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Archive?");
+  });
+
+  it("returns focus to the archive control on cancel", async () => {
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }),
+    );
+  });
+
   it("marks the confirm state with a data attribute so styling is not the signal", async () => {
     const { container } = render(
       <AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />,

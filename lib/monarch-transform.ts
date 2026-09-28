@@ -109,17 +109,37 @@ export function buildExternalHash(input: {
 // the account into the debt bucket and inverts its sign in the net-worth
 // calculation — a wrong number, not a cosmetic mislabel.
 //
-// Lookarounds on alphanumerics rather than \b, and applied only at whichever
-// ends of the keyword are themselves alphanumeric. A boundary assertion is
-// only meaningful against a word character: "orig. $" ends in "$" and is
-// immediately followed by a digit in the real data ("(Orig. $500,000.00)"), so
-// a trailing lookahead would reject the very string the keyword exists to
-// match. Same at the front for a keyword that begins with punctuation.
-// Internal punctuation and spaces are matched literally.
+// Inflections the trailing boundary tolerates. The keyword table is written in
+// STEMS, because it was authored against `includes()`: "invest" is meant to
+// catch "Investments", "house" to catch "Houses", "credit card" to catch
+// "Credit Cards". A bare trailing boundary turned every one of those into a
+// miss — and a miss now means `uncategorized`, i.e. dropped from net worth
+// altogether, which is a worse failure than the mislabelling the boundary was
+// added to prevent. Ordered longest-first so the alternation is greedy.
+const KEYWORD_SUFFIXES = ["ments", "ment", "ing", "es", "s"];
+
+// Matches `keyword` as a whole term inside `text`, both already lowercased,
+// allowing the inflections above at the end.
+//
+// The leading lookbehind is what fixes the defect this rule exists for: "citi"
+// must not match "Citibank", "ira" must not match "Iraq", "hsa" must not match
+// "Kishsaver". Note that all three of those are *leading*-boundary failures —
+// a keyword preceded by a word character — so the lookbehind does the real
+// work and the trailing side only needs to reject a continuation that is not a
+// plural or a participle ("Cashmere", "Investigation").
+//
+// Each lookaround is applied only if that end of the keyword is itself
+// alphanumeric. A boundary assertion is meaningless against punctuation:
+// "orig. $" ends in "$" and is immediately followed by a digit in the real
+// data ("(Orig. $500,000.00)"), so a trailing lookahead would reject the one
+// string that keyword exists to match. Internal punctuation and spaces are
+// matched literally.
 function matchesKeyword(text: string, keyword: string): boolean {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const before = /[a-z0-9]/.test(keyword[0]) ? "(?<![a-z0-9])" : "";
-  const after = /[a-z0-9]/.test(keyword[keyword.length - 1]) ? "(?![a-z0-9])" : "";
+  const after = /[a-z0-9]/.test(keyword[keyword.length - 1])
+    ? `(?:${KEYWORD_SUFFIXES.join("|")})?(?![a-z0-9])`
+    : "";
   return new RegExp(`${before}${escaped}${after}`).test(text);
 }
 
@@ -148,7 +168,7 @@ interface AssetTypeRule {
 // those entries were standing in for. Moving the table into per-user mapping
 // data is the remaining half of item 15 (15a) and needs a migration.
 export const ASSET_TYPE_RULES: AssetTypeRule[] = [
-  { keywords: ["roth 401", "roth401"], type: "roth_401k" },
+  { keywords: ["roth 401k", "roth401k", "roth 401", "roth401"], type: "roth_401k" },
   { keywords: ["401(k)", "401k"], type: "401k" },
   { keywords: ["roth ira"], type: "roth_ira" },
   { keywords: ["traditional ira"], type: "traditional_ira" },
@@ -167,7 +187,12 @@ export const ASSET_TYPE_RULES: AssetTypeRule[] = [
       "amex",
       "american express",
     ],
-    excludeKeywords: ["debit"],
+    // A deposit product sold under a card-network brand is a cash account:
+    // "Discover Online Savings", "Amex High Yield Savings", "Visa Debit
+    // Checking". The card rule is checked before the cash rule, and these
+    // names genuinely contain a network word, so ordering cannot separate
+    // them — the exclusion has to say it.
+    excludeKeywords: ["debit", "checking", "savings", "banking"],
     type: "credit_card",
   },
   { keywords: ["checking", "banking", "savings", "cash"], type: "cash" },

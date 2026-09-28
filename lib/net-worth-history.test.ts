@@ -51,7 +51,7 @@ describe("computeNetWorthSeries", () => {
     expect(mid?.value).toBe(100 + 5000);
   });
 
-  it("docs/decisions/0003-account-contribution-window.md: an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
+  it("an ARCHIVED closed account contributes nothing to a later date, even with a large non-zero final balance", () => {
     // Mirrors the real scenario: a mortgage that stops reporting (paid off /
     // account closed and archived by the account upsert's import) while still frozen at
     // a large balance. Stored as its contribution to net worth, so an owed
@@ -196,7 +196,7 @@ describe("computeNetWorthSeries", () => {
     expect(byDate.get("2026-03-01")).toBe(30); // "a" updates to 30; "b" already closed (archived)
   });
 
-  it("docs/decisions/0009-same-day-events-tiebreak-on-recordedat.md: two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
+  it("two events sharing one asOf resolve to the later recordedAt, not the first-encountered one", () => {
     const points = computeNetWorthSeries(
       [
         // Same-day double-edit: user set the balance to 100, then to 200
@@ -259,7 +259,7 @@ describe("computeNetWorthSeries", () => {
     expect(points).toEqual([{ date: "2026-01-01", value: 100 }]);
   });
 
-  describe("archivedAt window semantics (docs/decisions/0003-account-contribution-window.md, amended)", () => {
+  describe("archivedAt window semantics", () => {
     // Each case below isolates one cell of the archived x before/after-window
     // matrix, using a second single-event "anchor" account purely to create
     // a sample date at the point of interest (computeNetWorthSeries only
