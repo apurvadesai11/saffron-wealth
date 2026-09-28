@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Account, AccountInput, AccountType } from "@/lib/types";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import {
   BUCKET_ORDER,
   ACCOUNT_TYPES_BY_BUCKET,
@@ -25,6 +26,9 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
   const [balance, setBalance] = useState(account ? String(account.balance) : "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Confines Tab to this dialog and restores focus to whatever opened it.
+  useFocusTrap(dialogRef);
 
   // 'uncategorized' is what the import assigns when it recognizes nothing, and
   // it contributes to no net-worth total. That makes it a state to move OUT of,
@@ -84,6 +88,7 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
       aria-label="Close modal"
     >
       <div
+        ref={dialogRef}
         className="bg-white rounded-2xl shadow-xl w-full max-w-md"
         role="dialog"
         aria-modal="true"

@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { Account } from "@/lib/types";
 import {
   ACCOUNT_TYPE_LABELS,
@@ -9,10 +12,21 @@ import {
 interface Props {
   account: Account;
   onEdit: () => void;
-  onDelete: () => void;
+  // Named for what it does. archiveAccount (lib/accounts.ts) sets archivedAt
+  // and never removes the row — the account moves to the archived group with a
+  // working Restore. Calling this "delete" described something the app has
+  // never done.
+  onArchive: () => void;
 }
 
-export default function AccountRow({ account, onEdit, onDelete }: Props) {
+export default function AccountRow({ account, onEdit, onArchive }: Props) {
+  // Inline rather than a modal: the action is recoverable, and nesting a
+  // dialog inside the page for a reversible archive is heavier than the
+  // decision warrants. It still has to be an explicit second action — the
+  // control sits next to the row's edit button, which makes a misclick likely
+  // rather than theoretical.
+  const [confirming, setConfirming] = useState(false);
+
   const liability = isLiability(getBucketForType(account.type));
   const { text: balanceText, sign: balanceSign } = describeAccountBalance(
     account.type,
@@ -27,6 +41,7 @@ export default function AccountRow({ account, onEdit, onDelete }: Props) {
   return (
     <li
       data-liability={liability ? "true" : "false"}
+      data-confirming={confirming ? "true" : undefined}
       className="flex items-center justify-between py-4"
     >
       <button
@@ -47,13 +62,38 @@ export default function AccountRow({ account, onEdit, onDelete }: Props) {
         >
           {balanceText}
         </span>
-        <button
-          onClick={onDelete}
-          className="text-gray-300 hover:text-red-400 transition-colors text-xs"
-          aria-label={`Delete ${account.name}`}
-        >
-          ✕
-        </button>
+        {confirming ? (
+          <span className="flex items-center gap-2 text-xs">
+            <span className="text-gray-600">Archive?</span>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                onArchive();
+              }}
+              className="min-h-6 min-w-6 px-2 rounded text-red-700 font-medium hover:bg-red-50 transition-colors"
+            >
+              Yes, archive
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="min-h-6 min-w-6 px-2 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </span>
+        ) : (
+          // text-gray-500 is ~4.8:1 on white; the previous text-gray-300 was
+          // ~1.5:1, under WCAG 1.4.11's 3:1 floor for a non-text control.
+          // min-h-6/min-w-6 is 24x24 CSS px, the SC 2.5.8 target minimum —
+          // the bare glyph reserved roughly 10px.
+          <button
+            onClick={() => setConfirming(true)}
+            className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-gray-500 hover:text-red-600 hover:bg-gray-100 transition-colors"
+            aria-label={`Archive ${account.name}`}
+          >
+            ✕
+          </button>
+        )}
       </div>
     </li>
   );

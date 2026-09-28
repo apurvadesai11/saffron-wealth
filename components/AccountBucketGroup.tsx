@@ -4,10 +4,10 @@ import AccountRow from "./AccountRow";
 interface Props {
   group: AccountBucketGroupType;
   onEdit: (account: Account) => void;
-  onDelete: (account: Account) => void;
+  onArchive: (account: Account) => void;
 }
 
-export default function AccountBucketGroup({ group, onEdit, onDelete }: Props) {
+export default function AccountBucketGroup({ group, onEdit, onArchive }: Props) {
   return (
     <section data-bucket={group.bucket}>
       <div className="flex items-center justify-between mb-1">
@@ -24,7 +24,7 @@ export default function AccountBucketGroup({ group, onEdit, onDelete }: Props) {
             key={account.id}
             account={account}
             onEdit={() => onEdit(account)}
-            onDelete={() => onDelete(account)}
+            onArchive={() => onArchive(account)}
           />
         ))}
       </ul>

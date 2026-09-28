@@ -1,5 +1,15 @@
 import { join } from "node:path";
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+
+// The archive control is a two-step confirm now (item 14a): the row's control
+// opens the confirm, and "Yes, archive" commits it. Wording says archive
+// because archiveAccount never removes the row.
+async function archiveAccount(page: Page, name: string) {
+  await page.getByRole("button", { name: `Archive ${name}` }).click();
+  await page.getByRole("button", { name: /^Yes, archive/ }).click();
+}
+
 
 // Synthetic, entirely invented data (no real personal or financial data —
 // see CLAUDE.md's privacy rule): two accounts, monthly balances from
@@ -100,7 +110,7 @@ test.describe("Net Worth — history chart and balance-history import", () => {
     const before = parseCurrency(await netWorthCard.locator("p.text-2xl").innerText());
 
     // Archive (Delete is a soft-archive — lib/accounts.ts's archiveAccount).
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await archiveAccount(page, name);
     await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
 
     const archivedGroup = page.locator('[data-state="archived-group"]');
@@ -148,7 +158,7 @@ test.describe("Net Worth — history chart and balance-history import", () => {
     await expect(page.getByText(name)).toBeVisible();
 
     // Archive it immediately — same calendar day as creation.
-    await page.getByRole("button", { name: `Delete ${name}` }).click();
+    await archiveAccount(page, name);
     await expect(page.locator("[data-bucket]").getByText(name)).toHaveCount(0);
 
     // Add/delete don't refresh the chart locally (only a committed import
