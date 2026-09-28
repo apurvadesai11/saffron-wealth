@@ -39,7 +39,17 @@ describe("proxy — passthrough (never gated)", () => {
 });
 
 describe("proxy — auth pages (pass through + CSRF cookie)", () => {
-  const authPaths = ["/login", "/register", "/password-reset", "/password-reset/abc123"];
+  const authPaths = [
+    "/login",
+    "/register",
+    "/password-reset",
+    "/password-reset/abc123",
+    // The email-change confirmation link is opened from the new inbox, which
+    // is often a signed-out device. Gating it would strand the token, and the
+    // confirm POST needs the CSRF cookie this branch issues.
+    "/email-change",
+    "/email-change/abc123",
+  ];
 
   for (const path of authPaths) {
     it(`allows unauthenticated access to ${path}`, () => {

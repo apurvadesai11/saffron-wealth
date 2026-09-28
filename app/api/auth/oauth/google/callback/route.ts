@@ -15,6 +15,7 @@ import { setSessionCookie } from "@/lib/auth/session-cookie";
 import { recordAuthEvent } from "@/lib/auth/audit-log";
 import { clientIp, userAgent } from "@/lib/auth/request-info";
 import { seedDefaultCategories } from "@/lib/categories";
+import { sendOauthLinkNotice } from "@/lib/auth/email";
 
 function redirectErr(req: NextRequest, code: string) {
   return NextResponse.redirect(new URL(`/login?oauth=${code}`, req.url));
@@ -93,6 +94,10 @@ export async function GET(req: NextRequest) {
     let userId: string;
     let isNewUser = false;
     let didLinkExisting = false;
+    // Captured for the post-link notification. Linking to an existing account
+    // happens on an email match alone, without the person proving they control
+    // that account, so the owner has to be told out-of-band.
+    let linkedAccountContact: { email: string; firstName: string } | null = null;
 
     if (linked) {
       userId = linked.id;
@@ -113,12 +118,16 @@ export async function GET(req: NextRequest) {
       // account for the same email).
       const byEmail = await prisma.user.findUnique({
         where: { emailNormalized },
-        select: { id: true, profilePicture: true },
+        select: { id: true, profilePicture: true, email: true, firstName: true },
       });
 
       if (byEmail) {
         userId = byEmail.id;
         didLinkExisting = true;
+        linkedAccountContact = {
+          email: byEmail.email,
+          firstName: byEmail.firstName,
+        };
         await prisma.oAuthAccount.create({
           data: {
             userId,
@@ -186,6 +195,35 @@ export async function GET(req: NextRequest) {
         userAgent: ua,
         metadata: { isNewUser, didLinkExisting, emailNormalized },
       }),
+      // A distinct, queryable event for the link itself. google_oauth_signin
+      // carries didLinkExisting in metadata, but the link is the security-
+      // relevant act and deserves its own type rather than a flag inside a
+      // sign-in record.
+      didLinkExisting
+        ? recordAuthEvent({
+            type: "oauth_account_linked",
+            userId,
+            ipAddress: ip,
+            userAgent: ua,
+            metadata: {
+              provider: "google",
+              emailNormalized,
+              providerAccountId: profile.sub,
+            },
+          })
+        : Promise.resolve(),
+      // Best-effort, and never allowed to fail the sign-in — the link already
+      // happened, so a mail outage must not strand the user mid-flow.
+      linkedAccountContact
+        ? sendOauthLinkNotice({
+            to: linkedAccountContact.email,
+            firstName: linkedAccountContact.firstName,
+            provider: "Google",
+            linkedEmail: profile.email,
+          }).catch(e => {
+            console.error("[oauth/google/callback] link notice failed", e);
+          })
+        : Promise.resolve(),
       recordAuthEvent({
         type: "login_success",
         userId,

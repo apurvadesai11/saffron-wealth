@@ -26,6 +26,7 @@ model User {
   sessions             Session[]
   oauthAccounts        OAuthAccount[]
   resetTokens          PasswordResetToken[]
+  emailChangeTokens    EmailChangeToken[]
   failedLogins         FailedLogin[]
   authEvents           AuthEvent[]
   accounts             Account[]
@@ -75,6 +76,31 @@ model PasswordResetToken {
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// A pending email change, held here instead of mutating User.email on PATCH.
+// Mirrors PasswordResetToken (SHA-256 at rest, 15-minute TTL, single-use via
+// `consumedAt`) and additionally carries the address being claimed.
+//
+// The claim is NOT reserved by this row: `newEmailNormalized` is deliberately
+// not unique, because reserving an address the user has not yet proven they
+// control would let anyone deny it to its real owner. Uniqueness is therefore
+// re-checked at confirm time, where losing the race is a 409 rather than a
+// silent overwrite.
+model EmailChangeToken {
+  id                 String    @id @default(cuid())
+  userId             String
+  tokenHash          String    @unique
+  newEmail           String
+  newEmailNormalized String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

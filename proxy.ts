@@ -18,7 +18,16 @@ const CSRF_COOKIE = "sw_csrf";
 // Token is `randomBytes(32).toString("base64url")` => length 43.
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,86}$/;
 
-const AUTH_PATHS = ["/login", "/register", "/password-reset"];
+// /email-change is here because the confirmation link is opened from whatever
+// device reads the NEW inbox, which is very often not signed in. Gating it
+// would bounce the user to /login and strand the token; and the confirm POST
+// needs the CSRF cookie this branch issues.
+const AUTH_PATHS = [
+  "/login",
+  "/register",
+  "/password-reset",
+  "/email-change",
+];
 
 function isAuthPath(pathname: string): boolean {
   return AUTH_PATHS.some(
