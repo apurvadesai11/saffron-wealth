@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useApp } from "./app-context";
 import {
   formatAlertMessage,
-  getCurrentPeriodSpend,
+  getPeriodSpendByCategory,
   getDaysRemainingInPeriod,
   getProgressPercent,
   getPeriodKey,
@@ -48,6 +48,7 @@ export function useAlertState(): UseAlertStateResult {
     const asOf = getAsOf(now.getMonth(), now.getFullYear());
     const period = "monthly" as const;
     const periodKey = getPeriodKey(asOf, period);
+    const spendByCategory = getPeriodSpendByCategory(transactions, period, asOf);
     const alerts: ActiveAlert[] = [];
 
     categories
@@ -56,7 +57,7 @@ export function useAlertState(): UseAlertStateResult {
         const budget = budgets.find(b => b.categoryId === cat.id && b.period === period);
         if (!budget || budget.amount === 0) return;
 
-        const spent = getCurrentPeriodSpend(transactions, cat.id, period, asOf);
+        const spent = spendByCategory.get(cat.id) ?? 0;
         const percent = getProgressPercent(spent, budget.amount);
         const days = getDaysRemainingInPeriod(asOf, period);
 

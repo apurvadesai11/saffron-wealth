@@ -2,7 +2,9 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   Dispatch,
@@ -50,6 +52,19 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 let localId = 0; // offline-mode id counter (tests only — see AppProviderProps.offline)
+
+// Yesterday, relative to a "YYYY-MM-DD" string. The gap fetch stops one day
+// short of the current window start so it never re-downloads rows already
+// in state. Built in UTC so the arithmetic can't shift a day.
+//
+// Module scope, not a closure inside the provider: it captures nothing, and
+// hoisting it keeps ensureTransactionsFrom's dependency list to what actually
+// varies.
+function dayBefore(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return prev.toISOString().slice(0, 10);
+}
 
 interface AppProviderProps {
   children: ReactNode;
@@ -151,9 +166,10 @@ export function AppProvider({
   const [pendingRefreshBaseline, setPendingRefreshBaseline] = useState<number | null>(null);
   const mutationVersionRef = useRef(0);
 
-  function beginRefresh() {
+  // Reads a ref and calls a setState, so it never needs rebuilding.
+  const beginRefresh = useCallback(() => {
     setPendingRefreshBaseline(mutationVersionRef.current);
-  }
+  }, []);
 
   const seedTransactionsChanged = seedTransactions !== prevSeedTransactions;
   const seedBudgetsChanged = seedBudgets !== prevSeedBudgets;
@@ -176,21 +192,19 @@ export function AppProvider({
     if (pendingRefreshBaseline !== null) setPendingRefreshBaseline(null);
   }
 
-  // Yesterday, relative to a "YYYY-MM-DD" string. The gap fetch stops one day
-  // short of the current window start so it never re-downloads rows already
-  // in state. Built in UTC so the arithmetic can't shift a day.
-  function dayBefore(dateStr: string): string {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const prev = new Date(Date.UTC(y, m - 1, d - 1));
-    return prev.toISOString().slice(0, 10);
-  }
-
   // In-flight requests keyed by target `from`, so a consumer calling this
   // from a render-driven effect can't stack duplicate fetches for the same
   // range while the first is still running.
   const inFlightRef = useRef(new Map<string, Promise<void>>());
 
-  async function ensureTransactionsFrom(from: string) {
+  // windowFrom is in the dependency list rather than read through a ref: the
+  // gap boundary (`dayBefore(windowFrom)`) and the already-covered check
+  // (`from >= windowFrom`) must both see the current window, and a stale
+  // closure would silently fetch the wrong range. Rebuilding the callback when
+  // the window moves is the same value the unmemoized version saw on every
+  // render, so behavior is unchanged. Dedup survives the identity change
+  // because the in-flight map is a ref, not a closure variable.
+  const ensureTransactionsFrom = useCallback(async (from: string) => {
     // Null window means "everything is here"; a `from` at or after the
     // current start is already covered. Lexicographic comparison is valid
     // for "YYYY-MM-DD".
@@ -242,9 +256,9 @@ export function AppProvider({
       });
     inFlightRef.current.set(from, guarded);
     return guarded;
-  }
+  }, [windowFrom]);
 
-  async function addTransaction(t: Omit<Transaction, "id">) {
+  const addTransaction = useCallback(async (t: Omit<Transaction, "id">) => {
     if (offline) {
       setTransactions(prev => [{ ...t, id: `local-${++localId}` }, ...prev]);
       mutationVersionRef.current++;
@@ -262,9 +276,9 @@ export function AppProvider({
     }
     setTransactions(prev => [data.data.transaction as Transaction, ...prev]);
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  async function deleteTransaction(id: string) {
+  const deleteTransaction = useCallback(async (id: string) => {
     if (offline) {
       setTransactions(prev => prev.filter(t => t.id !== id));
       mutationVersionRef.current++;
@@ -281,9 +295,9 @@ export function AppProvider({
     }
     setTransactions(prev => prev.filter(t => t.id !== id));
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  async function saveBudgets(entries: Budget[]) {
+  const saveBudgets = useCallback(async (entries: Budget[]) => {
     if (offline) {
       setBudgets(prev => {
         const next = [...prev];
@@ -311,10 +325,13 @@ export function AppProvider({
     }
     setBudgets(data.data.budgets as Budget[]);
     mutationVersionRef.current++;
-  }
+  }, [offline]);
 
-  return (
-    <AppContext.Provider value={{
+  // Without this, every useApp() consumer re-rendered whenever the provider
+  // did — a fresh object plus five fresh closures per render — regardless of
+  // whether the data that consumer reads had changed.
+  const value = useMemo<AppContextValue>(
+    () => ({
       categories,
       transactions,
       budgets,
@@ -326,7 +343,23 @@ export function AppProvider({
       beginRefresh,
       dismissedKeys,
       setDismissedKeys,
-    }}>
+    }),
+    [
+      categories,
+      transactions,
+      budgets,
+      windowFrom,
+      ensureTransactionsFrom,
+      saveBudgets,
+      addTransaction,
+      deleteTransaction,
+      beginRefresh,
+      dismissedKeys,
+    ],
+  );
+
+  return (
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );

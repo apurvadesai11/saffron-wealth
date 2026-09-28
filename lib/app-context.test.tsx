@@ -6,9 +6,10 @@
 // rather than a slow one.
 import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { memo, useState } from "react";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { AppProvider, useApp } from "./app-context";
-import type { Transaction } from "./types";
+import type { Budget, Category, Transaction } from "./types";
 
 function tx(id: string, date: string, amount = 10): Transaction {
   return {
@@ -227,5 +228,96 @@ describe("AppProvider cannot reach mock data", () => {
 
   it("does not import from mock-data", () => {
     expect(source).not.toMatch(/from\s+"\.\/mock-data"/);
+  });
+});
+
+// AppProvider rebuilt its context value object and all five of its closures on
+// every render, so every useApp() consumer re-rendered whenever the provider
+// did — whether or not the data that consumer reads had changed. A parent state
+// change anywhere above it was enough.
+//
+// The assertion is a render count, not an inspection of the dependency arrays:
+// a memoized consumer that re-renders is the actual defect, and it is what a
+// wrong dependency list would bring back.
+describe("AppProvider memoization", () => {
+  // Referentially stable across re-renders, the way real seed props are: the
+  // (app) layout is a server component, so its arrays only change identity
+  // when the server actually re-ran.
+  const SEED_CATEGORIES: Category[] = [];
+  const SEED_BUDGETS: Budget[] = [];
+  const SEED_TRANSACTIONS: Transaction[] = [tx("a", "2026-09-01")];
+
+  let consumerRenders = 0;
+  let seen: ReturnType<typeof useApp>[] = [];
+  let bump: () => void = () => {};
+
+  // memo() alone does not stop a context consumer from re-rendering — a new
+  // context value identity re-renders it regardless of its props. That is
+  // precisely what this measures.
+  const MemoConsumer = memo(function MemoConsumer() {
+    const ctx = useApp();
+    consumerRenders++;
+    seen.push(ctx);
+    return <span data-testid="count">{ctx.budgets.length}</span>;
+  });
+
+  function Harness() {
+    const [n, setN] = useState(0);
+    bump = () => setN(x => x + 1);
+    return (
+      <AppProvider
+        seedCategories={SEED_CATEGORIES}
+        seedTransactions={SEED_TRANSACTIONS}
+        seedBudgets={SEED_BUDGETS}
+      >
+        {/* Re-renders the provider on every bump, as any parent state change
+            above it would. */}
+        <span data-testid="tick">{n}</span>
+        <MemoConsumer />
+      </AppProvider>
+    );
+  }
+
+  beforeEach(() => {
+    consumerRenders = 0;
+    seen = [];
+  });
+
+  it("does not re-render a consumer when the provider re-renders with nothing changed", () => {
+    render(<Harness />);
+    const initial = consumerRenders;
+    expect(initial).toBeGreaterThan(0);
+
+    act(() => bump());
+    act(() => bump());
+    act(() => bump());
+
+    expect(screen.getByTestId("tick")).toHaveTextContent("3");
+    // Three provider re-renders, zero consumer re-renders. Unmemoized this was
+    // three.
+    expect(consumerRenders).toBe(initial);
+  });
+
+  it("keeps the context value identical across a provider re-render", () => {
+    render(<Harness />);
+    act(() => bump());
+
+    expect(seen[seen.length - 1]).toBe(seen[0]);
+  });
+
+  it("keeps all five callbacks identical across a provider re-render", () => {
+    render(<Harness />);
+    const first = seen[0];
+    act(() => bump());
+    // The value is memoized, so re-reading it is the same object; assert the
+    // callbacks individually anyway, because a missing useCallback shows up
+    // here first if the value's dependency list is ever loosened.
+    const last = seen[seen.length - 1];
+
+    expect(last.ensureTransactionsFrom).toBe(first.ensureTransactionsFrom);
+    expect(last.saveBudgets).toBe(first.saveBudgets);
+    expect(last.addTransaction).toBe(first.addTransaction);
+    expect(last.deleteTransaction).toBe(first.deleteTransaction);
+    expect(last.beginRefresh).toBe(first.beginRefresh);
   });
 });

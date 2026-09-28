@@ -1,7 +1,7 @@
 import { Budget, Category, Transaction } from '@/lib/types';
 import {
   getCashflowProjection,
-  getCurrentPeriodSpend,
+  getPeriodSpendByCategory,
   getDaysElapsedInPeriod,
 } from '@/lib/budget-utils';
 
@@ -16,14 +16,18 @@ export default function CashflowCard({ transactions, budgets, categories, asOf }
   const projection   = getCashflowProjection(transactions, budgets, categories, asOf);
   const daysElapsed  = getDaysElapsedInPeriod(asOf, 'monthly');
 
-  // Month-to-date actuals: sum all transactions recorded this period
+  // Month-to-date actuals: sum all transactions recorded this period. One pass
+  // over the array, then a lookup per category — the per-category filter this
+  // replaced walked every transaction once for each of ~40 categories, twice.
+  const spendByCategory = getPeriodSpendByCategory(transactions, 'monthly', asOf);
+
   const totalReceived = categories
     .filter(c => c.type === 'income')
-    .reduce((sum, c) => sum + getCurrentPeriodSpend(transactions, c.id, 'monthly', asOf), 0);
+    .reduce((sum, c) => sum + (spendByCategory.get(c.id) ?? 0), 0);
 
   const totalSpent = categories
     .filter(c => c.type === 'expense')
-    .reduce((sum, c) => sum + getCurrentPeriodSpend(transactions, c.id, 'monthly', asOf), 0);
+    .reduce((sum, c) => sum + (spendByCategory.get(c.id) ?? 0), 0);
 
   const mtdNet        = totalReceived - totalSpent;
   const netPositive   = projection.projectedNet >= 0;

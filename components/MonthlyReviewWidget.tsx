@@ -6,6 +6,7 @@ import { useAlertState, getAsOf } from "@/lib/use-alert-state";
 import {
   buildBudgetProgressList,
   getCurrentPeriodSpend,
+  getPeriodSpendByCategory,
   getHistoricalAverage,
   getPeriodKey,
 } from "@/lib/budget-utils";
@@ -88,12 +89,15 @@ export default function MonthlyReviewWidget() {
       return;
     }
 
-    // FR-19: clear dismissed keys for categories where budget increased
+    // FR-19: clear dismissed keys for categories where budget increased.
+    // Batched: this sweep is per-entry, and Auto-Set All produces one entry
+    // per category with history.
     const periodKey = getPeriodKey(asOf, "monthly");
+    const spendByCategory = getPeriodSpendByCategory(transactions, "monthly", asOf);
     entries.forEach(({ categoryId, amount: newAmount }) => {
       const oldAmount = oldAmounts.get(categoryId);
       if (oldAmount !== undefined && newAmount > oldAmount) {
-        const spent = getCurrentPeriodSpend(transactions, categoryId, "monthly", asOf);
+        const spent = spendByCategory.get(categoryId) ?? 0;
         const newPercent = (spent / newAmount) * 100;
         const thresholds: number[] = [];
         if (newPercent < 80)  thresholds.push(80);
