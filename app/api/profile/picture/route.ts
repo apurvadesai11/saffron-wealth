@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   uploadAvatar,
+  deleteAvatar,
   validateImageBuffer,
   processAvatarImage,
   MAX_AVATAR_BYTES,
@@ -55,10 +56,31 @@ export const POST = withApiHandler(
       return err("UPLOAD_FAILED", "Could not save the image. Try again.", 500);
     }
 
+    // Read before the update: the old pointer is the only handle on the old
+    // blob, and the update overwrites it.
+    const previous = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { profilePicture: true },
+    });
+
     await prisma.user.update({
       where: { id: session.user.id },
       data: { profilePicture: publicUrl },
     });
+
+    // Strictly after the pointer has moved. Deleting first would leave a
+    // broken image if the update then failed. deleteAvatar ignores anything we
+    // did not write — notably OAuth users' lh3.googleusercontent.com URLs —
+    // and never throws on a storage failure, but the await is guarded anyway
+    // so a future change there cannot turn an orphaned blob into a failed
+    // upload. An orphan is the cheaper outcome.
+    if (previous?.profilePicture) {
+      try {
+        await deleteAvatar(previous.profilePicture);
+      } catch (deleteErr) {
+        console.error("[profile/picture] deleting previous avatar failed", deleteErr);
+      }
+    }
 
     return NextResponse.json({
       ok: true,

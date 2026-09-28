@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -33,6 +33,84 @@ export async function uploadAvatar(buffer: Buffer): Promise<string> {
   const filepath = path.join(LOCAL_UPLOAD_DIR, filename);
   await writeFile(filepath, buffer);
   return `/uploads/avatars/${filename}`;
+}
+
+const LOCAL_URL_PREFIX = "/uploads/avatars/";
+// The host Vercel Blob serves from, and the prefix uploadAvatar writes under.
+const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
+const BLOB_PATH_PREFIX = "/avatars/";
+
+/**
+ * Whether `url` is an avatar this app wrote, and may therefore delete.
+ *
+ * The case this exists for: OAuth users' User.profilePicture is Google's own
+ * lh3.googleusercontent.com URL, copied straight from the ID token profile
+ * (app/api/auth/oauth/google/callback/route.ts). We do not own it, and a
+ * delete must never be attempted against it. Anything not recognizably ours
+ * is left alone — the default is "not mine".
+ */
+export function isOwnedAvatarUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+
+  if (url.startsWith(LOCAL_URL_PREFIX)) {
+    // A stored value that walks out of the upload directory is not ours,
+    // however it got into the column. Checked on the decoded form too, so an
+    // encoded traversal can't slip through before path.resolve sees it.
+    const name = url.slice(LOCAL_URL_PREFIX.length);
+    let decoded = name;
+    try {
+      decoded = decodeURIComponent(name);
+    } catch {
+      return false;
+    }
+    if (!name || name !== decoded || decoded.includes("/") || decoded.includes("\\")) {
+      return false;
+    }
+    const resolved = path.resolve(LOCAL_UPLOAD_DIR, decoded);
+    return path.dirname(resolved) === path.resolve(LOCAL_UPLOAD_DIR);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  // Host comparison, not a substring match on the whole URL: a path segment
+  // that merely spells the blob domain must not qualify.
+  return (
+    parsed.protocol === "https:" &&
+    parsed.hostname.endsWith(BLOB_HOST_SUFFIX) &&
+    parsed.pathname.startsWith(BLOB_PATH_PREFIX)
+  );
+}
+
+/**
+ * Best-effort removal of a previously uploaded avatar. Returns whether the
+ * blob is gone.
+ *
+ * Never throws. An orphaned blob is a smaller problem than a failed avatar
+ * update, so callers treat a false return as nothing more than a log line —
+ * the same posture recordAuthEvent takes toward audit-write failures.
+ */
+export async function deleteAvatar(url: string | null | undefined): Promise<boolean> {
+  if (!isOwnedAvatarUrl(url)) return false;
+  const owned = url as string;
+
+  try {
+    if (owned.startsWith(LOCAL_URL_PREFIX)) {
+      const name = decodeURIComponent(owned.slice(LOCAL_URL_PREFIX.length));
+      await unlink(path.join(LOCAL_UPLOAD_DIR, name));
+      return true;
+    }
+
+    const { del } = await import("@vercel/blob");
+    await del(owned);
+    return true;
+  } catch {
+    // Already gone, permissions, network — all non-fatal by design.
+    return false;
+  }
 }
 
 export interface ImageValidationResult {
