@@ -790,7 +790,13 @@ A few likely places that need a touch:
   `vi.hoisted` + `vi.mock("next/headers")` for the session cookie, and
   `helpers.ts` for `seedUser`/`seedSession`/`makeRequest`.
 - **New auth primitive?** Add a sibling file in `lib/auth/` and a matching
-  `*.test.ts`. The bar in this directory is "one test file per module."
+  `*.test.ts`. The bar in this directory is "one test file per module" — and it
+  is now actually met, with two deliberate exceptions:
+  `csrf-shared.ts` (two string constants) and `blocklist-data.ts` (a literal
+  array of weak passwords, exercised through `blocklist.ts`'s own tests). Both
+  are pure data, so a test would restate the file rather than pin behavior. Any
+  module with a branch, a regex or a derived value gets a test, including small
+  ones — `csrf-client.ts` is ten lines and has both.
 - **New React component?** Colocate a `*.test.tsx` next to it. Use
   `renderWithApp` from `components/__tests__/test-utils.tsx` if the
   component reads `useApp()`; plain `render` from RTL otherwise. If color
