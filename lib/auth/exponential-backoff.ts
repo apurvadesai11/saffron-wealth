@@ -1,4 +1,11 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+// Mirrors AccountDbClient in lib/accounts.ts and TransactionDbClient in
+// lib/transactions.ts: accept either the singleton or a transaction client, so
+// a caller already inside a transaction does not have to open a second
+// connection to be read consistently.
+export type BackoffDbClient = Prisma.TransactionClient | PrismaClient;
 
 // Per-account exponential backoff. Counts FailedLogin rows for an email since
 // the user's most recent login_success (audit event), and returns the seconds
@@ -27,8 +34,9 @@ export interface BackoffStatus {
 
 export async function getBackoffStatus(
   emailNormalized: string,
+  client: BackoffDbClient = prisma,
 ): Promise<BackoffStatus> {
-  const lastSuccess = await prisma.authEvent.findFirst({
+  const lastSuccess = await client.authEvent.findFirst({
     where: {
       type: "login_success",
       metadata: {
@@ -41,7 +49,7 @@ export async function getBackoffStatus(
   });
   const since = lastSuccess?.createdAt ?? new Date(0);
 
-  const failures = await prisma.failedLogin.count({
+  const failures = await client.failedLogin.count({
     where: {
       emailNormalized,
       attemptedAt: { gt: since },
@@ -58,7 +66,7 @@ export async function getBackoffStatus(
     };
   }
 
-  const lastFailure = await prisma.failedLogin.findFirst({
+  const lastFailure = await client.failedLogin.findFirst({
     where: { emailNormalized, attemptedAt: { gt: since } },
     orderBy: { attemptedAt: "desc" },
     select: { attemptedAt: true },
