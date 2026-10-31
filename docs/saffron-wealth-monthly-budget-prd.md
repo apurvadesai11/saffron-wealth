@@ -360,7 +360,7 @@ The `useEffect` + `alertRecords` state pattern was replaced with a `useMemo` der
 Previously only `handleSave` cleared stale alert state when a budget was increased. Now `handleAutoSetAll` also clears dismissed keys for categories where the new budget causes spend to drop below a previously-dismissed threshold.
 
 **Fix: Dark mode CSS removed**
-`globals.css` defined dark mode CSS variables but the UI used hardcoded light-mode Tailwind classes, causing a visual mismatch for users with `prefers-color-scheme: dark`. The dark mode block was removed; the app is light-mode only.
+`globals.css` defined dark mode CSS variables but the UI used hardcoded light-mode Tailwind classes, causing a visual mismatch for users with `prefers-color-scheme: dark`. The dark mode block was removed; the app is light-mode only. *(Superseded: dark mode returned with every colour routed through theme tokens — see `docs/decisions/0012-theme-tokens-and-cookie-preference.md`.)*
 
 **Fix: Transaction ID generation**
 Replaced `Date.now()` with an incrementing counter to prevent duplicate IDs when transactions are added in rapid succession.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AuthFormError from "@/components/auth/AuthFormError";
 import PasswordStrengthHint from "@/components/auth/PasswordStrengthHint";
 import ProfilePictureUploader from "@/components/auth/ProfilePictureUploader";
+import ThemeSelector from "@/components/ThemeSelector";
 import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
@@ -247,7 +248,7 @@ export default function ProfilePage() {
           ) : null}
           <button
             type="submit"
-            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
+            className="bg-accent-solid text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors disabled:opacity-60"
             disabled={profileSaving}
           >
             {profileSaving ? "Saving…" : "Save changes"}
@@ -309,12 +310,20 @@ export default function ProfilePage() {
           ) : null}
           <button
             type="submit"
-            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
+            className="bg-accent-solid text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors disabled:opacity-60"
             disabled={passwordSaving}
           >
             {passwordSaving ? "Updating…" : "Update password"}
           </button>
         </form>
+      </section>
+
+      <section className="bg-surface rounded-2xl shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-fg-secondary mb-4">Appearance</h2>
+        <ThemeSelector />
+        <p className="text-xs text-fg-faint mt-2">
+          System follows your device. Saved in this browser only.
+        </p>
       </section>
 
       <section className="bg-surface rounded-2xl shadow-sm p-6">

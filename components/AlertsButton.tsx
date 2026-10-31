@@ -56,7 +56,7 @@ export default function AlertsButton() {
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
           {activeAlerts.length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 bg-danger-muted text-on-solid text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+            <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 bg-danger-solid text-on-solid text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
               {activeAlerts.length}
             </span>
           )}

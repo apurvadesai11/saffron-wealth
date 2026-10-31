@@ -29,6 +29,7 @@ asserted.
 | **Cashflow forecast** | Budgeted income/expenses, projected net, per-category spend-rate extrapolation to month-end |
 | **Transactions** | Add/delete, six-way filtering, server-side paging, Monarch CSV import with stable-ID dedup |
 | **Net Worth** (Phases 1–3) | 12 account types across 5 buckets, current net worth, over-time chart with range selector, archive/restore, Monarch balance-history backfill |
+| **Dark mode** | Light / System / Dark on the profile page, defaulting to the OS. Every colour is a theme token, so a new component gets both themes for free |
 
 **Where that leaves us:** tracking is solid and all first-class financial data is persisted.
 Planning is one month deep — the cashflow forecast is the only forward-looking feature in the
@@ -173,7 +174,6 @@ Recording these so they don't get re-litigated:
 - **Multi-currency** — single currency until there's a reason.
 - **Multi-user / household sharing** — every model is scoped by `userId`, so this stays possible,
   but it isn't a goal.
-- **Dark mode** — the `globals.css` dark-mode block was deliberately removed. Light mode only.
 - **Tax filing or tax-optimization engine** — retirement planning (#6) models tax *drag* on
   withdrawal decisions. It does not become tax software.
 - **Commercial / multi-tenant productization** — this is a personal project built to learn and to

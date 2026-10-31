@@ -116,7 +116,7 @@ export default function TransactionsPage() {
             </button>
             <button
               onClick={() => setShowForm(prev => !prev)}
-              className="bg-accent text-on-solid rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-accent-strong transition-colors"
+              className="bg-accent-solid text-on-solid rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
             >
               {showForm ? "Cancel" : "+ Add Transaction"}
             </button>

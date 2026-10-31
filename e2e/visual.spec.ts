@@ -46,7 +46,10 @@ test.beforeAll(async ({ authedUser }) => {
   });
 });
 
-const SHOT = { fullPage: true, maxDiffPixels: 0, animations: "disabled" as const };
+// threshold: 0 matters as much as maxDiffPixels: 0. Playwright's default
+// per-pixel tolerance (0.2) treats nearby colours as equal, and passed a
+// field that was grey instead of the dark surface colour.
+const SHOT = { fullPage: true, maxDiffPixels: 0, threshold: 0, animations: "disabled" as const };
 
 async function settle(page: Page) {
   await page.waitForLoadState("networkidle");
@@ -54,72 +57,80 @@ async function settle(page: Page) {
   await page.waitForTimeout(400);
 }
 
-test.describe("@visual screens", () => {
-  test("monthly review — budget and cashflow", async ({ page }) => {
-    await page.goto("/");
-    await settle(page);
-    await expect(page).toHaveScreenshot("review-current.png", SHOT);
+// Light shots keep their original names, so baselines from before dark mode
+// existed still apply; dark shots get a suffix.
+for (const scheme of ["light", "dark"] as const) {
+  const name = (base: string) => (scheme === "light" ? `${base}.png` : `${base}-dark.png`);
 
-    // The seeded transactions are in Feb 2026; walk back so every bar colour shows.
-    const prev = page.getByRole("button", { name: "Previous month" });
-    while (!(await page.getByText(/February 2026/).isVisible())) {
-      await prev.click();
-    }
-    await settle(page);
-    await expect(page).toHaveScreenshot("review-budget.png", SHOT);
+  test.describe(`@visual screens (${scheme})`, () => {
+    test.use({ colorScheme: scheme });
 
-    await page.getByRole("button", { name: "cashflow" }).click();
-    await settle(page);
-    await expect(page).toHaveScreenshot("review-cashflow.png", SHOT);
+    test("monthly review — budget and cashflow", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("review-current"), SHOT);
 
-    await page.getByRole("button", { name: /budget alert/ }).click();
-    await expect(page.getByRole("dialog", { name: "Budget alerts" })).toBeVisible();
-    await expect(page).toHaveScreenshot("review-alerts.png", SHOT);
-  });
+      // The seeded transactions are in Feb 2026; walk back so every bar colour shows.
+      const prev = page.getByRole("button", { name: "Previous month" });
+      while (!(await page.getByText(/February 2026/).isVisible())) {
+        await prev.click();
+      }
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("review-budget"), SHOT);
 
-  test("transactions — list, add form, import modal", async ({ page }) => {
-    await page.goto("/transactions");
-    await settle(page);
-    await expect(page).toHaveScreenshot("transactions.png", SHOT);
+      await page.getByRole("button", { name: "cashflow" }).click();
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("review-cashflow"), SHOT);
 
-    await page.getByRole("button", { name: "+ Add Transaction" }).click();
-    await settle(page);
-    await expect(page).toHaveScreenshot("transactions-add.png", SHOT);
-    await page.reload();
+      await page.getByRole("button", { name: /budget alert/ }).click();
+      await expect(page.getByRole("dialog", { name: "Budget alerts" })).toBeVisible();
+      await expect(page).toHaveScreenshot(name("review-alerts"), SHOT);
+    });
 
-    await page.getByRole("button", { name: "Import from Monarch" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page).toHaveScreenshot("transactions-import.png", SHOT);
-  });
+    test("transactions — list, add form, import modal", async ({ page }) => {
+      await page.goto("/transactions");
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("transactions"), SHOT);
 
-  test("net worth — page, archived group, edit modal", async ({ page }) => {
-    await page.goto("/net-worth");
-    await settle(page);
-    await page.getByText(/^Archived \(/).click();
-    await expect(page).toHaveScreenshot("net-worth.png", SHOT);
+      await page.getByRole("button", { name: "+ Add Transaction" }).click();
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("transactions-add"), SHOT);
+      await page.reload();
 
-    await page.getByRole("button", { name: /^Visual Checking Cash/ }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page).toHaveScreenshot("net-worth-edit.png", SHOT);
-  });
+      await page.getByRole("button", { name: "Import from Monarch" }).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(page).toHaveScreenshot(name("transactions-import"), SHOT);
+    });
 
-  test("profile", async ({ page }) => {
-    await page.goto("/profile");
-    await settle(page);
-    // The worker user's email and name carry a timestamp and worker index.
-    await expect(page).toHaveScreenshot("profile.png", {
-      ...SHOT,
-      mask: [page.locator("input"), page.getByText(/e2e-worker-/)],
+    test("net worth — page, archived group, edit modal", async ({ page }) => {
+      await page.goto("/net-worth");
+      await settle(page);
+      await page.getByText(/^Archived \(/).click();
+      await expect(page).toHaveScreenshot(name("net-worth"), SHOT);
+
+      await page.getByRole("button", { name: /^Visual Checking Cash/ }).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(page).toHaveScreenshot(name("net-worth-edit"), SHOT);
+    });
+
+    test("profile", async ({ page }) => {
+      await page.goto("/profile");
+      await settle(page);
+      // The worker user's email and name carry a timestamp and worker index.
+      await expect(page).toHaveScreenshot(name("profile"), {
+        ...SHOT,
+        mask: [page.locator("input"), page.getByText(/e2e-worker-/)],
+      });
+    });
+
+    test("auth pages", async ({ browser }) => {
+      const anon = await browser.newPage({ colorScheme: scheme });
+      for (const path of ["/login", "/register", "/password-reset"]) {
+        await anon.goto(path);
+        await settle(anon);
+        await expect(anon).toHaveScreenshot(name(`auth${path.replace("/", "-")}`), SHOT);
+      }
+      await anon.close();
     });
   });
-
-  test("auth pages", async ({ browser }) => {
-    const anon = await browser.newPage();
-    for (const path of ["/login", "/register", "/password-reset"]) {
-      await anon.goto(path);
-      await settle(anon);
-      await expect(anon).toHaveScreenshot(`auth${path.replace("/", "-")}.png`, SHOT);
-    }
-    await anon.close();
-  });
-});
+}

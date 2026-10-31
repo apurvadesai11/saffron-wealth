@@ -6,3 +6,19 @@ body {
   @apply bg-surface text-fg-base;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@layer base {
+  /* Preflight hardcodes gray-400 for placeholders, which no theme controls. */
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-fg-faint;
+  }
+
+  /* Under `color-scheme: dark` the browser fills fields with its own neutral
+     grey, which clashes with the palette. White in light mode, as before. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    @apply bg-surface;
+  }
+}
