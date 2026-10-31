@@ -158,6 +158,9 @@ model Account {
   // past and present, while keeping it listed. Unlike archivedAt it doesn't
   // say the account closed, so it has no date.
   hiddenFromNetWorth Boolean   @default(false)
+  // The owner's drag-and-drop position within the account's section. Null
+  // until they first reorder it; null sorts after placed accounts.
+  sortOrder          Int?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

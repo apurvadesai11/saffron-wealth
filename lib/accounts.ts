@@ -36,7 +36,9 @@ function mapAccount(row: PrismaAccount): Account {
 export async function listAccounts(userId: string): Promise<Account[]> {
   const rows = await prisma.account.findMany({
     where: { userId, archivedAt: null },
-    orderBy: { createdAt: "asc" },
+    // Placed accounts in the owner's order, then never-placed ones (new, or
+    // in a section that's never been reordered) by creation.
+    orderBy: [{ sortOrder: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
   });
   return rows.map(mapAccount);
 }
@@ -146,6 +148,22 @@ export async function updateAccount(
   });
 
   return mapAccount(row);
+}
+
+// Saves one section's drag-and-drop order. Only the named accounts move, so a
+// section's save leaves every other section's order alone. Returns false
+// without writing anything if any id isn't one of the user's active accounts.
+export async function reorderAccounts(userId: string, accountIds: string[]): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const owned = await tx.account.count({
+      where: { id: { in: accountIds }, userId, archivedAt: null },
+    });
+    if (owned !== accountIds.length) return false;
+    for (const [sortOrder, id] of accountIds.entries()) {
+      await tx.account.update({ where: { id }, data: { sortOrder } });
+    }
+    return true;
+  });
 }
 
 // Soft-delete: marks the account archived (hidden from listAccounts / net

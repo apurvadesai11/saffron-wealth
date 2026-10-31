@@ -8,7 +8,7 @@
 // collapsed <details> in muted grey, which reads as "set aside". Uncategorized
 // read as "counted".
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AccountBucketGroup from "./AccountBucketGroup";
 import type { Account, AccountBucketGroup as Group } from "@/lib/types";
@@ -38,8 +38,16 @@ function group(over: Partial<Group> = {}): Group {
   };
 }
 
-function renderGroup(g: Group) {
-  return render(<AccountBucketGroup group={g} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
+function renderGroup(g: Group, onReorder = vi.fn()) {
+  return render(
+    <AccountBucketGroup
+      group={g}
+      onEdit={vi.fn()}
+      onArchive={vi.fn()}
+      onToggleHidden={vi.fn()}
+      onReorder={onReorder}
+    />,
+  );
 }
 
 // The bucket total and a single account's balance can render the same string,
@@ -145,5 +153,78 @@ describe("AccountBucketGroup — the uncategorized bucket", () => {
     const { container } = renderGroup(uncategorized);
 
     expect(headerTotal(container)).toBe("$250.00");
+  });
+});
+
+describe("AccountBucketGroup — drag-and-drop reordering", () => {
+  const three = group({
+    accounts: [
+      account({ id: "a", name: "Alpha" }),
+      account({ id: "b", name: "Bravo" }),
+      account({ id: "c", name: "Charlie" }),
+    ],
+  });
+
+  // happy-dom's DragEvent has no DataTransfer; the component only writes to it.
+  const dataTransfer = { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: "", dropEffect: "" };
+
+  function rowOf(name: string) {
+    return screen.getByText(name).closest("li")!;
+  }
+
+  function drag(from: string, onto: string) {
+    fireEvent.dragStart(screen.getByLabelText(`Drag to reorder ${from}`), { dataTransfer });
+    fireEvent.dragOver(rowOf(onto), { dataTransfer });
+    fireEvent.drop(rowOf(onto), { dataTransfer });
+  }
+
+  it("reports the section's new order when a row is dropped on another", () => {
+    const onReorder = vi.fn();
+    renderGroup(three, onReorder);
+
+    drag("Charlie", "Alpha");
+
+    expect(onReorder).toHaveBeenCalledWith(["c", "a", "b"]);
+  });
+
+  it("does nothing when a row is dropped on itself", () => {
+    const onReorder = vi.fn();
+    renderGroup(three, onReorder);
+
+    drag("Bravo", "Bravo");
+
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  // Each section tracks only its own drag, so a row dragged from another
+  // section (which would mean changing its type) isn't accepted here.
+  it("ignores a drop that didn't start in this section", () => {
+    const onReorder = vi.fn();
+    renderGroup(three, onReorder);
+
+    fireEvent.dragOver(rowOf("Alpha"), { dataTransfer });
+    fireEvent.drop(rowOf("Alpha"), { dataTransfer });
+
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it("marks the row being dragged over so it can be highlighted", () => {
+    renderGroup(three);
+
+    fireEvent.dragStart(screen.getByLabelText("Drag to reorder Charlie"), { dataTransfer });
+    fireEvent.dragOver(rowOf("Alpha"), { dataTransfer });
+
+    expect(rowOf("Alpha")).toHaveAttribute("data-drag-state", "over");
+    expect(rowOf("Charlie")).toHaveAttribute("data-drag-state", "dragging");
+
+    fireEvent.dragEnd(screen.getByLabelText("Drag to reorder Charlie"), { dataTransfer });
+
+    expect(rowOf("Alpha")).not.toHaveAttribute("data-drag-state");
+  });
+
+  it("offers no drag handle when the section has only one account", () => {
+    renderGroup(group());
+
+    expect(screen.queryByLabelText(/Drag to reorder/)).not.toBeInTheDocument();
   });
 });

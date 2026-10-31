@@ -3,16 +3,25 @@
 import { useState } from "react";
 import type { AccountBucketGroup as AccountBucketGroupType, Account } from "@/lib/types";
 import { formatUsd } from "@/lib/money";
-import AccountRow from "./AccountRow";
+import { moveAccount } from "@/lib/account-utils";
+import AccountRow, { type AccountRowDrag } from "./AccountRow";
 
 interface Props {
   group: AccountBucketGroupType;
   onEdit: (account: Account) => void;
   onArchive: (account: Account) => void;
   onToggleHidden: (account: Account) => void;
+  // This section's account ids in their new order, after a drop.
+  onReorder: (orderedIds: string[]) => void;
 }
 
-export default function AccountBucketGroup({ group, onEdit, onArchive, onToggleHidden }: Props) {
+export default function AccountBucketGroup({
+  group,
+  onEdit,
+  onArchive,
+  onToggleHidden,
+  onReorder,
+}: Props) {
   // The uncategorized bucket contributes to none of the summary cards above
   // this list (see lib/account-utils.ts's computeNetWorth). Rendered
   // identically to Cash or Debt it read as counted, so the page showed a
@@ -23,6 +32,54 @@ export default function AccountBucketGroup({ group, onEdit, onArchive, onToggleH
   // Not remembered across reloads: every section opens expanded.
   const [expanded, setExpanded] = useState(true);
   const listId = `bucket-${group.bucket}-accounts`;
+
+  // Drag state lives per section, which is what confines a drag to it: a row
+  // dragged from another section leaves draggedId null here, so the drop is
+  // never accepted. Moving an account between sections would mean changing
+  // its type, which the edit dialog does.
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const ids = group.accounts.map((a) => a.id);
+
+  function endDrag() {
+    setDraggedId(null);
+    setOverId(null);
+  }
+
+  function dragFor(account: Account): AccountRowDrag | undefined {
+    if (group.accounts.length < 2) return undefined;
+    return {
+      state:
+        draggedId === account.id ? "dragging" : draggedId !== null && overId === account.id ? "over" : null,
+      handle: {
+        onDragStart: (e) => {
+          setDraggedId(account.id);
+          // Firefox won't start a drag without data; the id is read back from
+          // state, not from here.
+          e.dataTransfer?.setData("text/plain", account.id);
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+          // Drag the whole row's image, not just the grip's.
+          const row = e.currentTarget.closest("li");
+          if (row) e.dataTransfer?.setDragImage?.(row, 0, 0);
+        },
+        onDragEnd: endDrag,
+      },
+      target: {
+        onDragOver: (e) => {
+          if (draggedId === null) return;
+          e.preventDefault();
+          if (overId !== account.id) setOverId(account.id);
+        },
+        onDrop: (e) => {
+          if (draggedId === null) return;
+          e.preventDefault();
+          const next = moveAccount(ids, draggedId, account.id);
+          if (next !== ids) onReorder(next);
+          endDrag();
+        },
+      },
+    };
+  }
 
   return (
     <section
@@ -80,6 +137,7 @@ export default function AccountBucketGroup({ group, onEdit, onArchive, onToggleH
                 onEdit={() => onEdit(account)}
                 onArchive={() => onArchive(account)}
                 onToggleHidden={() => onToggleHidden(account)}
+                drag={dragFor(account)}
               />
             ))}
           </ul>

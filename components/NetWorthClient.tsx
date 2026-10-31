@@ -144,6 +144,40 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     }
   }
 
+  async function handleReorder(orderedIds: string[]) {
+    setError(null);
+    const previous = accounts;
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    const moving = new Set(orderedIds);
+    // The section's accounts go to the end of the array as a block. The page
+    // groups by bucket and keeps array order within one, so this sets the
+    // section's order and leaves every other section's alone. No refresh:
+    // order changes no total and nothing on the chart.
+    setAccounts([
+      ...accounts.filter((a) => !moving.has(a.id)),
+      ...orderedIds.flatMap((id) => byId.get(id) ?? []),
+    ]);
+    const csrf = readCsrfCookie() ?? "";
+    try {
+      const res = await fetch("/api/accounts/order", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrf,
+        },
+        body: JSON.stringify({ accountIds: orderedIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setAccounts(previous);
+        setError(data?.error?.message ?? "Couldn't save the new order.");
+      }
+    } catch {
+      setAccounts(previous);
+      setError("Network error.");
+    }
+  }
+
   async function handleRestore(account: Account) {
     setError(null);
     const csrf = readCsrfCookie() ?? "";
@@ -219,6 +253,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
               onEdit={(account) => setEditingAccount(account)}
               onArchive={handleArchive}
               onToggleHidden={handleToggleHidden}
+              onReorder={handleReorder}
             />
           ))
         )}

@@ -110,6 +110,60 @@ test.describe("Net Worth page", () => {
     await archivedGroup.locator("summary").click();
     await expect(archivedGroup.getByText(name)).toBeVisible();
   });
+
+  test("collapses a section and expands it again", async ({ page }) => {
+    const name = `E2E Collapse ${Date.now()}`;
+    await page.goto("/net-worth");
+    await page.getByRole("button", { name: "+ Add Account" }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Account name").fill(name);
+    await modal.getByLabel("Type").selectOption("cash");
+    await modal.getByLabel("Balance").fill("10");
+    await modal.getByRole("button", { name: "Add Account" }).click();
+    await expect(modal).not.toBeVisible();
+
+    const toggle = page.getByRole("button", { name: "Cash", exact: true });
+    await toggle.click();
+    await expect(page.getByText(name)).not.toBeVisible();
+    await toggle.click();
+    await expect(page.getByText(name)).toBeVisible();
+  });
+
+  // Relative order only: the worker's user shares the Cash section with
+  // whatever other tests in this worker created.
+  test("drags an account above another, and the order survives a reload", async ({ page }) => {
+    const stamp = Date.now();
+    const upper = `E2E Order Upper ${stamp}`;
+    const lower = `E2E Order Lower ${stamp}`;
+    await page.goto("/net-worth");
+    for (const name of [upper, lower]) {
+      await page.getByRole("button", { name: "+ Add Account" }).click();
+      const modal = page.getByRole("dialog");
+      await modal.getByLabel("Account name").fill(name);
+      await modal.getByLabel("Type").selectOption("cash");
+      await modal.getByLabel("Balance").fill("10");
+      await modal.getByRole("button", { name: "Add Account" }).click();
+      await expect(modal).not.toBeVisible();
+    }
+
+    const cashNames = () =>
+      page.locator('[data-bucket="cash"] li').evaluateAll((rows) =>
+        rows.map((r) => r.querySelector("button p")?.textContent?.trim() ?? ""),
+      );
+    const relative = async () => (await cashNames()).filter((n) => n === upper || n === lower);
+    expect(await relative()).toEqual([upper, lower]);
+
+    const responded = page.waitForResponse((r) => r.url().endsWith("/api/accounts/order"));
+    await page
+      .getByLabel(`Drag to reorder ${lower}`)
+      .dragTo(page.locator('[data-bucket="cash"] li', { hasText: upper }));
+    expect((await responded).ok()).toBe(true);
+    expect(await relative()).toEqual([lower, upper]);
+
+    await page.reload();
+    await expect(page.getByText(lower)).toBeVisible();
+    expect(await relative()).toEqual([lower, upper]);
+  });
 });
 
 // Item 9. The summary cards are driven by local state and update

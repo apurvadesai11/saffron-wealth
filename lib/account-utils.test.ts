@@ -10,6 +10,7 @@ import {
   isLiability,
   computeNetWorth,
   groupAccountsByBucket,
+  moveAccount,
 } from "./account-utils";
 import type { Account, AccountType } from "./types";
 
@@ -301,5 +302,24 @@ describe("accounts hidden from net worth are excluded from totals", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].accounts.map((a) => a.id)).toEqual(["counted", "hidden"]);
     expect(groups[0].bucketTotal).toBe(100);
+  });
+});
+
+// The dropped account takes the slot of the one it was dropped on, whichever
+// direction it travelled.
+describe("moveAccount", () => {
+  it.each([
+    ["down onto the last", "a", "c", ["b", "c", "a"]],
+    ["down one", "a", "b", ["b", "a", "c"]],
+    ["up onto the first", "c", "a", ["c", "a", "b"]],
+    ["up one", "c", "b", ["a", "c", "b"]],
+    ["onto itself", "b", "b", ["a", "b", "c"]],
+  ])("moves %s", (_label, dragged, target, want) => {
+    expect(moveAccount(["a", "b", "c"], dragged, target)).toEqual(want);
+  });
+
+  it("leaves the order alone when either id isn't in it", () => {
+    expect(moveAccount(["a", "b"], "x", "a")).toEqual(["a", "b"]);
+    expect(moveAccount(["a", "b"], "a", "x")).toEqual(["a", "b"]);
   });
 });

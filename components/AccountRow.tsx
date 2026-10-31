@@ -20,6 +20,29 @@ interface Props {
   // Flips hiddenFromNetWorth. The row only reports the click; NetWorthClient
   // owns the PATCH and the totals.
   onToggleHidden: () => void;
+  // Present when the row can be dragged within its section. The section owns
+  // the drag; the row only renders the handle and wires its own events.
+  drag?: AccountRowDrag;
+}
+
+export interface AccountRowDrag {
+  state: "dragging" | "over" | null;
+  handle: Pick<React.HTMLAttributes<HTMLSpanElement>, "onDragStart" | "onDragEnd">;
+  target: Pick<React.HTMLAttributes<HTMLLIElement>, "onDragOver" | "onDrop">;
+}
+
+// A six-dot grip, drawn like the other icons in this file.
+function GripIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
+    </svg>
+  );
 }
 
 // Feather's "eye-off" glyph, drawn like the sidebar icons in lib/nav-config.ts.
@@ -46,7 +69,7 @@ function ClosedEyeIcon() {
   );
 }
 
-export default function AccountRow({ account, onEdit, onArchive, onToggleHidden }: Props) {
+export default function AccountRow({ account, onEdit, onArchive, onToggleHidden, drag }: Props) {
   // Inline rather than a modal: the action is recoverable, and nesting a
   // dialog inside the page for a reversible archive is heavier than the
   // decision warrants. It still has to be an explicit second action — the
@@ -90,8 +113,24 @@ export default function AccountRow({ account, onEdit, onArchive, onToggleHidden 
       data-liability={liability ? "true" : "false"}
       data-confirming={confirming ? "true" : undefined}
       data-hidden-from-net-worth={hidden ? "true" : undefined}
-      className="flex items-center justify-between py-4"
+      data-drag-state={drag?.state ?? undefined}
+      {...drag?.target}
+      className={`flex items-center justify-between py-4 transition-colors ${
+        drag?.state === "over" ? "bg-accent-soft" : ""
+      } ${drag?.state === "dragging" ? "opacity-50" : ""}`}
     >
+      {/* Only the grip starts a drag, so a click on the row still edits it. */}
+      {drag && (
+        <span
+          draggable
+          {...drag.handle}
+          aria-label={`Drag to reorder ${account.name}`}
+          title="Drag to reorder"
+          className="mr-2 shrink-0 cursor-grab active:cursor-grabbing text-fg-faint hover:text-fg-muted"
+        >
+          <GripIcon />
+        </span>
+      )}
       <button
         onClick={onEdit}
         className="flex-1 text-left hover:opacity-80 transition-opacity"

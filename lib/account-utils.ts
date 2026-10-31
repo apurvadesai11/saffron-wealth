@@ -138,6 +138,18 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
   };
 }
 
+// The section order after dropping `draggedId` on `targetId`: the dropped
+// account takes the target's slot, which reads as "insert above" when moving
+// up and "insert below" when moving down. An unknown id changes nothing.
+export function moveAccount(ids: string[], draggedId: string, targetId: string): string[] {
+  const from = ids.indexOf(draggedId);
+  const to = ids.indexOf(targetId);
+  if (from === -1 || to === -1 || from === to) return ids;
+  const next = ids.filter((id) => id !== draggedId);
+  next.splice(to, 0, draggedId);
+  return next;
+}
+
 // Groups accounts under their bucket in BUCKET_ORDER, omitting empty buckets.
 export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[] {
   return BUCKET_ORDER.flatMap((bucket) => {

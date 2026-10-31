@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Account } from "@/lib/types";
 import type { NetWorthPoint } from "@/lib/net-worth-history";
@@ -302,5 +302,47 @@ describe("NetWorthClient — hiding an account from net worth", () => {
     await waitFor(() => expect(screen.getByText("Save failed.")).toBeInTheDocument());
     expect(netWorthCard(container).getByText("$8,000.00")).toBeInTheDocument();
     expect(routerMocks.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("NetWorthClient — reordering accounts", () => {
+  const first = account({ id: "acc-1", name: "Chase Checking" });
+  const second = account({ id: "acc-2", name: "Ally Savings" });
+  const dataTransfer = { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: "", dropEffect: "" };
+
+  function names() {
+    return screen.getAllByText(/^(Chase Checking|Ally Savings)$/).map((el) => el.textContent);
+  }
+
+  function dragSecondOntoFirst() {
+    fireEvent.dragStart(screen.getByLabelText("Drag to reorder Ally Savings"), { dataTransfer });
+    const target = screen.getByText("Chase Checking").closest("li")!;
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+  }
+
+  it("shows the new order at once and saves it", async () => {
+    const spy = mockFetchOk({ accountIds: ["acc-2", "acc-1"] });
+    render(<NetWorthClient initialAccounts={[first, second]} initialArchivedAccounts={[]} series={series} />);
+
+    dragSecondOntoFirst();
+
+    expect(names()).toEqual(["Ally Savings", "Chase Checking"]);
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        "/api/accounts/order",
+        expect.objectContaining({ method: "PUT", body: JSON.stringify({ accountIds: ["acc-2", "acc-1"] }) }),
+      ),
+    );
+  });
+
+  it("puts the old order back and says so when the save fails", async () => {
+    mockFetchFailure("Couldn't save the new order.");
+    render(<NetWorthClient initialAccounts={[first, second]} initialArchivedAccounts={[]} series={series} />);
+
+    dragSecondOntoFirst();
+
+    await waitFor(() => expect(screen.getByText("Couldn't save the new order.")).toBeInTheDocument());
+    expect(names()).toEqual(["Chase Checking", "Ally Savings"]);
   });
 });
