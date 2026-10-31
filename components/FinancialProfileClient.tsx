@@ -27,6 +27,10 @@ interface Props {
 
 const controlClass =
   "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
+// The employer-match inputs sit inside a sentence, so they size to their
+// content rather than filling the row the way controlClass does.
+const inlineControlClass =
+  "w-20 border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 const labelClass = "block text-sm font-medium text-fg-secondary mb-1";
 const hintClass = "text-xs text-fg-faint mt-1.5";
 const errorClass = "text-xs text-danger-muted mt-1.5";
@@ -281,7 +285,7 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
                 aria-invalid={fieldErrors["employerMatch.matchPct"] ? true : undefined}
                 value={matchPct}
                 onChange={(e) => setMatchPct(e.target.value)}
-                className={`${controlClass} w-20`}
+                className={inlineControlClass}
               />
               <span>% of your contributions, up to</span>
               <input
@@ -291,7 +295,7 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
                 aria-invalid={fieldErrors["employerMatch.limitPct"] ? true : undefined}
                 value={matchLimitPct}
                 onChange={(e) => setMatchLimitPct(e.target.value)}
-                className={`${controlClass} w-20`}
+                className={inlineControlClass}
               />
               <span>% of salary</span>
             </div>

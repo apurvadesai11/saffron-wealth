@@ -69,7 +69,10 @@ export default function ContributionTargetsEditor({ rows, accounts, errors, onCh
         // Each row offers the accounts no other row has taken, plus its own.
         const options = accounts.filter((a) => a.id === row.accountId || !used.has(a.id));
         return (
-          <div key={row.key} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
+          <div
+            key={row.key}
+            className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start pb-3 border-b border-line-subtle sm:pb-0 sm:border-0"
+          >
             <div className="sm:col-span-6">
               <select
                 aria-label={`Contribution ${n} account`}

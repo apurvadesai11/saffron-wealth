@@ -89,7 +89,12 @@ export default function IncomeStreamsEditor({ rows, errors, onChange }: Props) {
         const n = i + 1;
         const err = (field: string) => errors[`incomeStreams.${i}.${field}`];
         return (
-          <div key={row.key} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
+          // Stacked on a phone, a row is four controls deep; the rule is what
+          // tells one stream from the next.
+          <div
+            key={row.key}
+            className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start pb-3 border-b border-line-subtle sm:pb-0 sm:border-0"
+          >
             <div className="sm:col-span-3">
               <select
                 aria-label={`Income ${n} type`}
@@ -118,7 +123,7 @@ export default function IncomeStreamsEditor({ rows, errors, onChange }: Props) {
               />
               {err("label") && <p className={errorClass}>{err("label")}</p>}
             </div>
-            <div className="sm:col-span-3">
+            <div className="sm:col-span-2">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-sm">$</span>
                 <input
@@ -126,7 +131,7 @@ export default function IncomeStreamsEditor({ rows, errors, onChange }: Props) {
                   inputMode="decimal"
                   aria-label={`Income ${n} annual amount`}
                   aria-invalid={err("annualAmount") ? true : undefined}
-                  placeholder="Per year, gross"
+                  placeholder="Per year"
                   value={row.annualAmount}
                   onChange={(e) => update(i, { annualAmount: e.target.value })}
                   className={`${controlClass} pl-7`}
@@ -134,7 +139,7 @@ export default function IncomeStreamsEditor({ rows, errors, onChange }: Props) {
               </div>
               {err("annualAmount") && <p className={errorClass}>{err("annualAmount")}</p>}
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-3">
               <select
                 aria-label={`Income ${n} frequency`}
                 aria-invalid={err("frequency") ? true : undefined}
@@ -167,7 +172,7 @@ export default function IncomeStreamsEditor({ rows, errors, onChange }: Props) {
 
       {errors.incomeStreams && <p className={errorClass}>{errors.incomeStreams}</p>}
 
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
         <button
           type="button"
           onClick={() => onChange([...rows, newIncomeDraft()])}
