@@ -212,6 +212,10 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     const name = `E2E Agree Hide ${Date.now()}`;
     await page.goto("/net-worth");
 
+    // A counted account of its own, so the chart still has points once the
+    // other one is hidden. On a fresh worker the hidden account would be the
+    // only one, and the chart would fall back to its empty state.
+    await addAccount(page, `E2E Hide Anchor ${Date.now()}`, "100");
     await addAccount(page, name, "1357");
     const withAccount = await latestChartValue(page);
 
