@@ -66,7 +66,7 @@ export default function EmailChangeConfirmPage({ params }: Props) {
   if (state.kind === "confirming") {
     return (
       <AuthCard title="Confirming your email" subtitle="One moment.">
-        <p className="text-sm text-gray-500">Applying the change…</p>
+        <p className="text-sm text-fg-muted">Applying the change…</p>
       </AuthCard>
     );
   }
@@ -77,13 +77,13 @@ export default function EmailChangeConfirmPage({ params }: Props) {
         title="Couldn't confirm that address"
         subtitle="The link may have expired or already been used."
         footer={
-          <Link href="/profile" className="text-blue-600 hover:text-blue-700">
+          <Link href="/profile" className="text-accent hover:text-accent-strong">
             Back to your profile
           </Link>
         }
       >
         <AuthFormError message={state.message} />
-        <p className="text-xs text-gray-500 mt-3">
+        <p className="text-xs text-fg-muted mt-3">
           Email-change links are valid for 15 minutes and can be used once.
           Request the change again from your profile to get a new link.
         </p>
@@ -96,16 +96,16 @@ export default function EmailChangeConfirmPage({ params }: Props) {
       title="Email address updated"
       subtitle="Use the new address to sign in from now on."
       footer={
-        <Link href="/profile" className="text-blue-600 hover:text-blue-700">
+        <Link href="/profile" className="text-accent hover:text-accent-strong">
           Go to your profile
         </Link>
       }
     >
-      <p className="text-sm text-gray-700" data-confirmed-email={state.email}>
+      <p className="text-sm text-fg-secondary" data-confirmed-email={state.email}>
         Your account email is now{" "}
         <span className="font-medium">{state.email}</span>.
       </p>
-      <p className="text-xs text-gray-500 mt-3">
+      <p className="text-xs text-fg-muted mt-3">
         Every other signed-in device was signed out as a precaution.
       </p>
     </AuthCard>

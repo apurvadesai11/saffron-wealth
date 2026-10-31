@@ -35,34 +35,34 @@ export default function CashflowCard({ transactions, budgets, categories, asOf }
   const hasMtdData    = totalReceived > 0 || totalSpent > 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+    <div className="bg-surface rounded-xl shadow-sm border border-line-subtle p-5">
+      <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-4">
         Cashflow Forecast
       </p>
 
       {/* ── Row 1: planned totals + projected net ─────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <p className="text-xs text-gray-500 mb-1">Budgeted Income</p>
-          <p className="text-xl font-bold text-green-600">
+          <p className="text-xs text-fg-muted mb-1">Budgeted Income</p>
+          <p className="text-xl font-bold text-success">
             ${projection.budgetedIncome.toLocaleString()}
           </p>
         </div>
 
         <div>
-          <p className="text-xs text-gray-500 mb-1">Budgeted Expenses</p>
-          <p className="text-xl font-bold text-gray-800">
+          <p className="text-xs text-fg-muted mb-1">Budgeted Expenses</p>
+          <p className="text-xl font-bold text-fg-soft">
             ${projection.budgetedExpenses.toLocaleString()}
           </p>
         </div>
 
         <div>
-          <p className="text-xs text-gray-500 mb-1">Projected Net</p>
-          <p className={`text-xl font-bold ${netPositive ? 'text-blue-600' : 'text-red-600'}`}>
+          <p className="text-xs text-fg-muted mb-1">Projected Net</p>
+          <p className={`text-xl font-bold ${netPositive ? 'text-accent' : 'text-danger'}`}>
             {netPositive ? '+' : ''}${Math.round(projection.projectedNet).toLocaleString()}
           </p>
           {/* Sub-label communicates whether this is a live projection or just the plan */}
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-fg-faint mt-0.5">
             {projection.isStaticProjection
               ? 'budget plan'
               : netPositive ? 'projected surplus' : 'projected deficit'
@@ -72,44 +72,44 @@ export default function CashflowCard({ transactions, budgets, categories, asOf }
       </div>
 
       {/* ── Divider ───────────────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 my-4" />
+      <div className="border-t border-line-subtle my-4" />
 
       {/* ── Row 2: month-to-date actuals ──────────────────────────────── */}
       <div>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+        <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-2">
           Month to Date
         </p>
 
         {hasMtdData ? (
           <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-sm">
-            <span className="text-gray-600">
+            <span className="text-fg-tertiary">
               Received{' '}
-              <span className="font-semibold text-green-600">
+              <span className="font-semibold text-success">
                 ${totalReceived.toLocaleString()}
               </span>
             </span>
-            <span className="text-gray-200 select-none">·</span>
-            <span className="text-gray-600">
+            <span className="text-fg-ghost select-none">·</span>
+            <span className="text-fg-tertiary">
               Spent{' '}
-              <span className="font-semibold text-gray-800">
+              <span className="font-semibold text-fg-soft">
                 ${totalSpent.toLocaleString()}
               </span>
             </span>
-            <span className="text-gray-200 select-none">·</span>
-            <span className="text-gray-600">
+            <span className="text-fg-ghost select-none">·</span>
+            <span className="text-fg-tertiary">
               Net{' '}
-              <span className={`font-semibold ${mtdPositive ? 'text-blue-600' : 'text-red-600'}`}>
+              <span className={`font-semibold ${mtdPositive ? 'text-accent' : 'text-danger'}`}>
                 {mtdPositive ? '+' : ''}${mtdNet.toLocaleString()}
               </span>
             </span>
           </div>
         ) : (
-          <p className="text-sm text-gray-400 italic">No transactions recorded yet.</p>
+          <p className="text-sm text-fg-faint italic">No transactions recorded yet.</p>
         )}
       </div>
 
       {/* ── Projection context note ───────────────────────────────────── */}
-      <p className="text-xs text-gray-400 mt-3">
+      <p className="text-xs text-fg-faint mt-3">
         {projection.isStaticProjection
           ? 'Showing budget plan — no spending data to project from yet.'
           : `Projecting from ${daysElapsed} day${daysElapsed === 1 ? '' : 's'} of spending data.`

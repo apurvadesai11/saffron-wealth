@@ -19,24 +19,24 @@ export default function ArchivedAccountsGroup({ accounts, onRestore }: Props) {
 
   return (
     <details data-state="archived-group">
-      <summary className="text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none">
+      <summary className="text-xs font-semibold text-fg-faint uppercase tracking-wide cursor-pointer select-none">
         Archived ({accounts.length})
       </summary>
-      <ul className="divide-y divide-gray-50 mt-2">
+      <ul className="divide-y divide-line-faint mt-2">
         {accounts.map((account) => (
           <li key={account.id} className="flex items-center justify-between py-3">
             <div>
-              <p className="text-sm font-medium text-gray-500">{account.name}</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-sm font-medium text-fg-muted">{account.name}</p>
+              <p className="text-xs text-fg-faint">
                 {ACCOUNT_TYPE_LABELS[account.type]}
                 {account.institution ? ` · ${account.institution}` : ""}
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm text-gray-400">${account.balance.toFixed(2)}</span>
+              <span className="text-sm text-fg-faint">${account.balance.toFixed(2)}</span>
               <button
                 onClick={() => onRestore(account)}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                className="text-xs font-medium text-accent hover:text-accent-strong transition-colors"
               >
                 Restore
               </button>

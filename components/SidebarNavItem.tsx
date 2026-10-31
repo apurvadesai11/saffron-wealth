@@ -20,8 +20,8 @@ export default function SidebarNavItem({ href, label, icon }: Props) {
       aria-current={active ? "page" : undefined}
       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors mx-2 ${
         active
-          ? "bg-gray-100 text-gray-900"
-          : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+          ? "bg-surface-muted text-fg"
+          : "text-fg-muted hover:bg-surface-sunken hover:text-fg-soft"
       }`}
     >
       {icon}

@@ -8,7 +8,7 @@ export default function GoogleSignInButton({ label = "Continue with Google" }: P
   return (
     <a
       href="/api/auth/oauth/google/start"
-      className="w-full flex items-center justify-center gap-2 border border-gray-300 rounded-lg py-2 px-4 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+      className="w-full flex items-center justify-center gap-2 border border-line-strong rounded-lg py-2 px-4 text-sm font-medium text-fg-secondary bg-surface hover:bg-surface-sunken transition-colors"
     >
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
         <path

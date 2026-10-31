@@ -97,11 +97,11 @@ export default function TransactionsPage() {
         onReset={() => setFilters(EMPTY_FILTERS)}
       />
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-surface rounded-xl shadow-sm border border-line-subtle">
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-800">Transactions</h2>
-            <p className="text-xs text-gray-400 mt-0.5" aria-live="polite">
+            <h2 className="text-lg font-semibold text-fg-soft">Transactions</h2>
+            <p className="text-xs text-fg-faint mt-0.5" aria-live="polite">
               {loading && rows.length === 0
                 ? "Loading…"
                 : `${rows.length} of ${total} ${total === 1 ? "transaction" : "transactions"}`}
@@ -110,13 +110,13 @@ export default function TransactionsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowImportModal(true)}
-              className="border border-gray-200 text-gray-700 rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-gray-50 transition-colors"
+              className="border border-line text-fg-secondary rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-surface-sunken transition-colors"
             >
               Import from Monarch
             </button>
             <button
               onClick={() => setShowForm(prev => !prev)}
-              className="bg-blue-600 text-white rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-blue-700 transition-colors"
+              className="bg-accent text-on-solid rounded-lg py-1.5 px-4 text-sm font-medium hover:bg-accent-strong transition-colors"
             >
               {showForm ? "Cancel" : "+ Add Transaction"}
             </button>
@@ -124,17 +124,17 @@ export default function TransactionsPage() {
         </div>
 
         {showForm && (
-          <div className="px-6 pb-6 border-b border-gray-100">
+          <div className="px-6 pb-6 border-b border-line-subtle">
             <TransactionForm onSubmitted={() => setShowForm(false)} />
           </div>
         )}
 
         {error ? (
           <div className="px-6 py-8 text-center" role="alert">
-            <p className="text-sm text-gray-500">{error}</p>
+            <p className="text-sm text-fg-muted">{error}</p>
             <button
               onClick={() => void load(null)}
-              className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="mt-3 text-sm font-medium text-accent hover:text-accent-strong"
             >
               Try again
             </button>
@@ -144,11 +144,11 @@ export default function TransactionsPage() {
             <TransactionList transactions={rows} />
 
             {nextCursor && (
-              <div className="px-6 py-4 border-t border-gray-100 text-center">
+              <div className="px-6 py-4 border-t border-line-subtle text-center">
                 <button
                   onClick={() => void load(nextCursor)}
                   disabled={loading}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:text-gray-400"
+                  className="text-sm font-medium text-accent hover:text-accent-strong disabled:text-fg-faint"
                 >
                   {loading ? "Loading…" : "Load more"}
                 </button>

@@ -9,16 +9,16 @@ interface Props {
 // Style map — full class names to prevent Tailwind v4 purging
 const STYLES: Record<AlertThreshold, { border: string; bg: string; icon: string; iconColor: string }> = {
   80:  {
-    border:    'border-amber-400',
-    bg:        'bg-amber-50',
+    border:    'border-warning-line-strong',
+    bg:        'bg-warning-soft',
     icon:      '⚠',
-    iconColor: 'text-amber-500',
+    iconColor: 'text-warning-muted',
   },
   100: {
-    border:    'border-red-400',
-    bg:        'bg-red-50',
+    border:    'border-danger-line-strong',
+    bg:        'bg-danger-soft',
     icon:      '!',
-    iconColor: 'text-red-500',
+    iconColor: 'text-danger-muted',
   },
 };
 
@@ -37,12 +37,12 @@ export default function AlertBanner({ threshold, message, onDismiss }: Props) {
       </span>
 
       {/* Message */}
-      <p className="flex-1 text-sm text-gray-700 leading-snug">{message}</p>
+      <p className="flex-1 text-sm text-fg-secondary leading-snug">{message}</p>
 
       {/* Dismiss */}
       <button
         onClick={onDismiss}
-        className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors text-lg leading-none mt-0.5"
+        className="shrink-0 text-fg-disabled hover:text-fg-muted transition-colors text-lg leading-none mt-0.5"
         aria-label="Dismiss alert"
       >
         ×

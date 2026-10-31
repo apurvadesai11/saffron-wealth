@@ -40,9 +40,9 @@ const sampleTx = (overrides: Partial<Transaction>): Transaction => ({
 describe("MonthlyReviewWidget", () => {
   it("defaults to the Budget tab and switches to Cashflow on click", async () => {
     renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions: [], budgets: [] });
-    expect(screen.getByRole("button", { name: /^budget$/i })).toHaveClass(/bg-gray-100/);
+    expect(screen.getByRole("button", { name: /^budget$/i })).toHaveClass(/bg-surface-muted/);
     await userEvent.click(screen.getByRole("button", { name: /^cashflow$/i }));
-    expect(screen.getByRole("button", { name: /^cashflow$/i })).toHaveClass(/bg-gray-100/);
+    expect(screen.getByRole("button", { name: /^cashflow$/i })).toHaveClass(/bg-surface-muted/);
   });
 
   it("Cashflow tab shows the no-data state when the selected month has no spend", async () => {

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+import { THEME_TOKENS, hexToChannels } from "../lib/theme-tokens";
 
 // Item 14. Two things the plan asks be verified in a real browser rather than
 // walked by hand, so they become regressions we keep:
@@ -138,9 +139,10 @@ test.describe("archive control accessibility", () => {
     expect(box!.height).toBeGreaterThanOrEqual(24);
 
     // The control's colour, resolved by the browser rather than inferred from
-    // a class name. text-gray-500 is rgb(107, 114, 128).
+    // a class name: fg-muted, the token the unit test's contrast check reads.
     const color = await control.evaluate((el) => getComputedStyle(el).color);
-    expect(color).toBe("rgb(107, 114, 128)");
+    const [r, g, b] = hexToChannels(THEME_TOKENS.light["fg-muted"]).split(" ");
+    expect(color).toBe(`rgb(${r}, ${g}, ${b})`);
 
     // One click asks; it does not archive.
     await control.click();

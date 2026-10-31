@@ -36,7 +36,7 @@ export default function AlertsButton() {
       <button
         onClick={() => setOpen(prev => !prev)}
         className={`relative w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-          open ? "bg-gray-100 text-gray-900" : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+          open ? "bg-surface-muted text-fg" : "text-fg-muted hover:bg-surface-sunken hover:text-fg-soft"
         }`}
         aria-label={`${activeAlerts.length} budget alert${activeAlerts.length === 1 ? "" : "s"}`}
         aria-expanded={open}
@@ -56,7 +56,7 @@ export default function AlertsButton() {
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
           {activeAlerts.length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+            <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 bg-danger-muted text-on-solid text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
               {activeAlerts.length}
             </span>
           )}
@@ -66,20 +66,20 @@ export default function AlertsButton() {
 
       {open && (
         <div
-          className="fixed sm:absolute left-16 sm:left-full top-16 sm:top-0 sm:ml-3 w-80 z-40 bg-white rounded-xl shadow-lg border border-gray-200 p-3"
+          className="fixed sm:absolute left-16 sm:left-full top-16 sm:top-0 sm:ml-3 w-80 z-40 bg-surface rounded-xl shadow-lg border border-line p-3"
           role="dialog"
           aria-label="Budget alerts"
         >
           <div className="flex items-center justify-between mb-2 px-1">
-            <p className="text-sm font-semibold text-gray-700">Alerts</p>
+            <p className="text-sm font-semibold text-fg-secondary">Alerts</p>
             <button
               onClick={() => setOpen(false)}
-              className="text-gray-300 hover:text-gray-500 transition-colors text-lg leading-none"
+              className="text-fg-disabled hover:text-fg-muted transition-colors text-lg leading-none"
               aria-label="Close"
             >×</button>
           </div>
           {activeAlerts.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-3">No active alerts.</p>
+            <p className="text-sm text-fg-faint text-center py-3">No active alerts.</p>
           ) : (
             <AlertPanel alerts={activeAlerts} onDismiss={dismissAlert} />
           )}

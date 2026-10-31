@@ -4,5 +4,5 @@ interface Props {
 
 export default function AuthFormError({ message }: Props) {
   if (!message) return null;
-  return <p className="text-xs text-red-500 mt-1.5">{message}</p>;
+  return <p className="text-xs text-danger-muted mt-1.5">{message}</p>;
 }

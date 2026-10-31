@@ -11,6 +11,10 @@ const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // e2e/visual.spec.ts compares against local, uncommitted baselines, so it
+  // only runs when asked for (`npm run test:visual`), never in CI or a plain
+  // `npm run test:e2e`.
+  grepInvert: process.env.VISUAL ? undefined : /@visual/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

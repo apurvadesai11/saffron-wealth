@@ -39,7 +39,7 @@ export default function AvatarFallback({
     <div
       role="img"
       aria-label={`${firstName} ${lastName}`}
-      className={`${color} text-white rounded-full flex items-center justify-center font-semibold ${className}`}
+      className={`${color} text-on-solid rounded-full flex items-center justify-center font-semibold ${className}`}
       style={{ width: size, height: size, fontSize }}
     >
       {initials}

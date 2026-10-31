@@ -148,21 +148,21 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Net Worth</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl font-bold text-fg">Net Worth</h1>
+          <p className="text-sm text-fg-muted mt-1">
             Track your accounts, properties, and debts in one place.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => setShowImportModal(true)}
-            className="border border-gray-200 text-gray-700 rounded-lg py-2 px-4 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="border border-line text-fg-secondary rounded-lg py-2 px-4 text-sm font-medium hover:bg-surface-sunken transition-colors"
           >
             Import balance history
           </button>
           <button
             onClick={() => setEditingAccount("new")}
-            className="bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors"
           >
             + Add Account
           </button>
@@ -174,14 +174,14 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
       <NetWorthSummaryCards summary={summary} />
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2">
+        <p className="text-sm text-danger bg-danger-soft border border-danger-line-soft rounded-lg px-4 py-2">
           {error}
         </p>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm p-6 space-y-6">
+      <div className="bg-surface rounded-2xl shadow-sm p-6 space-y-6">
         {groups.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-8">
+          <p className="text-fg-faint text-sm text-center py-8">
             No accounts yet. Add your first account to start tracking your net worth.
           </p>
         ) : (
@@ -197,7 +197,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
       </div>
 
       {archivedAccounts.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm p-6">
+        <div className="bg-surface rounded-2xl shadow-sm p-6">
           <ArchivedAccountsGroup accounts={archivedAccounts} onRestore={handleRestore} />
         </div>
       )}

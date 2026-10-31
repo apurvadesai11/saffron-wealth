@@ -22,7 +22,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 };
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 function LoginForm() {
   const router = useRouter();
@@ -75,7 +75,7 @@ function LoginForm() {
           <div>
             <Link
               href="/password-reset"
-              className="text-blue-600 hover:text-blue-700"
+              className="text-accent hover:text-accent-strong"
             >
               Forgot your password?
             </Link>
@@ -84,7 +84,7 @@ function LoginForm() {
             New here?{" "}
             <Link
               href="/register"
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="text-accent hover:text-accent-strong font-medium"
             >
               Create an account
             </Link>
@@ -93,21 +93,21 @@ function LoginForm() {
       }
     >
       {justReset ? (
-        <p className="text-xs text-emerald-600 mb-4">
+        <p className="text-xs text-gain mb-4">
           Password updated. Sign in with your new password.
         </p>
       ) : null}
       <GoogleSignInButton label="Sign in with Google" />
       <div className="flex items-center gap-3 my-4">
-        <div className="h-px flex-1 bg-gray-200" />
-        <span className="text-xs text-gray-400 uppercase tracking-wide">or</span>
-        <div className="h-px flex-1 bg-gray-200" />
+        <div className="h-px flex-1 bg-surface-strong" />
+        <span className="text-xs text-fg-faint uppercase tracking-wide">or</span>
+        <div className="h-px flex-1 bg-surface-strong" />
       </div>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div>
           <label
             htmlFor="login-email"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Email
           </label>
@@ -125,7 +125,7 @@ function LoginForm() {
         <div>
           <label
             htmlFor="login-password"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Password
           </label>
@@ -143,7 +143,7 @@ function LoginForm() {
         <AuthFormError message={topError} />
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+          className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
           disabled={submitting}
         >
           {submitting ? "Signing in…" : "Sign in"}
@@ -155,7 +155,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-gray-400">Loading…</div>}>
+    <Suspense fallback={<div className="text-sm text-fg-faint">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );

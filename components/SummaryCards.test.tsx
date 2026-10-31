@@ -32,6 +32,6 @@ describe("SummaryCards", () => {
 
     const balance = screen.getByText("$-1000.00");
     expect(balance).toBeInTheDocument();
-    expect(balance.className).toMatch(/text-red-600/);
+    expect(balance.className).toMatch(/text-danger/);
   });
 });

@@ -8,7 +8,7 @@ import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 export default function PasswordResetRequestPage() {
   const [email, setEmail] = useState("");
@@ -51,18 +51,18 @@ export default function PasswordResetRequestPage() {
         footer={
           <Link
             href="/login"
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-accent hover:text-accent-strong font-medium"
           >
             Back to sign in
           </Link>
         }
       >
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-fg-tertiary">
           Didn&apos;t get an email? Check your spam folder, or{" "}
           <button
             type="button"
             onClick={() => setSubmitted(false)}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-accent hover:text-accent-strong"
           >
             try again
           </button>
@@ -81,7 +81,7 @@ export default function PasswordResetRequestPage() {
           Remembered it?{" "}
           <Link
             href="/login"
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-accent hover:text-accent-strong font-medium"
           >
             Back to sign in
           </Link>
@@ -92,7 +92,7 @@ export default function PasswordResetRequestPage() {
         <div>
           <label
             htmlFor="reset-email"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Email
           </label>
@@ -110,7 +110,7 @@ export default function PasswordResetRequestPage() {
         <AuthFormError message={topError} />
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+          className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
           disabled={submitting}
         >
           {submitting ? "Sending…" : "Send reset link"}

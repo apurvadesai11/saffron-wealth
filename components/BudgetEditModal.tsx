@@ -75,33 +75,33 @@ export default function BudgetEditModal({
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
       onClick={onClose}
       aria-label="Close modal"
     >
       {/* Card — stop propagation so clicks inside don't close */}
       <div
         ref={dialogRef}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md"
+        className="bg-surface rounded-2xl shadow-xl w-full max-w-md"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header ──────────────────────────────────────────────── */}
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="px-6 pt-6 pb-4 border-b border-line-subtle">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+              <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-1">
                 {category.type === "expense" ? "Expense" : "Income"} · Monthly Budget
               </p>
-              <h2 id="modal-title" className="text-xl font-bold text-gray-900">
+              <h2 id="modal-title" className="text-xl font-bold text-fg">
                 {category.name}
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-300 hover:text-gray-500 transition-colors text-2xl leading-none mt-0.5"
+              className="text-fg-disabled hover:text-fg-muted transition-colors text-2xl leading-none mt-0.5"
               aria-label="Close"
             >
               ×
@@ -110,38 +110,38 @@ export default function BudgetEditModal({
         </div>
 
         {/* ── Spending history context (US-02) ────────────────────── */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+        <div className="px-6 py-4 border-b border-line-subtle">
+          <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-3">
             {category.type === "expense" ? "Spending" : "Income"} History
           </p>
 
           {historicalAverage === null ? (
-            <p className="text-sm text-gray-400 italic">
+            <p className="text-sm text-fg-faint italic">
               No transaction history available for this category.
             </p>
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-800">
-                  <span className="font-semibold text-gray-900">
+                <p className="text-sm text-fg-soft">
+                  <span className="font-semibold text-fg">
                     ${Math.round(historicalAverage.average).toLocaleString()}
-                    <span className="font-normal text-gray-500">/month</span>
+                    <span className="font-normal text-fg-muted">/month</span>
                   </span>
                 </p>
                 {/* Limited history warning — US-02 AC: < 2 months */}
                 {historicalAverage.periodsOfData < 2 ? (
-                  <p className="text-xs text-amber-600 mt-0.5">
+                  <p className="text-xs text-warning mt-0.5">
                     ⚠ Based on {historicalAverage.periodsOfData} month of data — accuracy may be limited
                   </p>
                 ) : (
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-fg-faint mt-0.5">
                     Based on {historicalAverage.periodsOfData} months of data
                   </p>
                 )}
               </div>
               <button
                 onClick={handleUseAverage}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors ml-4 shrink-0"
+                className="text-sm font-medium text-accent hover:text-accent-strong transition-colors ml-4 shrink-0"
               >
                 Use this →
               </button>
@@ -153,13 +153,13 @@ export default function BudgetEditModal({
         <div className="px-6 py-5">
           <label
             htmlFor="budget-amount"
-            className="block text-sm font-medium text-gray-700 mb-2"
+            className="block text-sm font-medium text-fg-secondary mb-2"
           >
             Monthly budget amount
           </label>
 
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted font-medium">
               $
             </span>
             <input
@@ -177,22 +177,22 @@ export default function BudgetEditModal({
               onKeyDown={e => {
                 if (e.key === "Enter") handleSave();
               }}
-              className="w-full border border-gray-200 rounded-lg pl-7 pr-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-line rounded-lg pl-7 pr-4 py-2.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
 
           {/* Validation error */}
           {error && (
-            <p className="text-xs text-red-500 mt-1.5">{error}</p>
+            <p className="text-xs text-danger-muted mt-1.5">{error}</p>
           )}
 
           {/* $0 → hidden hint (FR-05) */}
           {willBeHidden ? (
-            <p className="text-xs text-amber-600 mt-2">
+            <p className="text-xs text-warning mt-2">
               This category will be marked <span className="font-medium">Hidden from Budgets</span> and won&apos;t show a progress bar.
             </p>
           ) : (
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-fg-faint mt-2">
               Set to $0 to hide this category from your budget view.
             </p>
           )}
@@ -202,13 +202,13 @@ export default function BudgetEditModal({
         <div className="px-6 pb-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="flex-1 border border-line text-fg-secondary rounded-lg py-2.5 text-sm font-medium hover:bg-surface-sunken transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
           >
             Save Budget
           </button>

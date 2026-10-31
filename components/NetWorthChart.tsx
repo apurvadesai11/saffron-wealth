@@ -316,12 +316,12 @@ export default function NetWorthChart({ series }: Props) {
 
   if (series.length === 0) {
     return (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h2 className="text-sm font-medium text-gray-500 mb-4">Net Worth Over Time</h2>
+      <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
+        <h2 className="text-sm font-medium text-fg-muted mb-4">Net Worth Over Time</h2>
         <div
           data-state="empty"
           data-point-count={0}
-          className="flex items-center justify-center h-40 text-sm text-gray-400 italic"
+          className="flex items-center justify-center h-40 text-sm text-fg-faint italic"
         >
           No net worth history yet.
         </div>
@@ -353,9 +353,9 @@ export default function NetWorthChart({ series }: Props) {
   const liveAnnouncement = hoverIndex !== null ? activeValueText : "";
 
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+    <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-gray-500">Net Worth Over Time</h2>
+        <h2 className="text-sm font-medium text-fg-muted">Net Worth Over Time</h2>
         <div role="group" aria-label="Chart range" className="flex gap-1">
           {RANGE_KEYS.map((r) => {
             const isActive = r === range;
@@ -368,8 +368,8 @@ export default function NetWorthChart({ series }: Props) {
                 data-range={isActive ? r : undefined}
                 className={
                   isActive
-                    ? "px-2 py-1 text-xs font-medium rounded-md bg-gray-800 text-white"
-                    : "px-2 py-1 text-xs font-medium rounded-md text-gray-500 hover:bg-gray-100"
+                    ? "px-2 py-1 text-xs font-medium rounded-md bg-inverse text-on-solid"
+                    : "px-2 py-1 text-xs font-medium rounded-md text-fg-muted hover:bg-surface-muted"
                 }
               >
                 {r}
@@ -417,27 +417,27 @@ export default function NetWorthChart({ series }: Props) {
                 x2={right}
                 y1={yScale(0)}
                 y2={yScale(0)}
-                className="stroke-gray-300"
+                className="stroke-line-strong"
                 strokeWidth={1}
                 strokeDasharray="4 4"
               />
             )}
 
-            <text x={left} y={top + 4} textAnchor="start" className="fill-gray-400 text-[10px]">
+            <text x={left} y={top + 4} textAnchor="start" className="fill-fg-faint text-[10px]">
               {compactCurrencyFormatter.format(domain[1])}
             </text>
-            <text x={left} y={bottom} textAnchor="start" className="fill-gray-400 text-[10px]">
+            <text x={left} y={bottom} textAnchor="start" className="fill-fg-faint text-[10px]">
               {compactCurrencyFormatter.format(domain[0])}
             </text>
 
-            {pathD !== "" && <path d={pathD} fill="none" className="stroke-blue-600" strokeWidth={2} />}
+            {pathD !== "" && <path d={pathD} fill="none" className="stroke-accent" strokeWidth={2} />}
 
-            {filtered.length === 1 && <circle cx={coords[0].x} cy={coords[0].y} r={3} className="fill-blue-600" />}
+            {filtered.length === 1 && <circle cx={coords[0].x} cy={coords[0].y} r={3} className="fill-accent" />}
 
-            <text x={left} y={HEIGHT - 4} textAnchor="start" className="fill-gray-400 text-[10px]">
+            <text x={left} y={HEIGHT - 4} textAnchor="start" className="fill-fg-faint text-[10px]">
               {axisDateFormatter.format(parseLocalDate(filtered[0].date))}
             </text>
-            <text x={right} y={HEIGHT - 4} textAnchor="end" className="fill-gray-400 text-[10px]">
+            <text x={right} y={HEIGHT - 4} textAnchor="end" className="fill-fg-faint text-[10px]">
               {axisDateFormatter.format(parseLocalDate(filtered[filtered.length - 1].date))}
             </text>
 
@@ -448,10 +448,10 @@ export default function NetWorthChart({ series }: Props) {
                   x2={hoveredCoord.x}
                   y1={top}
                   y2={bottom}
-                  className="stroke-gray-300"
+                  className="stroke-line-strong"
                   strokeWidth={1}
                 />
-                <circle cx={hoveredCoord.x} cy={hoveredCoord.y} r={4} className="fill-blue-600" />
+                <circle cx={hoveredCoord.x} cy={hoveredCoord.y} r={4} className="fill-accent" />
               </>
             )}
           </g>
@@ -488,11 +488,11 @@ export default function NetWorthChart({ series }: Props) {
         {hovered && hoveredCoord && (
           <div
             aria-hidden="true"
-            className="absolute pointer-events-none bg-gray-800 text-white text-xs rounded-md px-2 py-1 shadow-lg"
+            className="absolute pointer-events-none bg-inverse text-on-solid text-xs rounded-md px-2 py-1 shadow-lg"
             style={{ left: hoveredCoord.x, top: hoveredCoord.y - 36 }}
           >
             <p className="font-medium">{currencyFormatter.format(hovered.value)}</p>
-            <p className="text-gray-300">{tooltipDateFormatter.format(parseLocalDate(hovered.date))}</p>
+            <p className="text-fg-disabled">{tooltipDateFormatter.format(parseLocalDate(hovered.date))}</p>
           </div>
         )}
 
