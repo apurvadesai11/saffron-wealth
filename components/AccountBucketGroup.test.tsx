@@ -9,6 +9,7 @@
 // read as "counted".
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import AccountBucketGroup from "./AccountBucketGroup";
 import type { Account, AccountBucketGroup as Group } from "@/lib/types";
 
@@ -56,6 +57,40 @@ describe("AccountBucketGroup", () => {
     expect(screen.getByText("Cash")).toBeInTheDocument();
     expect(headerTotal(container)).toBe("$1,000.00");
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("starts expanded and collapses its accounts from the heading, keeping the total in view", async () => {
+    const { container } = renderGroup(
+      group({ accounts: [account(), account({ id: "acc-2", name: "Other" })] }),
+    );
+    const toggle = screen.getByRole("button", { name: "Cash" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(container.querySelector('[data-collapsed="true"]')).toBeInTheDocument();
+    expect(headerTotal(container)).toBe("$1,000.00");
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("hides the uncategorized explanation along with its accounts when collapsed", async () => {
+    renderGroup(
+      group({
+        bucket: "uncategorized",
+        label: "Uncategorized",
+        accounts: [account({ type: "uncategorized" })],
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
+
+    expect(screen.queryByText(/Excluded from your net worth/i)).not.toBeInTheDocument();
   });
 
   it("tags itself with its bucket so the page can style and target it", () => {
