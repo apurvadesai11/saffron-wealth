@@ -50,6 +50,19 @@ export function roundToHundredths(value: number): number {
   return Math.sign(value) * rounded || 0;
 }
 
+/**
+ * The form's text → number step, run before the parser. Blank is `undefined`
+ * (the parser says "Required."); anything that isn't a plain decimal is NaN
+ * (it says "Enter a number."). Separators and `$`/`%` are dropped because
+ * people type "90,000" and "3.5%". `Number()` alone would accept "0x10" and
+ * "1e3", which nobody means as an amount.
+ */
+export function parseNumberInput(text: string): number | undefined {
+  const cleaned = text.replace(/[\s,$%]/g, "");
+  if (cleaned === "") return undefined;
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(cleaned) ? Number(cleaned) : NaN;
+}
+
 type Errors = Record<string, string>;
 
 // A required number. Records an error and returns undefined when it isn't one.

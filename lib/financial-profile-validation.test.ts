@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseFinancialProfileBody, roundToHundredths } from "./financial-profile-validation";
+import {
+  parseFinancialProfileBody,
+  parseNumberInput,
+  roundToHundredths,
+} from "./financial-profile-validation";
 
 function body(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -239,6 +243,26 @@ describe("parseFinancialProfileBody — contribution targets", () => {
   it("caps the list at 50 targets", () => {
     const many = Array.from({ length: 51 }, (_, i) => ({ accountId: `acct_${i}`, annualAmount: 1 }));
     expect(errorsFor({ contributionTargets: many }).contributionTargets).toMatch(/50/);
+  });
+});
+
+describe("parseNumberInput", () => {
+  it("reads a blank field as missing", () => {
+    expect(parseNumberInput("")).toBeUndefined();
+    expect(parseNumberInput("   ")).toBeUndefined();
+  });
+
+  it("tolerates thousands separators, a dollar sign and a percent sign", () => {
+    expect(parseNumberInput("90,000")).toBe(90000);
+    expect(parseNumberInput("$1,250.50")).toBe(1250.5);
+    expect(parseNumberInput("3.5%")).toBe(3.5);
+    expect(parseNumberInput("-1.5")).toBe(-1.5);
+  });
+
+  it("reads anything else as NaN so the parser says 'Enter a number.'", () => {
+    expect(parseNumberInput("lots")).toBeNaN();
+    expect(parseNumberInput("1.2.3")).toBeNaN();
+    expect(parseFinancialProfileBody(body({ age: parseNumberInput("lots") })).ok).toBe(false);
   });
 });
 
