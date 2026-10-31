@@ -223,7 +223,7 @@ Each import shows a preview before it writes, and both are safe to re-run: trans
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server on :3000 |
+| `npm run dev` | Start development server on :3000 (runs `prisma generate` first) |
 | `npm run build` | Production build (runs `prisma generate`) |
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |

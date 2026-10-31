@@ -810,6 +810,11 @@ touches the database, it is UTC.
 - **`prepare` script in `package.json`** installs the git hooks pointer
   automatically on `npm install`. New contributors get pre-push checks
   without any extra step.
+- **`predev` runs `prisma generate`.** Pulling or switching to a branch that
+  changes `schema.prisma` doesn't regenerate the client, and a stale one asks
+  the migrated database for columns it no longer has (this happened with the
+  Financial Profile's renamed age column). Restart the dev server after a
+  schema change; a running one keeps the client it loaded.
 - **`prisma/migrations/` is now the source of truth, and CI enforces it.**
   Author schema changes with `npm run db:migrate`, not `db:push`. `db:push`
   remains in `package.json` as an escape hatch, but reaching for it is what
@@ -918,7 +923,7 @@ A few likely places that need a touch:
 ### Quick reference
 
 ```
-npm run dev                Start Next.js dev server (port 3000)
+npm run dev                prisma generate, then start Next.js dev server (port 3000)
 npm run build              prisma generate && next build
 npm run start              Serve production build
 npm run lint               ESLint
