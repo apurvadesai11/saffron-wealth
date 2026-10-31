@@ -321,7 +321,10 @@ describe("NetWorthClient — reordering accounts", () => {
     fireEvent.drop(target, { dataTransfer });
   }
 
-  it("shows the new order at once and saves it", async () => {
+  // Refreshed after the save even though order changes no total: a refresh
+  // from an earlier save (an add, say) can land after the drop with the old
+  // order, and only a later one puts the saved order back on screen.
+  it("shows the new order at once, saves it, and then refreshes", async () => {
     const spy = mockFetchOk({ accountIds: ["acc-2", "acc-1"] });
     render(<NetWorthClient initialAccounts={[first, second]} initialArchivedAccounts={[]} series={series} />);
 
@@ -334,6 +337,7 @@ describe("NetWorthClient — reordering accounts", () => {
         expect.objectContaining({ method: "PUT", body: JSON.stringify({ accountIds: ["acc-2", "acc-1"] }) }),
       ),
     );
+    await waitFor(() => expect(routerMocks.refresh).toHaveBeenCalledTimes(1));
   });
 
   it("puts the old order back and says so when the save fails", async () => {
@@ -344,5 +348,6 @@ describe("NetWorthClient — reordering accounts", () => {
 
     await waitFor(() => expect(screen.getByText("Couldn't save the new order.")).toBeInTheDocument());
     expect(names()).toEqual(["Chase Checking", "Ally Savings"]);
+    expect(routerMocks.refresh).not.toHaveBeenCalled();
   });
 });

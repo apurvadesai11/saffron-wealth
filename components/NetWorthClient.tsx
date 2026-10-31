@@ -151,8 +151,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     const moving = new Set(orderedIds);
     // The section's accounts go to the end of the array as a block. The page
     // groups by bucket and keeps array order within one, so this sets the
-    // section's order and leaves every other section's alone. No refresh:
-    // order changes no total and nothing on the chart.
+    // section's order and leaves every other section's alone.
     setAccounts([
       ...accounts.filter((a) => !moving.has(a.id)),
       ...orderedIds.flatMap((id) => byId.get(id) ?? []),
@@ -171,7 +170,13 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
       if (!res.ok || !data.ok) {
         setAccounts(previous);
         setError(data?.error?.message ?? "Couldn't save the new order.");
+        return;
       }
+      // Order changes no total, but a refresh from an earlier save (adding an
+      // account, say) can land after this drop carrying the old order, and
+      // the prop sync above would put it back on screen. Next runs refreshes
+      // in sequence, so this one, requested after the save, lands last.
+      router.refresh();
     } catch {
       setAccounts(previous);
       setError("Network error.");

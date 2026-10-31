@@ -104,7 +104,9 @@ test.describe("Net Worth — history chart and balance-history import", () => {
     await expect(modal.getByRole("button", { name: "Confirm import" })).toBeInViewport({ ratio: 1 });
     await expect(modal.getByRole("heading", { name: "Import Balance History" })).toBeInViewport({ ratio: 1 });
 
-    const bottom = modal.getByText("Range Test Credit Card");
+    // A heading every preview shows: an earlier test in this worker may have
+    // imported the same file already, leaving no new accounts to list.
+    const bottom = modal.getByRole("heading", { name: "New accounts" });
     await bottom.scrollIntoViewIfNeeded();
     await expect(bottom).toBeInViewport({ ratio: 1 });
     const top = modal.getByText("Date range");

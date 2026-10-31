@@ -158,7 +158,9 @@ test.describe("Net Worth page", () => {
       .getByLabel(`Drag to reorder ${lower}`)
       .dragTo(page.locator('[data-bucket="cash"] li', { hasText: upper }));
     expect((await responded).ok()).toBe(true);
-    expect(await relative()).toEqual([lower, upper]);
+    // Polled: the add's own refresh can land after the drop and show the old
+    // order briefly, until the refresh that follows the save replaces it.
+    await expect.poll(relative).toEqual([lower, upper]);
 
     await page.reload();
     await expect(page.getByText(lower)).toBeVisible();

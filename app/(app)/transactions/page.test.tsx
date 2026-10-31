@@ -2,6 +2,14 @@
 // AppProvider now seeds only the last 13 months, so the page reads GET
 // /api/transactions instead: the server filters, counts, and pages.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// The page reads its starting filter from the URL (Monthly Review links in
+// with one). Outside Next's router useSearchParams has nothing to read, so
+// each test sets the query it wants here.
+const url = vi.hoisted(() => ({ search: "" }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(url.search),
+}));
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TransactionsPage from "./page";
@@ -37,6 +45,7 @@ function page(transactions: Transaction[], nextCursor: string | null = null, tot
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  url.search = "";
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(page([]));
   vi.stubGlobal("fetch", fetchMock);
@@ -50,6 +59,20 @@ function lastQuery(): URLSearchParams {
   const calls = fetchMock.mock.calls;
   return new URL(calls[calls.length - 1][0], "http://localhost").searchParams;
 }
+
+describe("TransactionsPage starting filter", () => {
+  it("asks the server for the filter the URL carries", async () => {
+    url.search = `categoryIds=${CAT_RENT.id}&from=2026-05-01&to=2026-05-31`;
+
+    renderWithApp(<TransactionsPage />, { categories: CATS, transactions: [] });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const q = lastQuery();
+    expect(q.get("categoryIds")).toBe(CAT_RENT.id);
+    expect(q.get("from")).toBe("2026-05-01");
+    expect(q.get("to")).toBe("2026-05-31");
+  });
+});
 
 describe("TransactionsPage server-side paging", () => {
   it("renders the rows the server returned", async () => {
