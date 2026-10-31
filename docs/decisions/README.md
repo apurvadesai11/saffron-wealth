@@ -28,6 +28,8 @@ rediscover the same wrong answer.
 | [0010](0010-utc-persistence-local-period-math.md) | Persistence is UTC, period math is local, `"YYYY-MM-DD"` crosses between them | Accepted |
 | [0011](0011-signed-contribution-at-write-time.md) | A balance event stores the signed contribution, applied at write time | Accepted |
 | [0012](0012-theme-tokens-and-cookie-preference.md) | Colours are theme tokens; the theme preference is a server-read cookie | Accepted (supersedes the light-only PRD fix) |
+| [0013](0013-financial-profile-append-only-versions.md) | The financial profile is append-only versions; an unchanged save writes nothing | Accepted |
+| [0014](0014-age-anchored-to-its-own-date.md) | Age is stored as an anchor with its own date, carried forward until the age itself changes | Accepted |
 
 ## Where "Task N" references point
 

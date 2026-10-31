@@ -1,6 +1,6 @@
 # Saffron Wealth — Roadmap
 
-**Last updated:** 2026-09-27 · **Current version:** v0.3
+**Last updated:** 2026-10-31 · **Current version:** v0.4
 
 This is the sequenced source of truth for what gets built next. `README.md` describes what
 exists today; this file describes what doesn't yet and in what order. When the two disagree,
@@ -30,39 +30,41 @@ asserted.
 | **Transactions** | Add/delete, six-way filtering, server-side paging, Monarch CSV import with stable-ID dedup |
 | **Net Worth** (Phases 1–3) | 12 account types across 5 buckets, current net worth, over-time chart with range selector, archive/restore, Monarch balance-history backfill |
 | **Dark mode** | Light / System / Dark on the profile page, defaulting to the OS. Every colour is a theme token, so a new component gets both themes for free |
+| **Financial Profile** (#1) | Declared planning inputs on `/financial-profile`: typed income streams, current and retirement age, real return / withdrawal / inflation assumptions, filing status, employer match, per-account contribution targets. Append-only dated versions |
 
 **Where that leaves us:** tracking is solid and all first-class financial data is persisted.
-Planning is one month deep — the cashflow forecast is the only forward-looking feature in the
-app. Everything below is about extending the horizon from weeks to decades.
+The declared inputs planning needs now exist, but nothing reads them yet — the cashflow forecast
+is still the only forward-looking feature in the app. Everything below is about extending the
+horizon from weeks to decades.
 
 ---
 
 ## Now
 
-### 1. Financial Profile
+### 1. Financial Profile — ✅ shipped (v0.4)
 
-**The blocking gap.** `User` currently holds identity and auth only — email, first/last name,
-password hash, profile picture. There is no declared financial input anywhere in the app. Income
-is *inferable* from income-category transactions, but nothing is *declared*, and every planning
-feature below needs declared inputs.
+Plan: `docs/saffron-wealth-financial-profile-plan.md`. Decisions:
+`docs/decisions/0013-financial-profile-append-only-versions.md`,
+`docs/decisions/0014-age-anchored-to-its-own-date.md`.
 
-Add a financial-profile surface (new section on `/profile`, or its own route) capturing:
+What shipped, against what this item asked for:
 
-- Gross annual income / salary, and how it's paid (for savings-rate math that doesn't have to
-  reverse-engineer it from transactions)
-- Birth date or target retirement age
-- Expected real rate of return
-- Safe withdrawal rate assumption
-- Inflation assumption
-- Optionally: filing status, employer match terms, contribution targets per account
+- **Income** — not one salary figure but a list of typed streams (salary, bonus, RSUs, ESPP,
+  rental, self-employment, interest & dividends, other), each gross-annual with how it's paid.
+  The kind is what lets #3/#4 separate earned from passive income later.
+- **Age** — the user types their *current age*; it's stored as an anchor (age + the instant it
+  was true) and derived forward, and the anchor only moves when the age is corrected (0014).
+  No birth date is stored.
+- **Target retirement age, expected real return, safe withdrawal rate, inflation** — required,
+  with no pre-filled defaults.
+- **Optional** — filing status, employer match (% of contributions up to % of salary), and
+  annual contribution targets per cash / investment / retirement account.
+- **Effective dating** — every changing save inserts a complete dated version; an unchanged save
+  writes nothing (0013).
 
-**Why first:** projections, FIRE, and retirement planning are all arithmetic over these numbers.
-Without them, each of those features would have to invent its own input form, and three features
-would each own a different copy of "what return do you assume."
-
-**Design note:** these are *assumptions*, not facts, and they change. Store them with an
-effective date the way `AccountBalanceEvent` does, so a projection run last year stays
-explicable. A single mutable row would make old numbers unreproducible.
+**Left for the first consumer:** a `getFinancialProfileAsOf(userId, date)` reader. Net worth
+projections (#3) is the first thing that needs an old version, so it adds the reader; every
+version it will read is already being kept.
 
 ### 2. Investment holdings
 
@@ -194,5 +196,5 @@ Recording these so they don't get re-litigated:
 #10 Budget periods   (independent — data model already supports it)
 ```
 
-Financial Profile is the single unlock for the entire planning tier. It's also the smallest item
-in Now.
+Financial Profile was the single unlock for the entire planning tier, and it has shipped —
+#3 and #4 are unblocked. Investment holdings (#2) is the remaining item in Now.

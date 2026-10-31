@@ -34,6 +34,7 @@ model User {
   categories           Category[]
   transactions         Transaction[]
   budgets              Budget[]
+  financialProfiles    FinancialProfile[]
 
   @@index([emailNormalized])
 }
@@ -156,9 +157,10 @@ model Account {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balanceHistory AccountBalanceEvent[]
-  transactions   Transaction[]
+  user                User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceHistory      AccountBalanceEvent[]
+  transactions        Transaction[]
+  contributionTargets FinancialProfileContribution[]
 
   @@index([userId])
 }
@@ -274,4 +276,80 @@ model Budget {
 
   @@unique([userId, categoryId, period])
   @@index([userId])
+}
+
+// One saved version of the user's declared planning inputs — the assumptions
+// projections, FIRE and retirement planning run on. Append-only: a save that
+// changes anything inserts the next `version`, and no row is ever updated, so
+// a number computed against version N stays reproducible after the user edits
+// their assumptions. The current profile is the highest version.
+// See docs/decisions/0013-financial-profile-append-only-versions.md.
+//
+// `anchoredAge` is an age the user typed and `ageAnchoredAt` when it was true;
+// the current age is derived from the two (lib/financial-profile-utils.ts
+// `ageOn`). The anchor is deliberately not `effectiveAt`: a version that leaves
+// the age as derived carries the previous anchor forward, or every edit would
+// discard the part-year already elapsed.
+// See docs/decisions/0014-age-anchored-to-its-own-date.md.
+//
+// Percent columns hold the percent as typed: 4.00 means 4%.
+model FinancialProfile {
+  id                    String   @id @default(cuid())
+  userId                String
+  version               Int
+  effectiveAt           DateTime @default(now())
+  anchoredAge           Int
+  ageAnchoredAt         DateTime
+  targetRetirementAge   Int
+  expectedRealReturnPct Decimal  @db.Decimal(5, 2)
+  safeWithdrawalRatePct Decimal  @db.Decimal(5, 2)
+  inflationPct          Decimal  @db.Decimal(5, 2)
+  filingStatus          String?
+  // Both set or both null: the employer matches `employerMatchPct`% of the
+  // user's contributions, up to `employerMatchLimitPct`% of salary.
+  employerMatchPct      Decimal? @db.Decimal(5, 2)
+  employerMatchLimitPct Decimal? @db.Decimal(5, 2)
+
+  user                User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeStreams       FinancialProfileIncome[]
+  contributionTargets FinancialProfileContribution[]
+
+  // Orders versions, and backstops the per-user advisory lock that
+  // saveFinancialProfile takes before computing the next version.
+  @@unique([userId, version])
+}
+
+// One income stream inside a profile version. `kind` is an IncomeKind and
+// `frequency` a PayFrequency, both enforced in the app layer like
+// Account.type. `annualAmount` is gross, before tax.
+model FinancialProfileIncome {
+  id           String  @id @default(cuid())
+  profileId    String
+  sortOrder    Int
+  kind         String
+  label        String?
+  annualAmount Decimal @db.Decimal(14, 2)
+  frequency    String?
+
+  profile FinancialProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// A planned annual contribution to one account, inside a profile version.
+// Cascades from Account only on a hard delete, which the app never does —
+// accounts are archived, so a version's targets survive the account being
+// archived.
+model FinancialProfileContribution {
+  id           String  @id @default(cuid())
+  profileId    String
+  accountId    String
+  sortOrder    Int
+  annualAmount Decimal @db.Decimal(14, 2)
+
+  profile FinancialProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  account Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, accountId])
+  @@index([accountId])
 }

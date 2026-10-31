@@ -113,6 +113,12 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page).toHaveScreenshot(name("net-worth-edit"), SHOT);
     });
 
+    test("financial profile", async ({ page }) => {
+      await page.goto("/financial-profile");
+      await settle(page);
+      await expect(page).toHaveScreenshot(name("financial-profile"), SHOT);
+    });
+
     test("profile", async ({ page }) => {
       await page.goto("/profile");
       await settle(page);

@@ -172,3 +172,92 @@ export interface AccountInput {
 // archiving ruling in lib/accounts.ts reserves for overriding an
 // import-inferred archive.
 export type AccountPatch = Partial<AccountInput> & { archivedAt?: null };
+
+// --- Financial Profile -------------------------------------------------------
+// Declared planning inputs. String unions enforced in the app layer (like
+// AccountType), so a new kind or frequency needs no migration. Labels and type
+// guards live in lib/financial-profile-utils.ts.
+
+export type IncomeKind =
+  | 'salary'
+  | 'bonus'
+  | 'rsu'
+  | 'espp'
+  | 'rental'
+  | 'self_employment'
+  | 'interest_dividends'
+  | 'other';
+
+// How a stream is paid. Informational: every calculation reads annualAmount.
+export type PayFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'irregular';
+
+export type FilingStatus =
+  | 'single'
+  | 'married_joint'
+  | 'married_separate'
+  | 'head_of_household'
+  | 'qualifying_surviving_spouse';
+
+export interface IncomeStream {
+  kind: IncomeKind;
+  label: string | null;
+  annualAmount: number; // gross, before tax
+  frequency: PayFrequency | null;
+}
+
+// The employer matches `matchPct`% of the user's contributions, up to
+// `limitPct`% of salary.
+export interface EmployerMatch {
+  matchPct: number;
+  limitPct: number;
+}
+
+export interface ContributionTarget {
+  accountId: string;
+  annualAmount: number;
+}
+
+// An account the contribution-target editor can show. `eligible: false` only
+// ever appears on an account the current version already names and that has
+// since been re-typed out of cash/investments/retirement — it is shown so the
+// row can be seen and removed, never offered for a new target.
+export interface ContributionAccountOption {
+  id: string;
+  name: string;
+  type: AccountType;
+  archived: boolean;
+  eligible: boolean;
+}
+
+// The write shape: what the form sends and the parser returns. `age` is the
+// user's current age; it becomes FinancialProfile's age anchor (see 0014).
+// Percents are as typed (4 means 4%).
+export interface FinancialProfileInput {
+  age: number;
+  targetRetirementAge: number;
+  expectedRealReturnPct: number;
+  safeWithdrawalRatePct: number;
+  inflationPct: number;
+  filingStatus: FilingStatus | null;
+  employerMatch: EmployerMatch | null;
+  incomeStreams: IncomeStream[];
+  contributionTargets: ContributionTarget[];
+}
+
+// One saved version. The age is stored as an anchor — an age the user typed
+// and when it was true — which can be older than the version itself. Derive
+// the current age with ageOn(); never read anchoredAge as if it were today's.
+export type FinancialProfile = Omit<FinancialProfileInput, 'age'> & {
+  version: number;
+  effectiveAt: string; // ISO timestamp
+  anchoredAge: number;
+  ageAnchoredAt: string; // ISO timestamp
+};
