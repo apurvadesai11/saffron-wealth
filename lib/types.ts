@@ -225,8 +225,20 @@ export interface ContributionTarget {
   annualAmount: number;
 }
 
+// An account the contribution-target editor can show. `eligible: false` only
+// ever appears on an account the current version already names and that has
+// since been re-typed out of cash/investments/retirement — it is shown so the
+// row can be seen and removed, never offered for a new target.
+export interface ContributionAccountOption {
+  id: string;
+  name: string;
+  type: AccountType;
+  archived: boolean;
+  eligible: boolean;
+}
+
 // The write shape: what the form sends and the parser returns. `age` is the
-// user's current age as typed; it is stored as FinancialProfile.ageAtEffective.
+// user's current age; it becomes FinancialProfile's age anchor (see 0014).
 // Percents are as typed (4 means 4%).
 export interface FinancialProfileInput {
   age: number;
@@ -240,11 +252,12 @@ export interface FinancialProfileInput {
   contributionTargets: ContributionTarget[];
 }
 
-// One saved version. The age is stored as typed, anchored to effectiveAt —
-// derive the current age with ageOn() rather than reading ageAtEffective as if
-// it were today's.
+// One saved version. The age is stored as an anchor — an age the user typed
+// and when it was true — which can be older than the version itself. Derive
+// the current age with ageOn(); never read anchoredAge as if it were today's.
 export type FinancialProfile = Omit<FinancialProfileInput, 'age'> & {
   version: number;
   effectiveAt: string; // ISO timestamp
-  ageAtEffective: number;
+  anchoredAge: number;
+  ageAnchoredAt: string; // ISO timestamp
 };

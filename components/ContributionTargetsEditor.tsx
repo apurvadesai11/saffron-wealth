@@ -1,17 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { AccountType, ContributionTarget } from "@/lib/types";
+import type { ContributionAccountOption, ContributionTarget } from "@/lib/types";
 
-// An account the user can point a contribution at. The page builds this list:
-// eligible active accounts, plus any archived account the current version
-// still names, so that row can render and be kept or removed.
-export interface ContributionAccountOption {
-  id: string;
-  name: string;
-  type: AccountType;
-  archived: boolean;
-}
+// Built by contributionAccountOptions() in lib/financial-profile-utils.ts.
+export type { ContributionAccountOption };
 
 export interface ContributionDraft {
   key: string;
@@ -34,6 +27,13 @@ const controlClass =
   "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 const errorClass = "text-xs text-danger-muted mt-1.5";
 
+function optionLabel(a: ContributionAccountOption): string {
+  const notes = [a.archived ? "archived" : null, a.eligible ? null : "no longer eligible"].filter(
+    (n): n is string => n !== null,
+  );
+  return notes.length > 0 ? `${a.name} (${notes.join(", ")})` : a.name;
+}
+
 interface Props {
   rows: ContributionDraft[];
   accounts: ContributionAccountOption[];
@@ -42,7 +42,7 @@ interface Props {
 }
 
 export default function ContributionTargetsEditor({ rows, accounts, errors, onChange }: Props) {
-  if (accounts.length === 0 && rows.length === 0) {
+  if (!accounts.some((a) => a.eligible) && rows.length === 0) {
     return (
       <p className="text-sm text-fg-faint">
         Add a cash, investment, or retirement account on{" "}
@@ -59,15 +59,21 @@ export default function ContributionTargetsEditor({ rows, accounts, errors, onCh
   }
 
   const used = new Set(rows.map((r) => r.accountId).filter((id) => id !== ""));
-  const allUsed = rows.length >= accounts.length;
+  // A new row needs an eligible account that neither a chosen row nor an
+  // still-blank row has claimed.
+  const blankRows = rows.filter((r) => r.accountId === "").length;
+  const allUsed = accounts.filter((a) => a.eligible && !used.has(a.id)).length <= blankRows;
 
   return (
     <div className="space-y-3">
       {rows.map((row, i) => {
         const n = i + 1;
         const err = (field: string) => errors[`contributionTargets.${i}.${field}`];
-        // Each row offers the accounts no other row has taken, plus its own.
-        const options = accounts.filter((a) => a.id === row.accountId || !used.has(a.id));
+        // Each row offers the eligible accounts no other row has taken, plus
+        // its own — which is the only way an ineligible account appears.
+        const options = accounts.filter(
+          (a) => a.id === row.accountId || (a.eligible && !used.has(a.id)),
+        );
         return (
           <div
             key={row.key}
@@ -84,7 +90,7 @@ export default function ContributionTargetsEditor({ rows, accounts, errors, onCh
                 <option value="">Choose an account</option>
                 {options.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.archived ? `${a.name} (archived)` : a.name}
+                    {optionLabel(a)}
                   </option>
                 ))}
               </select>

@@ -10,6 +10,11 @@
 
 **Spec:** `docs/ROADMAP.md` §1 "Financial Profile", plus the decisions below, which were settled with the author before this plan was written.
 
+> **Revised after the final review:** the age is stored as `anchoredAge` + `ageAnchoredAt`
+> (migration `financial_profile_age_anchor`), not `ageAtEffective` against the version's date —
+> see `docs/decisions/0014-age-anchored-to-its-own-date.md`. The task text below is the plan as
+> executed and still names the original field.
+
 ## Decisions settled before planning
 
 | Question | Decision |

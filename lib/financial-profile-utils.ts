@@ -3,8 +3,10 @@
 // same way lib/account-utils.ts enforces AccountType.
 
 import type {
+  Account,
   AccountBucket,
   AccountType,
+  ContributionAccountOption,
   FilingStatus,
   FinancialProfile,
   FinancialProfileInput,
@@ -109,6 +111,33 @@ export function isContributionEligible(type: AccountType): boolean {
   return CONTRIBUTION_BUCKETS.includes(getBucketForType(type));
 }
 
+/**
+ * The accounts the contribution editor shows: eligible active accounts, plus
+ * every account the current version references — archived or re-typed since —
+ * so each saved row renders as the account it holds. Dropping a referenced
+ * account left its row showing "Choose an account" while it still held the
+ * id, and the server then refused every save over it.
+ */
+export function contributionAccountOptions(
+  active: Account[],
+  archived: Account[],
+  referenced: Set<string>,
+): ContributionAccountOption[] {
+  const option = (a: Account, isArchived: boolean): ContributionAccountOption => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    archived: isArchived,
+    eligible: isContributionEligible(a.type),
+  });
+  return [
+    ...active
+      .filter((a) => isContributionEligible(a.type) || referenced.has(a.id))
+      .map((a) => option(a, false)),
+    ...archived.filter((a) => referenced.has(a.id)).map((a) => option(a, true)),
+  ];
+}
+
 // Milliseconds since the start of the instant's UTC month — comparable across
 // years for the same month, which is what an anniversary check needs.
 function sinceMonthStart(d: Date): number {
@@ -116,20 +145,20 @@ function sinceMonthStart(d: Date): number {
 }
 
 /**
- * The age a saved version implies at `on`: the typed age plus the whole years
- * elapsed since it was saved. Lags the true age by under a year, never leads
- * it. See docs/decisions/0014-age-anchored-to-effective-date.md.
+ * The age a saved version implies at `on`: the anchored age plus the whole
+ * years elapsed since its anchor. Lags the true age by under a year, never
+ * leads it. See docs/decisions/0014-age-anchored-to-its-own-date.md.
  */
 export function ageOn(
-  profile: Pick<FinancialProfile, "ageAtEffective" | "effectiveAt">,
+  profile: Pick<FinancialProfile, "anchoredAge" | "ageAnchoredAt">,
   on: Date,
 ): number {
-  const saved = new Date(profile.effectiveAt);
+  const saved = new Date(profile.ageAnchoredAt);
   const beforeAnniversary =
     on.getUTCMonth() < saved.getUTCMonth() ||
     (on.getUTCMonth() === saved.getUTCMonth() && sinceMonthStart(on) < sinceMonthStart(saved));
   const years = on.getUTCFullYear() - saved.getUTCFullYear() - (beforeAnniversary ? 1 : 0);
-  return profile.ageAtEffective + Math.max(0, years);
+  return profile.anchoredAge + Math.max(0, years);
 }
 
 export function totalAnnualIncome(streams: Pick<IncomeStream, "annualAmount">[]): number {

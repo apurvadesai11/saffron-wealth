@@ -93,32 +93,37 @@ function readAge(raw: unknown, key: string, errors: Errors): number {
 
 // `min` is exclusive when `minExclusive` is set: a 0% withdrawal rate or a 0%
 // match is not an assumption, it's the absence of one.
+//
+// Both readers bound the *rounded* value, because that is what gets stored:
+// checked before rounding, 0.001 passed "above 0%" and was written as 0.00.
 function readPercent(
   raw: unknown,
   key: string,
   errors: Errors,
   bounds: { min: number; max: number; minExclusive?: boolean },
 ): number {
-  const n = readNumber(raw, key, errors);
-  if (n === undefined) return 0;
+  const typed = readNumber(raw, key, errors);
+  if (typed === undefined) return 0;
+  const n = roundToHundredths(typed);
   const belowMin = bounds.minExclusive ? n <= bounds.min : n < bounds.min;
   if (belowMin || n > bounds.max) {
     errors[key] = bounds.minExclusive
       ? `Enter a rate above ${bounds.min}% and up to ${bounds.max}%.`
       : `Enter a rate between ${bounds.min}% and ${bounds.max}%.`;
   }
-  return roundToHundredths(n);
+  return n;
 }
 
 function readAmount(raw: unknown, key: string, errors: Errors): number {
-  const n = readNumber(raw, key, errors);
-  if (n === undefined) return 0;
+  const typed = readNumber(raw, key, errors);
+  if (typed === undefined) return 0;
+  const n = roundToHundredths(typed);
   if (n <= 0) {
     errors[key] = "Enter an amount above $0.";
   } else if (n > AMOUNT_MAX) {
     errors[key] = "That amount is too large.";
   }
-  return roundToHundredths(n);
+  return n;
 }
 
 function asRecord(raw: unknown): Record<string, unknown> | null {

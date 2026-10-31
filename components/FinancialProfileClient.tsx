@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import type { FilingStatus, FinancialProfile } from "@/lib/types";
-import { FILING_STATUSES, FILING_STATUS_LABELS } from "@/lib/financial-profile-utils";
+import { FILING_STATUSES, FILING_STATUS_LABELS, ageOn } from "@/lib/financial-profile-utils";
 import { parseFinancialProfileBody, parseNumberInput } from "@/lib/financial-profile-validation";
 import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
@@ -36,6 +36,14 @@ const hintClass = "text-xs text-fg-faint mt-1.5";
 const errorClass = "text-xs text-danger-muted mt-1.5";
 
 const savedDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
+
+// True in the browser, false during the server render and hydration. The saved
+// date has to wait for it: formatted on the server it uses the server's time
+// zone, and React keeps server text on hydration rather than patching it.
+const noSubscription = () => () => {};
+function useIsBrowser(): boolean {
+  return useSyncExternalStore(noSubscription, () => true, () => false);
+}
 
 function text(n: number | undefined | null): string {
   return n === undefined || n === null ? "" : String(n);
@@ -92,6 +100,9 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
   const [profile, setProfile] = useState<FinancialProfile | null>(p);
 
   const [age, setAge] = useState(text(initialAge));
+  // Whether the user has typed in the age field since the last save. See
+  // buildBody for why an untouched field isn't sent as shown.
+  const [ageTouched, setAgeTouched] = useState(false);
   const [retirementAge, setRetirementAge] = useState(text(p?.targetRetirementAge));
   const [filingStatus, setFilingStatus] = useState<FilingStatus | "">(p?.filingStatus ?? "");
   const [incomeRows, setIncomeRows] = useState<IncomeDraft[]>(() =>
@@ -112,11 +123,16 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const isBrowser = useIsBrowser();
 
   function buildBody() {
     const noMatch = matchPct.trim() === "" && matchLimitPct.trim() === "";
     return {
-      age: parseNumberInput(age),
+      // An untouched field shows the age as of the render. Sent as shown from
+      // a page left open across the anniversary, it would read as a correction
+      // and re-anchor the age a year low; the age as of the save is what the
+      // field meant. See docs/decisions/0014-age-anchored-to-its-own-date.md.
+      age: !ageTouched && profile ? ageOn(profile, new Date()) : parseNumberInput(age),
       targetRetirementAge: parseNumberInput(retirementAge),
       expectedRealReturnPct: parseNumberInput(returnPct),
       safeWithdrawalRatePct: parseNumberInput(swrPct),
@@ -171,6 +187,7 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
       }
       const saved = data.data.profile as FinancialProfile;
       setProfile(saved);
+      setAgeTouched(false);
       setStatus(data.data.changed ? `Saved as version ${saved.version}.` : "No changes to save.");
     } catch {
       setFormError("Network error.");
@@ -187,11 +204,11 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
           The inputs your projections and FIRE math run on. Every save is kept as a dated version,
           so a number worked out from last year&apos;s assumptions can still be explained.
         </p>
-        {/* The date is formatted in the viewer's time zone, which the server
-            render can't know; the browser's value wins on hydration. */}
-        <p className="text-xs text-fg-faint mt-2" suppressHydrationWarning>
+        <p className="text-xs text-fg-faint mt-2">
           {profile
-            ? `Version ${profile.version} · saved ${savedDate.format(new Date(profile.effectiveAt))}`
+            ? `Version ${profile.version}${
+                isBrowser ? ` · saved ${savedDate.format(new Date(profile.effectiveAt))}` : ""
+              }`
             : "Not saved yet"}
         </p>
       </div>
@@ -203,7 +220,10 @@ export default function FinancialProfileClient({ initialProfile, initialAge, acc
               id="fp-age"
               label="Current age"
               value={age}
-              onChange={setAge}
+              onChange={(value) => {
+                setAge(value);
+                setAgeTouched(true);
+              }}
               error={fieldErrors.age}
               hint="Moves forward on its own each year from the day you save."
             />

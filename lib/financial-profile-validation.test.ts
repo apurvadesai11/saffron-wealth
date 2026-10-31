@@ -112,6 +112,22 @@ describe("parseFinancialProfileBody — assumptions", () => {
     expect(parseFinancialProfileBody(body({ safeWithdrawalRatePct: 10 })).ok).toBe(true);
   });
 
+  // Review finding: the bounds ran before rounding, so 0.001 passed the
+  // "above 0%" check and was stored as 0.00.
+  it("checks bounds on the rounded value, so a value that rounds to 0 is refused", () => {
+    expect(errorsFor({ safeWithdrawalRatePct: 0.001 }).safeWithdrawalRatePct).toBeDefined();
+    expect(
+      errorsFor({ employerMatch: { matchPct: 0.004, limitPct: 6 } })["employerMatch.matchPct"],
+    ).toBeDefined();
+    expect(
+      errorsFor({
+        incomeStreams: [{ kind: "salary", label: null, annualAmount: 0.004, frequency: null }],
+      })["incomeStreams.0.annualAmount"],
+    ).toBeDefined();
+    // ...and one that rounds back inside the range is accepted.
+    expect(parseFinancialProfileBody(body({ expectedRealReturnPct: 20.004 })).ok).toBe(true);
+  });
+
   it("bounds inflation to -5%–20%", () => {
     expect(errorsFor({ inflationPct: -5.5 }).inflationPct).toBeDefined();
   });

@@ -18,7 +18,7 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 ### Financial Profile (shipped)
 - **Declared planning inputs** on their own page — the numbers projections, the FIRE calculator and retirement planning will run on, instead of each inventing its own form
 - **Income as typed streams** — salary, bonus, RSUs, ESPP, rental, self-employment, interest & dividends, other — each with a gross annual amount and how it's paid
-- **Current age and target retirement age** — the age is stored as typed and advances on its own each year from the save date
+- **Current age and target retirement age** — the age is stored as an anchor and advances on its own each year; editing anything else never resets it
 - **Assumptions** — expected real return, safe withdrawal rate, inflation; deliberately no pre-filled defaults
 - **Optional** — filing status, employer match (% of contributions up to % of salary), and annual contribution targets per cash, investment or retirement account
 - **Append-only versions** — every save that changes something is kept as a dated version, so a number computed from last year's assumptions stays explicable; an unchanged save writes nothing

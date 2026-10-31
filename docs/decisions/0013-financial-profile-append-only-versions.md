@@ -28,7 +28,7 @@ reason `AccountBalanceEvent` is append-only.
 The version number is shown to the user ("Version 3 · saved …"). Re-saving an
 untouched form should not mint a version that differs from the last one in
 nothing but its timestamp. Equality is checked on the *derived* profile
-(`toProfileInput` with today's age — see 0014), so a re-save a year later with
+(`toProfileInput` with the age derived for today — see 0014), so a re-save a year later with
 the age the form pre-filled is still recognized as unchanged.
 
 The parser rounds percents to two decimals and amounts to cents before the

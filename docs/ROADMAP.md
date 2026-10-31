@@ -45,15 +45,16 @@ horizon from weeks to decades.
 
 Plan: `docs/saffron-wealth-financial-profile-plan.md`. Decisions:
 `docs/decisions/0013-financial-profile-append-only-versions.md`,
-`docs/decisions/0014-age-anchored-to-effective-date.md`.
+`docs/decisions/0014-age-anchored-to-its-own-date.md`.
 
 What shipped, against what this item asked for:
 
 - **Income** — not one salary figure but a list of typed streams (salary, bonus, RSUs, ESPP,
   rental, self-employment, interest & dividends, other), each gross-annual with how it's paid.
   The kind is what lets #3/#4 separate earned from passive income later.
-- **Age** — the user types their *current age*; it's stored with the save's timestamp and
-  derived forward (0014). No birth date is stored.
+- **Age** — the user types their *current age*; it's stored as an anchor (age + the instant it
+  was true) and derived forward, and the anchor only moves when the age is corrected (0014).
+  No birth date is stored.
 - **Target retirement age, expected real return, safe withdrawal rate, inflation** — required,
   with no pre-filled defaults.
 - **Optional** — filing status, employer match (% of contributions up to % of salary), and

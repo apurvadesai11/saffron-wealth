@@ -7,9 +7,9 @@ import ContributionTargetsEditor, {
   type ContributionDraft,
 } from "./ContributionTargetsEditor";
 
-const ROTH: ContributionAccountOption = { id: "acct-roth", name: "Example Roth IRA", type: "roth_ira", archived: false };
-const HSA: ContributionAccountOption = { id: "acct-hsa", name: "Example HSA", type: "hsa", archived: false };
-const OLD: ContributionAccountOption = { id: "acct-old", name: "Old Brokerage", type: "brokerage", archived: true };
+const ROTH: ContributionAccountOption = { id: "acct-roth", name: "Example Roth IRA", type: "roth_ira", archived: false, eligible: true };
+const HSA: ContributionAccountOption = { id: "acct-hsa", name: "Example HSA", type: "hsa", archived: false, eligible: true };
+const OLD: ContributionAccountOption = { id: "acct-old", name: "Old Brokerage", type: "brokerage", archived: true, eligible: true };
 
 function Harness({
   accounts,
@@ -48,6 +48,41 @@ describe("ContributionTargetsEditor", () => {
     render(<Harness accounts={[ROTH, OLD]} initial={[{ key: "a", accountId: "acct-old", annualAmount: "5000" }]} />);
     expect(optionLabels(screen.getByLabelText("Contribution 1 account"))).toContain("Old Brokerage (archived)");
     expect(screen.getByLabelText("Contribution 1 account")).toHaveValue("acct-old");
+  });
+
+  it("labels a referenced account that is no longer eligible and offers it to no other row", () => {
+    const card: ContributionAccountOption = {
+      id: "acct-card", name: "Retyped Card", type: "credit_card", archived: false, eligible: false,
+    };
+    render(
+      <Harness
+        accounts={[ROTH, card]}
+        initial={[
+          { key: "a", accountId: "acct-card", annualAmount: "5000" },
+          { key: "b", accountId: "", annualAmount: "" },
+        ]}
+      />,
+    );
+    expect(screen.getByLabelText("Contribution 1 account")).toHaveValue("acct-card");
+    expect(optionLabels(screen.getByLabelText("Contribution 1 account"))).toContain(
+      "Retyped Card (no longer eligible)",
+    );
+    expect(optionLabels(screen.getByLabelText("Contribution 2 account"))).not.toContain(
+      "Retyped Card (no longer eligible)",
+    );
+  });
+
+  it("disables adding when only ineligible accounts are left", () => {
+    const card: ContributionAccountOption = {
+      id: "acct-card", name: "Retyped Card", type: "credit_card", archived: false, eligible: false,
+    };
+    render(
+      <Harness
+        accounts={[ROTH, card]}
+        initial={[{ key: "a", accountId: "acct-roth", annualAmount: "7000" }]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "+ Add contribution target" })).toBeDisabled();
   });
 
   it("does not offer an account another row already uses", () => {

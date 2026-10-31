@@ -13,6 +13,7 @@ vi.mock("next/headers", () => ({
 
 import { PUT } from "../route";
 import { getCurrentFinancialProfile, saveFinancialProfile } from "@/lib/financial-profile";
+import { ageOn } from "@/lib/financial-profile-utils";
 import type { FinancialProfileInput } from "@/lib/types";
 import { seedUser, seedSession, seedAccount, makeRequest, cleanupUser } from "./helpers";
 
@@ -103,7 +104,7 @@ describe("PUT /api/financial-profile — versions", () => {
     expect(json.data.changed).toBe(true);
     expect(json.data.profile).toMatchObject({
       version: 1,
-      ageAtEffective: 35,
+      anchoredAge: 35,
       targetRetirementAge: 50,
       expectedRealReturnPct: 5,
       safeWithdrawalRatePct: 3.5,
@@ -261,6 +262,36 @@ describe("saveFinancialProfile / getCurrentFinancialProfile", () => {
     expect(result.profile.version).toBe(1);
   });
 
+  // Review finding: every changed save used to re-anchor the pre-filled,
+  // rounded-down age to `now`, dropping the part-year already elapsed — so
+  // someone who edits more than once a year never got older.
+  it("keeps aging across changed saves that leave the age as derived", async () => {
+    const user = await bareUser();
+    await saveFinancialProfile(
+      user.id,
+      validBody(null) as FinancialProfileInput,
+      new Date("2026-01-01T12:00:00.000Z"),
+    );
+
+    const edits = ["2026-12-01", "2027-11-01", "2028-10-01", "2029-09-01"];
+    let inflationPct = 2.5;
+    for (const day of edits) {
+      const at = new Date(`${day}T12:00:00.000Z`);
+      const latest = (await getCurrentFinancialProfile(user.id))!;
+      inflationPct += 0.5;
+      const result = await saveFinancialProfile(
+        user.id,
+        validBody(null, { age: ageOn(latest, at), inflationPct }) as FinancialProfileInput,
+        at,
+      );
+      expect(result.changed).toBe(true);
+    }
+
+    const latest = (await getCurrentFinancialProfile(user.id))!;
+    expect(latest.version).toBe(5);
+    expect(ageOn(latest, new Date("2029-12-31T12:00:00.000Z"))).toBe(38);
+  });
+
   it("re-anchors the age when the user corrects it", async () => {
     const user = await bareUser();
     const savedAt = new Date("2026-10-31T12:00:00.000Z");
@@ -275,7 +306,8 @@ describe("saveFinancialProfile / getCurrentFinancialProfile", () => {
     expect(result.changed).toBe(true);
     expect(result.profile).toMatchObject({
       version: 2,
-      ageAtEffective: 36,
+      anchoredAge: 36,
+      ageAnchoredAt: later.toISOString(),
       effectiveAt: later.toISOString(),
     });
   });

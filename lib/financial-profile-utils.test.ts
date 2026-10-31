@@ -10,8 +10,9 @@ import {
   isFilingStatus,
   toProfileInput,
   profileInputsEqual,
+  contributionAccountOptions,
 } from "./financial-profile-utils";
-import type { FinancialProfile, FinancialProfileInput } from "./types";
+import type { Account, FinancialProfile, FinancialProfileInput } from "./types";
 
 function input(overrides: Partial<FinancialProfileInput> = {}): FinancialProfileInput {
   return {
@@ -32,7 +33,7 @@ function input(overrides: Partial<FinancialProfileInput> = {}): FinancialProfile
 }
 
 describe("ageOn", () => {
-  const saved = { ageAtEffective: 35, effectiveAt: "2026-10-31T12:00:00.000Z" };
+  const saved = { anchoredAge: 35, ageAnchoredAt: "2026-10-31T12:00:00.000Z" };
 
   it("holds the typed age until the anniversary of the save", () => {
     expect(ageOn(saved, new Date("2026-10-31T12:00:00.000Z"))).toBe(35);
@@ -45,7 +46,7 @@ describe("ageOn", () => {
   });
 
   it("treats a leap-day save's anniversary as March 1st in common years", () => {
-    const leap = { ageAtEffective: 35, effectiveAt: "2028-02-29T09:00:00.000Z" };
+    const leap = { anchoredAge: 35, ageAnchoredAt: "2028-02-29T09:00:00.000Z" };
     expect(ageOn(leap, new Date("2029-02-28T23:59:00.000Z"))).toBe(35);
     expect(ageOn(leap, new Date("2029-03-01T09:00:00.000Z"))).toBe(36);
   });
@@ -99,6 +100,44 @@ describe("DEFAULT_FREQUENCY_BY_KIND", () => {
   });
 });
 
+describe("contributionAccountOptions", () => {
+  function account(id: string, type: Account["type"]): Account {
+    return {
+      id, name: `Name ${id}`, type, institution: null, balance: 0,
+      balanceAsOf: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  it("offers eligible active accounts and drops ineligible ones nobody references", () => {
+    const options = contributionAccountOptions(
+      [account("roth", "roth_ira"), account("card", "credit_card")],
+      [],
+      new Set(),
+    );
+    expect(options).toEqual([
+      { id: "roth", name: "Name roth", type: "roth_ira", archived: false, eligible: true },
+    ]);
+  });
+
+  // Review finding: an account the current version names, re-typed to debt on
+  // Net Worth, was dropped from the options — the row rendered as "Choose an
+  // account" while still holding the id, and every save was refused.
+  it("keeps every account the current version references, whatever it is now", () => {
+    const options = contributionAccountOptions(
+      [account("card", "credit_card")],
+      [account("old", "brokerage"), account("gone", "property"), account("unused", "brokerage")],
+      new Set(["card", "old", "gone"]),
+    );
+    expect(options).toEqual([
+      { id: "card", name: "Name card", type: "credit_card", archived: false, eligible: false },
+      { id: "old", name: "Name old", type: "brokerage", archived: true, eligible: true },
+      { id: "gone", name: "Name gone", type: "property", archived: true, eligible: false },
+    ]);
+  });
+});
+
 describe("toProfileInput", () => {
   it("restates a saved version as input with the derived age", () => {
     const { age, ...rest } = input();
@@ -106,7 +145,8 @@ describe("toProfileInput", () => {
       ...rest,
       version: 1,
       effectiveAt: "2026-10-31T12:00:00.000Z",
-      ageAtEffective: age,
+      anchoredAge: age,
+      ageAnchoredAt: "2026-10-31T12:00:00.000Z",
     };
     expect(toProfileInput(profile, new Date("2028-01-01T00:00:00.000Z"))).toEqual(
       input({ age: 36 }),

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToString } from "react-dom/server";
 import type { FinancialProfile } from "@/lib/types";
 import type { ContributionAccountOption } from "./ContributionTargetsEditor";
 
@@ -12,13 +13,14 @@ vi.mock("@/lib/auth/csrf-client", () => ({
 
 import FinancialProfileClient from "./FinancialProfileClient";
 
-const ROTH: ContributionAccountOption = { id: "acct-roth", name: "Example Roth IRA", type: "roth_ira", archived: false };
+const ROTH: ContributionAccountOption = { id: "acct-roth", name: "Example Roth IRA", type: "roth_ira", archived: false, eligible: true };
 
 function profile(overrides: Partial<FinancialProfile> = {}): FinancialProfile {
   return {
     version: 3,
     effectiveAt: "2025-06-15T12:00:00.000Z",
-    ageAtEffective: 34,
+    anchoredAge: 34,
+    ageAnchoredAt: "2025-06-15T12:00:00.000Z",
     targetRetirementAge: 50,
     expectedRealReturnPct: 5,
     safeWithdrawalRatePct: 3.5,
@@ -168,5 +170,56 @@ describe("FinancialProfileClient — editing a saved profile", () => {
     render(<FinancialProfileClient initialProfile={profile()} initialAge={35} accounts={[ROTH]} />);
     await submit();
     expect(await screen.findByText("Network error.")).toBeInTheDocument();
+  });
+});
+
+describe("FinancialProfileClient — the age across time", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function sentBody(spy: ReturnType<typeof mockFetch>) {
+    const [, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
+    return JSON.parse(init.body as string);
+  }
+
+  // Review finding: a page rendered just before the save's anniversary and
+  // saved just after sent the stale pre-filled age, which the server took as
+  // a correction and re-anchored a year low.
+  it("sends the age as of the save, not as of the render, when the field is untouched", async () => {
+    const spy = mockFetch({ ok: true, body: { ok: true, data: { profile: profile(), changed: false } } });
+    // Saved at 34 on 2025-06-15; rendered on 2026-06-14, so the field says 34.
+    render(<FinancialProfileClient initialProfile={profile()} initialAge={34} accounts={[ROTH]} />);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
+    await submit();
+    expect(sentBody(spy).age).toBe(35);
+  });
+
+  it("sends the typed age when the user changes it", async () => {
+    const spy = mockFetch({ ok: true, body: { ok: true, data: { profile: profile(), changed: true } } });
+    render(<FinancialProfileClient initialProfile={profile()} initialAge={35} accounts={[ROTH]} />);
+    await userEvent.clear(screen.getByLabelText("Current age"));
+    await userEvent.type(screen.getByLabelText("Current age"), "40");
+    await submit();
+    expect(sentBody(spy).age).toBe(40);
+  });
+});
+
+describe("FinancialProfileClient — server render", () => {
+  // Review finding: the saved date was formatted during the server render,
+  // in the server's time zone, and suppressHydrationWarning kept that text —
+  // React does not patch it on hydration.
+  it("leaves the saved date out of the server HTML", () => {
+    const html = renderToString(
+      <FinancialProfileClient initialProfile={profile()} initialAge={35} accounts={[ROTH]} />,
+    );
+    expect(html).toContain("Version 3");
+    expect(html).not.toMatch(/Jun 1[45], 2025/);
+  });
+
+  it("shows the saved date once mounted in the browser", () => {
+    render(<FinancialProfileClient initialProfile={profile()} initialAge={35} accounts={[ROTH]} />);
+    expect(screen.getByText(/^Version 3 · saved Jun 1[45], 2025$/)).toBeInTheDocument();
   });
 });

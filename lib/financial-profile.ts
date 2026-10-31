@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { InvalidReferenceError } from "./db-errors";
 import {
+  ageOn,
   isContributionEligible,
   profileInputsEqual,
   toProfileInput,
@@ -27,7 +28,8 @@ function mapProfile(row: ProfileRow): FinancialProfile {
   return {
     version: row.version,
     effectiveAt: row.effectiveAt.toISOString(),
-    ageAtEffective: row.ageAtEffective,
+    anchoredAge: row.anchoredAge,
+    ageAnchoredAt: row.ageAnchoredAt.toISOString(),
     targetRetirementAge: row.targetRetirementAge,
     expectedRealReturnPct: row.expectedRealReturnPct.toNumber(),
     safeWithdrawalRatePct: row.safeWithdrawalRatePct.toNumber(),
@@ -115,19 +117,27 @@ export async function saveFinancialProfile(
       orderBy: { version: "desc" },
       include: WITH_CHILDREN,
     });
-    if (latestRow) {
-      const latest = mapProfile(latestRow);
-      if (profileInputsEqual(toProfileInput(latest, now), input)) {
-        return { profile: latest, changed: false };
-      }
+    const latest = latestRow ? mapProfile(latestRow) : null;
+    if (latest && profileInputsEqual(toProfileInput(latest, now), input)) {
+      return { profile: latest, changed: false };
     }
+
+    // The derived age typed back unchanged is not a new statement about the
+    // age, so it keeps the old anchor. Re-anchoring it to `now` would drop the
+    // part-year already elapsed on every edit, and someone who saves more
+    // than once a year would never get older. Only a different number moves
+    // the anchor. See docs/decisions/0014-age-anchored-to-its-own-date.md.
+    const anchor =
+      latest !== null && input.age === ageOn(latest, now)
+        ? { anchoredAge: latest.anchoredAge, ageAnchoredAt: new Date(latest.ageAnchoredAt) }
+        : { anchoredAge: input.age, ageAnchoredAt: now };
 
     const created = await tx.financialProfile.create({
       data: {
         userId,
-        version: (latestRow?.version ?? 0) + 1,
+        version: (latest?.version ?? 0) + 1,
         effectiveAt: now,
-        ageAtEffective: input.age,
+        ...anchor,
         targetRetirementAge: input.targetRetirementAge,
         expectedRealReturnPct: input.expectedRealReturnPct,
         safeWithdrawalRatePct: input.safeWithdrawalRatePct,

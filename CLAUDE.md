@@ -517,11 +517,16 @@ take a per-user `pg_advisory_xact_lock` before reading the latest version, so
 two tabs saving at once produce consecutive versions rather than a unique-
 constraint 500. See `docs/decisions/0013-financial-profile-append-only-versions.md`.
 
-**Age is anchored, not current.** The user types their current age; it's
-stored as `ageAtEffective` alongside `effectiveAt`, and `ageOn(profile, date)`
-derives the age at any instant. Never read `ageAtEffective` as today's age.
-The no-op comparison uses the derived age, so re-saving an untouched form a
-year later is still a no-op. See `docs/decisions/0014-age-anchored-to-effective-date.md`.
+**Age is an anchor, not a current value.** The user types their current age;
+it's stored as `anchoredAge` + `ageAnchoredAt` (its own date — *not*
+`effectiveAt`), and `ageOn(profile, date)` derives the age at any instant.
+Never read `anchoredAge` as today's age. A save whose age equals the derived
+one carries the previous anchor forward; only a different number re-anchors.
+Anchoring to each version's date instead froze the age for anyone who edits
+more than once a year — the final review caught it. The form sends
+`ageOn(profile, now)` when its age field is untouched, so a page left open
+across the anniversary doesn't read as a correction. See
+`docs/decisions/0014-age-anchored-to-its-own-date.md`.
 
 **One parser, both sides.** `parseFinancialProfileBody` is pure and runs in the
 client form before sending as well as in the route. It rounds percents and

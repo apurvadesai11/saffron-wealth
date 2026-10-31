@@ -285,9 +285,12 @@ model Budget {
 // their assumptions. The current profile is the highest version.
 // See docs/decisions/0013-financial-profile-append-only-versions.md.
 //
-// `ageAtEffective` is the age the user typed, true as of `effectiveAt`; the
-// current age is derived from the two (lib/financial-profile-utils.ts `ageOn`).
-// See docs/decisions/0014-age-anchored-to-effective-date.md.
+// `anchoredAge` is an age the user typed and `ageAnchoredAt` when it was true;
+// the current age is derived from the two (lib/financial-profile-utils.ts
+// `ageOn`). The anchor is deliberately not `effectiveAt`: a version that leaves
+// the age as derived carries the previous anchor forward, or every edit would
+// discard the part-year already elapsed.
+// See docs/decisions/0014-age-anchored-to-its-own-date.md.
 //
 // Percent columns hold the percent as typed: 4.00 means 4%.
 model FinancialProfile {
@@ -295,7 +298,8 @@ model FinancialProfile {
   userId                String
   version               Int
   effectiveAt           DateTime @default(now())
-  ageAtEffective        Int
+  anchoredAge           Int
+  ageAnchoredAt         DateTime
   targetRetirementAge   Int
   expectedRealReturnPct Decimal  @db.Decimal(5, 2)
   safeWithdrawalRatePct Decimal  @db.Decimal(5, 2)
