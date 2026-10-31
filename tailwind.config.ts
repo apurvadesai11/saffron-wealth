@@ -14,6 +14,10 @@ const tokenColors = Object.fromEntries(
   TOKEN_NAMES.map((t) => [t, `rgb(var(${tokenVar(t)}) / <alpha-value>)`]),
 );
 
+const categoricalBackgrounds = Object.entries(CATEGORICAL_PALETTE).flatMap(([hue, steps]) =>
+  Object.keys(steps).map((step) => `bg-${hue}-${step}`),
+);
+
 function themeVariables(theme: keyof typeof THEME_TOKENS) {
   const values = THEME_TOKENS[theme] as Record<string, string>;
   return Object.fromEntries(
@@ -26,9 +30,10 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  // Category.color is stored in Postgres; until tokens, this class was only
-  // generated because BudgetProgressBar happened to use it too.
-  safelist: ["bg-orange-400"],
+  // Category.color is a class name stored in Postgres, so it never appears in
+  // the files Tailwind scans. Without this, a stored colour only got CSS when
+  // some component happened to use the same class, and the rest rendered blank.
+  safelist: categoricalBackgrounds,
   theme: {
     // Replaces Tailwind's default palette rather than extending it, so a raw
     // shade like `bg-gray-500` produces no CSS. See lib/theme-tokens.ts.

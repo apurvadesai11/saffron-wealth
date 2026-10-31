@@ -27,7 +27,7 @@ export async function listCategories(userId: string): Promise<Category[]> {
 // their first Monarch import. Defined here (not imported from mock-data.ts)
 // because mock-data.ts is a test-fixture module in the mock/in-memory system
 // this replaces — production code shouldn't depend on it.
-const DEFAULT_CATEGORY_SEED: Array<Pick<Category, "name" | "type" | "color">> = [
+export const DEFAULT_CATEGORY_SEED: Array<Pick<Category, "name" | "type" | "color">> = [
   { name: "Housing", type: "expense", color: "bg-violet-500" },
   { name: "Groceries", type: "expense", color: "bg-orange-400" },
   { name: "Dining Out", type: "expense", color: "bg-yellow-500" },
@@ -59,7 +59,7 @@ export type CategoryDbClient = PrismaClient | Prisma.TransactionClient;
 // export carries no color of its own, and any deterministic order is fine —
 // unlike DEFAULT_CATEGORY_SEED above, there's no meaningful color-to-category
 // mapping to preserve.
-const IMPORT_COLOR_PALETTE = [
+export const IMPORT_COLOR_PALETTE = [
   "bg-violet-500",
   "bg-orange-400",
   "bg-yellow-500",
