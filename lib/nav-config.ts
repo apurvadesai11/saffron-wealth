@@ -70,11 +70,17 @@ const ProfileIcon = createElement(
   createElement("circle", { cx: 12, cy: 7, r: 4 }),
 );
 
-// Adding a new feature surface? Append a NavItem here.
-export const NAV_ITEMS: NavItem[] = [
-  { href: "/",             label: "Monthly Review", icon: MonthlyReviewIcon },
-  { href: "/transactions", label: "Transactions",   icon: TransactionsIcon  },
-  { href: "/net-worth",    label: "Net Worth",      icon: NetWorthIcon      },
-  { href: "/financial-profile", label: "Financial Profile", icon: FinancialProfileIcon },
-  { href: "/profile",      label: "Profile",        icon: ProfileIcon       },
+// Adding a new feature surface? Add a NavItem to the section it belongs in.
+// The sidebar draws a divider between sections: the money pages first, then
+// the pages that configure them.
+export const NAV_SECTIONS: NavItem[][] = [
+  [
+    { href: "/net-worth",      label: "Net Worth",      icon: NetWorthIcon      },
+    { href: "/monthly-review", label: "Monthly Review", icon: MonthlyReviewIcon },
+    { href: "/transactions",   label: "Transactions",   icon: TransactionsIcon  },
+  ],
+  [
+    { href: "/financial-profile", label: "Financial Profile", icon: FinancialProfileIcon },
+    { href: "/profile",           label: "Profile",           icon: ProfileIcon          },
+  ],
 ];

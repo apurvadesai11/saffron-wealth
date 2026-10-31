@@ -10,9 +10,11 @@ import { hashPassword } from "../lib/auth/password";
 // is unreachable).
 
 test.describe("Auth gating", () => {
-  test("redirects unauthenticated visitors at / to /login with next param", async ({ page }) => {
+  // "/" redirects to the Net Worth landing page before the proxy runs, so the
+  // proxy sees /net-worth, and that's where signing in returns to.
+  test("redirects unauthenticated visitors at / to /login, returning to Net Worth", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveURL(/\/login\?next=%2F$/);
+    await expect(page).toHaveURL(/\/login\?next=%2Fnet-worth$/);
   });
 
   test("redirects unauthenticated visitors at /transactions to /login with next param", async ({ page }) => {
@@ -135,16 +137,17 @@ test.describe("Post-sign-in redirect is same-origin", () => {
     await page.waitForURL(url => !url.pathname.startsWith("/login"), { timeout: 15_000 });
   }
 
-  test("an absolute off-origin next lands on /", async ({ page }) => {
+  // safeNext falls back to "/", which redirects to the Net Worth landing page.
+  test("an absolute off-origin next lands on the landing page", async ({ page }) => {
     await signInWithNext(page, "https://evil.example");
     expect(new URL(page.url()).origin).toBe("http://localhost:3100");
-    await expect(page).toHaveURL("http://localhost:3100/");
+    await expect(page).toHaveURL("http://localhost:3100/net-worth");
   });
 
-  test("a protocol-relative next lands on /", async ({ page }) => {
+  test("a protocol-relative next lands on the landing page", async ({ page }) => {
     await signInWithNext(page, "//evil.example");
     expect(new URL(page.url()).origin).toBe("http://localhost:3100");
-    await expect(page).toHaveURL("http://localhost:3100/");
+    await expect(page).toHaveURL("http://localhost:3100/net-worth");
   });
 
   test("a site-relative next is still honored", async ({ page }) => {

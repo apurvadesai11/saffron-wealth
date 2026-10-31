@@ -91,7 +91,7 @@ test.describe("modal focus management", () => {
   });
 
   test("BudgetEditModal traps Tab and restores focus", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     // The budget rows are buttons named after their category.
     const trigger = page.getByRole("button", { name: /Groceries/ }).first();
     await trigger.focus();

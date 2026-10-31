@@ -183,9 +183,10 @@ app/
   (app)/                   Auth-gated route group
     layout.tsx             getSession() gate + fetches categories/transactions/budgets and
                             wraps children in AppProvider (financial-data hydration)
-    page.tsx               Monthly Review (SummaryCards + MonthlyReviewWidget)
+    monthly-review/page.tsx  Monthly Review (SummaryCards + MonthlyReviewWidget)
     transactions/page.tsx  Transactions list + filters + add form
-    net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres)
+    net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres).
+                            The landing page: next.config.ts redirects / here
     financial-profile/page.tsx  Financial Profile (RSC; current version + account options → client form)
     profile/page.tsx       Account / password / picture / sessions
   (auth)/                  Unauthed route group
@@ -882,8 +883,9 @@ following the setup instructions got `/login?oauth=unconfigured`.
 
 A few likely places that need a touch:
 
-- **New nav surface?** Append to `NAV_ITEMS` in `lib/nav-config.ts`. The
-  sidebar renders from this; no Sidebar.tsx edit needed.
+- **New nav surface?** Add it to the right section of `NAV_SECTIONS` in
+  `lib/nav-config.ts`. The sidebar renders from this, with a divider between
+  sections; no Sidebar.tsx edit needed.
 - **New protected page?** Drop it inside `app/(app)/` — gating is automatic
   via the layout.
 - **New unauthed page?** Drop it inside `app/(auth)/` and add the path to

@@ -5,6 +5,13 @@ import { STATIC_SECURITY_HEADERS, buildApiCsp } from "./lib/security-headers";
 // that Next propagates to its inline bootstrap scripts, which a static header
 // cannot express. Everything that does not vary per request is set here.
 const nextConfig: NextConfig = {
+  // Net Worth is the landing page. Redirecting here, before the proxy runs,
+  // means every path that ends at "/" (safeNext's fallback, the post-register
+  // and OAuth redirects) lands on it without each naming it. Not permanent:
+  // browsers cache a 308, and the landing page is a product choice that can move.
+  async redirects() {
+    return [{ source: "/", destination: "/net-worth", permanent: false }];
+  },
   async headers() {
     return [
       {

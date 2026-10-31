@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { NAV_ITEMS } from "@/lib/nav-config";
+import { Fragment } from "react";
+import { NAV_SECTIONS } from "@/lib/nav-config";
 import SidebarNavItem from "./SidebarNavItem";
 import AlertsButton from "./AlertsButton";
 
@@ -28,13 +29,18 @@ export default function Sidebar() {
 
       {/* 3. Nav items (driven by config — add more in lib/nav-config.ts) */}
       <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map(item => (
-          <SidebarNavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={item.icon}
-          />
+        {NAV_SECTIONS.map((section, i) => (
+          <Fragment key={section[0].href}>
+            {i > 0 && <div role="separator" className="border-t border-line-subtle mx-3 my-1" />}
+            {section.map(item => (
+              <SidebarNavItem
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+              />
+            ))}
+          </Fragment>
         ))}
       </nav>
     </aside>

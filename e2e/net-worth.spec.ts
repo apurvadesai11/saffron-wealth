@@ -17,7 +17,7 @@ async function archiveAccount(page: Page, name: string) {
 
 test.describe("Sidebar navigation", () => {
   test("navigates to Net Worth and marks it active", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     await page.getByRole("link", { name: /Net Worth/ }).click();
     await expect(page).toHaveURL("/net-worth");
     // exact: true — the Net Worth page's NetWorthChart adds its own "Net Worth Over
