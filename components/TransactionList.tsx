@@ -6,9 +6,11 @@ import { formatUsd } from "@/lib/money";
 
 interface Props {
   transactions: Transaction[];
+  // The page owns the edit dialog, as NetWorthClient does for accounts.
+  onEdit: (transaction: Transaction) => void;
 }
 
-export default function TransactionList({ transactions }: Props) {
+export default function TransactionList({ transactions, onEdit }: Props) {
   const { categories, deleteTransaction } = useApp();
 
   function getCategoryName(categoryId: string) {
@@ -23,13 +25,20 @@ export default function TransactionList({ transactions }: Props) {
     <ul className="divide-y divide-line-faint">
       {transactions.map(t => (
         <li key={t.id} className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
+          {/* The whole left side opens the editor, the same target AccountRow
+              uses. The delete control is a sibling, so its click never
+              reaches this one. */}
+          <button
+            onClick={() => onEdit(t)}
+            className="flex-1 flex items-center gap-3 text-left hover:opacity-80 transition-opacity"
+            aria-label={`Edit ${t.description}`}
+          >
             <div className={`w-2 h-2 rounded-full ${t.type === "income" ? "bg-data-good" : "bg-data-over"}`} />
             <div>
               <p className="text-sm font-medium text-fg-soft">{t.description}</p>
               <p className="text-xs text-fg-faint">{getCategoryName(t.categoryId)} · {t.date}</p>
             </div>
-          </div>
+          </button>
           <div className="flex items-center gap-3">
             <span className={`text-sm font-semibold ${t.type === "income" ? "text-success" : "text-danger"}`}>
               {t.type === "income" ? "+" : "-"}{formatUsd(t.amount)}

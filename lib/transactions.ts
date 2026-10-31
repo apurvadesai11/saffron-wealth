@@ -201,6 +201,47 @@ export async function createTransaction(
   return mapTransaction(row);
 }
 
+export type UpdateTransactionInput = Omit<CreateTransactionInput, "accountId">;
+
+// Replaces the five editable fields and leaves accountId, merchant, notes and
+// externalHash as they are (see parseUpdateTransactionBody). Returns null when
+// the transaction isn't the user's; throws InvalidReferenceError for a
+// category they can't file it under.
+export async function updateTransaction(
+  userId: string,
+  id: string,
+  input: UpdateTransactionInput,
+): Promise<Transaction | null> {
+  const existing = await prisma.transaction.findFirst({
+    where: { id, userId },
+    select: { categoryId: true },
+  });
+  if (!existing) return null;
+
+  // An archived category is refused as a new choice, as on create, but a row
+  // already filed under one keeps it — otherwise none of its other fields
+  // could ever be corrected.
+  if (input.categoryId !== existing.categoryId) {
+    const category = await prisma.category.findFirst({
+      where: { id: input.categoryId, userId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!category) throw new InvalidReferenceError("categoryId", "Category not found.");
+  }
+
+  const row = await prisma.transaction.update({
+    where: { id },
+    data: {
+      description: input.description,
+      amount: input.amount,
+      categoryId: input.categoryId,
+      type: input.type,
+      date: dateStringToUtcDate(input.date),
+    },
+  });
+  return mapTransaction(row);
+}
+
 export async function deleteTransaction(userId: string, id: string): Promise<boolean> {
   const result = await prisma.transaction.deleteMany({ where: { id, userId } });
   return result.count === 1;

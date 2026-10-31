@@ -12,6 +12,13 @@ import {
   ReactNode,
 } from "react";
 import { Category, Transaction, Budget } from "./types";
+
+// The fields the edit form owns. PATCH /api/transactions/[id] leaves the rest
+// (account, merchant, notes, import hash) as they are.
+export type TransactionEdit = Pick<
+  Transaction,
+  "description" | "amount" | "categoryId" | "type" | "date"
+>;
 import { readCsrfCookie } from "./auth/csrf-client";
 import { CSRF_HEADER_NAME } from "./auth/csrf-shared";
 
@@ -35,6 +42,9 @@ interface AppContextValue {
   saveBudgets: (entries: Budget[]) => Promise<void>;
   addTransaction: (t: Omit<Transaction, "id">) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  // Rejects with the server's message when the save fails, leaving state as
+  // it was.
+  updateTransaction: (id: string, edit: TransactionEdit) => Promise<void>;
   // Call immediately before router.refresh() whenever a caller needs the
   // eventual fresh seed adopted even if a local mutation happened earlier in
   // the session (see the long comment above the seed-sync block below for
@@ -64,6 +74,30 @@ function dayBefore(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const prev = new Date(Date.UTC(y, m - 1, d - 1));
   return prev.toISOString().slice(0, 10);
+}
+
+// Puts an edited row where the window expects it. The Transactions page can
+// edit a row from before the window; if the new date brings it inside, it has
+// to join the array, or that month reads short while the window claims to hold
+// all of it. A held row whose new date falls before the window can stay:
+// holding extra rows is harmless, missing ones isn't.
+//
+// Always returns a new array, even when nothing in it changed. The
+// Transactions page re-fetches on this array's identity, and it's showing the
+// row that was just saved.
+function placeEditedTransaction(
+  prev: Transaction[],
+  edited: Transaction,
+  windowFrom: string | null,
+): Transaction[] {
+  const held = prev.some(t => t.id === edited.id);
+  const insideWindow = windowFrom === null || edited.date >= windowFrom;
+  if (!held && !insideWindow) return prev.slice();
+  const next = held ? prev.map(t => (t.id === edited.id ? edited : t)) : [edited, ...prev];
+  // A date change can move it, and consumers assume newest-first. Same
+  // comparator as the gap merge in ensureTransactionsFrom; the sort is
+  // stable, so ties keep their order.
+  return next.sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
 }
 
 interface AppProviderProps {
@@ -297,6 +331,30 @@ export function AppProvider({
     mutationVersionRef.current++;
   }, [offline]);
 
+  const updateTransaction = useCallback(async (id: string, edit: TransactionEdit) => {
+    if (offline) {
+      setTransactions(prev => {
+        const existing = prev.find(t => t.id === id);
+        return existing ? placeEditedTransaction(prev, { ...existing, ...edit }, windowFrom) : prev;
+      });
+      mutationVersionRef.current++;
+      return;
+    }
+    const csrf = readCsrfCookie() ?? "";
+    const res = await fetch(`/api/transactions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", [CSRF_HEADER_NAME]: csrf },
+      body: JSON.stringify(edit),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error?.message ?? "Failed to update transaction.");
+    }
+    const edited = data.data.transaction as Transaction;
+    setTransactions(prev => placeEditedTransaction(prev, edited, windowFrom));
+    mutationVersionRef.current++;
+  }, [offline, windowFrom]);
+
   const saveBudgets = useCallback(async (entries: Budget[]) => {
     if (offline) {
       setBudgets(prev => {
@@ -340,6 +398,7 @@ export function AppProvider({
       saveBudgets,
       addTransaction,
       deleteTransaction,
+      updateTransaction,
       beginRefresh,
       dismissedKeys,
       setDismissedKeys,
@@ -353,6 +412,7 @@ export function AppProvider({
       saveBudgets,
       addTransaction,
       deleteTransaction,
+      updateTransaction,
       beginRefresh,
       dismissedKeys,
     ],

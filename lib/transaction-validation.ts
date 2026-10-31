@@ -79,13 +79,18 @@ export type ParseResult<T> =
   | { ok: true; value: T }
   | { ok: false; fieldErrors: Record<string, string> };
 
-export function parseCreateTransactionBody(body: unknown): ParseResult<CreateTransactionInput> {
-  if (typeof body !== "object" || body === null) {
-    return { ok: false, fieldErrors: {} };
-  }
-  const b = body as Record<string, unknown>;
-  const fieldErrors: Record<string, string> = {};
+// PATCH /api/transactions/[id] replaces the five fields the form edits and
+// nothing else. accountId, merchant and notes come from an import and the
+// form has no inputs for them; externalHash is never client-supplied, and it
+// has to survive an edit so a re-import still recognizes the row.
+export type UpdateTransactionInput = Omit<CreateTransactionInput, "accountId">;
 
+// The checks create and update share. Records into fieldErrors; the caller
+// decides whether the parse failed.
+function readEditableFields(
+  b: Record<string, unknown>,
+  fieldErrors: Record<string, string>,
+): UpdateTransactionInput {
   const descErr = validateDescription(typeof b.description === "string" ? b.description : "");
   if (descErr) fieldErrors.description = descErr.message;
 
@@ -102,6 +107,23 @@ export function parseCreateTransactionBody(body: unknown): ParseResult<CreateTra
   const dateErr = validateDate(b.date);
   if (dateErr) fieldErrors.date = dateErr.message;
 
+  return {
+    description: typeof b.description === "string" ? b.description.trim() : "",
+    amount: b.amount as number,
+    categoryId: b.categoryId as string,
+    type: b.type as CategoryType,
+    date: b.date as string,
+  };
+}
+
+export function parseCreateTransactionBody(body: unknown): ParseResult<CreateTransactionInput> {
+  if (typeof body !== "object" || body === null) {
+    return { ok: false, fieldErrors: {} };
+  }
+  const b = body as Record<string, unknown>;
+  const fieldErrors: Record<string, string> = {};
+  const fields = readEditableFields(b, fieldErrors);
+
   let accountId: string | null = null;
   if (b.accountId !== undefined && b.accountId !== null) {
     if (typeof b.accountId !== "string" || b.accountId.trim().length === 0) {
@@ -112,18 +134,17 @@ export function parseCreateTransactionBody(body: unknown): ParseResult<CreateTra
   }
 
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
+  return { ok: true, value: { ...fields, accountId } };
+}
 
-  return {
-    ok: true,
-    value: {
-      description: (b.description as string).trim(),
-      amount: b.amount as number,
-      categoryId: b.categoryId as string,
-      type: b.type as CategoryType,
-      date: b.date as string,
-      accountId,
-    },
-  };
+export function parseUpdateTransactionBody(body: unknown): ParseResult<UpdateTransactionInput> {
+  if (typeof body !== "object" || body === null) {
+    return { ok: false, fieldErrors: {} };
+  }
+  const fieldErrors: Record<string, string> = {};
+  const fields = readEditableFields(body as Record<string, unknown>, fieldErrors);
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
+  return { ok: true, value: fields };
 }
 
 // ── GET /api/transactions query string ─────────────────────────────────────

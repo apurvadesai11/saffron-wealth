@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TransactionList from "./TransactionList";
@@ -17,7 +17,7 @@ import type { Transaction } from "@/lib/types";
 // is stale relative to the context the delete handler mutates.
 function ConnectedList() {
   const { transactions } = useApp();
-  return <TransactionList transactions={transactions} />;
+  return <TransactionList transactions={transactions} onEdit={() => {}} />;
 }
 
 const CATS = [CAT_GROCERIES, CAT_SALARY];
@@ -42,7 +42,7 @@ const INCOME_TX: Transaction = {
 
 describe("TransactionList", () => {
   it("shows an empty-state message when transactions is empty", () => {
-    renderWithApp(<TransactionList transactions={[]} />, {
+    renderWithApp(<TransactionList transactions={[]} onEdit={vi.fn()} />, {
       categories: CATS,
       transactions: [],
     });
@@ -52,7 +52,7 @@ describe("TransactionList", () => {
   });
 
   it("renders an income transaction with a leading '+' and the category name", () => {
-    renderWithApp(<TransactionList transactions={[INCOME_TX]} />, {
+    renderWithApp(<TransactionList transactions={[INCOME_TX]} onEdit={vi.fn()} />, {
       categories: CATS,
       transactions: [INCOME_TX],
     });
@@ -62,7 +62,7 @@ describe("TransactionList", () => {
   });
 
   it("renders an expense transaction with a leading '-' sign", () => {
-    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} />, {
+    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} onEdit={vi.fn()} />, {
       categories: CATS,
       transactions: [EXPENSE_TX],
     });
@@ -71,11 +71,35 @@ describe("TransactionList", () => {
 
   it("falls back to the raw categoryId when category lookup misses", () => {
     const orphaned: Transaction = { ...EXPENSE_TX, categoryId: "unknown-cat" };
-    renderWithApp(<TransactionList transactions={[orphaned]} />, {
+    renderWithApp(<TransactionList transactions={[orphaned]} onEdit={vi.fn()} />, {
       categories: CATS,
       transactions: [orphaned],
     });
     expect(screen.getByText(/unknown-cat/)).toBeInTheDocument();
+  });
+
+  it("opens a transaction for editing when its row is clicked", async () => {
+    const onEdit = vi.fn();
+    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} onEdit={onEdit} />, {
+      categories: CATS,
+      transactions: [EXPENSE_TX],
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Edit Coffee/ }));
+
+    expect(onEdit).toHaveBeenCalledWith(EXPENSE_TX);
+  });
+
+  it("does not open the editor when the delete control is clicked", async () => {
+    const onEdit = vi.fn();
+    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} onEdit={onEdit} />, {
+      categories: CATS,
+      transactions: [EXPENSE_TX],
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Delete Coffee/ }));
+
+    expect(onEdit).not.toHaveBeenCalled();
   });
 
   it("clicking the delete button removes the row via context", async () => {
@@ -98,7 +122,7 @@ describe("TransactionList delete control accessibility", () => {
   const MIN_UI_CONTRAST = 3;
 
   it("clears WCAG 1.4.11's 3:1 and reserves a 24x24 hit target", () => {
-    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} />, {
+    renderWithApp(<TransactionList transactions={[EXPENSE_TX]} onEdit={vi.fn()} />, {
       categories: CATS,
       transactions: [EXPENSE_TX],
     });

@@ -9,6 +9,7 @@ import TransactionFilters, {
   TransactionFilterState,
 } from "@/components/TransactionFilters";
 import MonarchImportModal from "@/components/MonarchImportModal";
+import TransactionEditModal from "@/components/TransactionEditModal";
 import type { Transaction } from "@/lib/types";
 
 const PAGE_SIZE = 100;
@@ -40,6 +41,7 @@ export default function TransactionsPage() {
   const { transactions: mutationSignal } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [editing, setEditing] = useState<Transaction | null>(null);
   const [filters, setFilters] = useState<TransactionFilterState>(EMPTY_FILTERS);
 
   const [rows, setRows] = useState<Transaction[]>([]);
@@ -141,7 +143,7 @@ export default function TransactionsPage() {
           </div>
         ) : (
           <>
-            <TransactionList transactions={rows} />
+            <TransactionList transactions={rows} onEdit={setEditing} />
 
             {nextCursor && (
               <div className="px-6 py-4 border-t border-line-subtle text-center">
@@ -160,6 +162,13 @@ export default function TransactionsPage() {
 
       {showImportModal && (
         <MonarchImportModal onClose={() => setShowImportModal(false)} />
+      )}
+
+      {/* A saved edit changes the context's transactions, which is the
+          mutationSignal the list re-fetches on, so the row updates (or drops
+          out of a filter it no longer matches) without more wiring here. */}
+      {editing && (
+        <TransactionEditModal transaction={editing} onClose={() => setEditing(null)} />
       )}
     </>
   );

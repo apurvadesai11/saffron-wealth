@@ -113,6 +113,33 @@ test.describe("Transactions: add + filter", () => {
     await expect(page.getByText("-$12.34")).toBeVisible();
   });
 
+  test("edits a transaction and the change survives a reload", async ({ page }) => {
+    const original = `Edit me ${Date.now()}`;
+    const edited = `${original} (edited)`;
+    await page.goto("/transactions");
+    await page.getByRole("button", { name: "+ Add Transaction" }).click();
+    await page.getByLabel("Description").fill(original);
+    await page.getByLabel("Amount").fill("20");
+    await page.getByRole("button", { name: "Save Transaction" }).click();
+    await expect(page.getByText(original)).toBeVisible();
+
+    await page.getByRole("button", { name: `Edit ${original}` }).click();
+    const modal = page.getByRole("dialog", { name: "Edit Transaction" });
+    await expect(modal.getByLabel("Description")).toHaveValue(original);
+    await modal.getByLabel("Description").fill(edited);
+    await modal.getByLabel("Amount").fill("1234.56");
+    await modal.getByRole("button", { name: "Save Changes" }).click();
+    await expect(modal).not.toBeVisible();
+
+    const row = page.locator("li", { hasText: edited });
+    await expect(row).toBeVisible();
+    await expect(row.getByText("-$1,234.56")).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator("li", { hasText: edited }).getByText("-$1,234.56")).toBeVisible();
+    await expect(page.getByText(original, { exact: true })).toHaveCount(0);
+  });
+
   test("filters by search text (description match)", async ({ page }) => {
     await page.goto("/transactions");
     await page.getByLabel("Search").fill("Netflix");
