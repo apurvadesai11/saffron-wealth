@@ -6,6 +6,7 @@ import {
   validateAccountType,
   parseCreateAccountBody,
   parseUpdateAccountBody,
+  parseReorderAccountsBody,
 } from "./account-validation";
 
 describe("validateAccountName", () => {
@@ -166,6 +167,20 @@ describe("parseUpdateAccountBody", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toEqual({ archivedAt: null, name: "Restored Account" });
   });
+
+  it.each([true, false])("accepts hiddenFromNetWorth: %s as the sole patch field", (hidden) => {
+    const r = parseUpdateAccountBody({ hiddenFromNetWorth: hidden });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ hiddenFromNetWorth: hidden });
+  });
+
+  // A string "false" is truthy; coercing it would hide the account the caller
+  // asked to show.
+  it.each(["false", 1, null])("rejects a non-boolean hiddenFromNetWorth (%s)", (value) => {
+    const r = parseUpdateAccountBody({ hiddenFromNetWorth: value });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.hiddenFromNetWorth).toBeTruthy();
+  });
 });
 
 describe("Decimal(14,2) boundary", () => {
@@ -193,5 +208,31 @@ describe("Decimal(14,2) boundary", () => {
   it("rejects a magnitude that would round up to 10^12", () => {
     expect(validateBalance(999_999_999_999.995)).not.toBeNull();
     expect(validateBalance(-999_999_999_999.995)).not.toBeNull();
+  });
+});
+
+describe("parseReorderAccountsBody", () => {
+  it("accepts an ordered list of account ids", () => {
+    const r = parseReorderAccountsBody({ accountIds: ["b", "a", "c"] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ accountIds: ["b", "a", "c"] });
+  });
+
+  it.each([
+    ["a missing list", {}],
+    ["an empty list", { accountIds: [] }],
+    ["a non-string id", { accountIds: ["a", 7] }],
+    ["an empty id", { accountIds: ["a", ""] }],
+    // A repeated id has no single position to save.
+    ["a repeated id", { accountIds: ["a", "b", "a"] }],
+    ["more ids than any user has accounts", { accountIds: Array.from({ length: 501 }, (_, i) => `acc-${i}`) }],
+  ])("rejects %s", (_label, body) => {
+    const r = parseReorderAccountsBody(body);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.accountIds).toBeTruthy();
+  });
+
+  it("rejects a non-object body", () => {
+    expect(parseReorderAccountsBody(null).ok).toBe(false);
   });
 });

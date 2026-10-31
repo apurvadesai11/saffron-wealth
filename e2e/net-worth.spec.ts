@@ -54,7 +54,7 @@ test.describe("Net Worth page", () => {
 
     await expect(modal).not.toBeVisible();
     await expect(page.getByText(name)).toBeVisible();
-    await expect(page.getByText("$10000.00").first()).toBeVisible();
+    await expect(page.getByText("$10,000.00").first()).toBeVisible();
   });
 
   test("edits an account's balance and the summary updates", async ({ page }) => {
@@ -79,7 +79,7 @@ test.describe("Net Worth page", () => {
     await modal.getByRole("button", { name: "Save Changes" }).click();
     await expect(modal).not.toBeVisible();
 
-    await expect(page.getByText("$2500.00").first()).toBeVisible();
+    await expect(page.getByText("$2,500.00").first()).toBeVisible();
   });
 
   // "Delete" is a soft-archive (see lib/accounts.ts's archiveAccount) — as of
@@ -109,6 +109,62 @@ test.describe("Net Worth page", () => {
     const archivedGroup = page.locator('[data-state="archived-group"]');
     await archivedGroup.locator("summary").click();
     await expect(archivedGroup.getByText(name)).toBeVisible();
+  });
+
+  test("collapses a section and expands it again", async ({ page }) => {
+    const name = `E2E Collapse ${Date.now()}`;
+    await page.goto("/net-worth");
+    await page.getByRole("button", { name: "+ Add Account" }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Account name").fill(name);
+    await modal.getByLabel("Type").selectOption("cash");
+    await modal.getByLabel("Balance").fill("10");
+    await modal.getByRole("button", { name: "Add Account" }).click();
+    await expect(modal).not.toBeVisible();
+
+    const toggle = page.getByRole("button", { name: "Cash", exact: true });
+    await toggle.click();
+    await expect(page.getByText(name)).not.toBeVisible();
+    await toggle.click();
+    await expect(page.getByText(name)).toBeVisible();
+  });
+
+  // Relative order only: the worker's user shares the Cash section with
+  // whatever other tests in this worker created.
+  test("drags an account above another, and the order survives a reload", async ({ page }) => {
+    const stamp = Date.now();
+    const upper = `E2E Order Upper ${stamp}`;
+    const lower = `E2E Order Lower ${stamp}`;
+    await page.goto("/net-worth");
+    for (const name of [upper, lower]) {
+      await page.getByRole("button", { name: "+ Add Account" }).click();
+      const modal = page.getByRole("dialog");
+      await modal.getByLabel("Account name").fill(name);
+      await modal.getByLabel("Type").selectOption("cash");
+      await modal.getByLabel("Balance").fill("10");
+      await modal.getByRole("button", { name: "Add Account" }).click();
+      await expect(modal).not.toBeVisible();
+    }
+
+    const cashNames = () =>
+      page.locator('[data-bucket="cash"] li').evaluateAll((rows) =>
+        rows.map((r) => r.querySelector("button p")?.textContent?.trim() ?? ""),
+      );
+    const relative = async () => (await cashNames()).filter((n) => n === upper || n === lower);
+    expect(await relative()).toEqual([upper, lower]);
+
+    const responded = page.waitForResponse((r) => r.url().endsWith("/api/accounts/order"));
+    await page
+      .getByLabel(`Drag to reorder ${lower}`)
+      .dragTo(page.locator('[data-bucket="cash"] li', { hasText: upper }));
+    expect((await responded).ok()).toBe(true);
+    // Polled: the add's own refresh can land after the drop and show the old
+    // order briefly, until the refresh that follows the save replaces it.
+    await expect.poll(relative).toEqual([lower, upper]);
+
+    await page.reload();
+    await expect(page.getByText(lower)).toBeVisible();
+    expect(await relative()).toEqual([lower, upper]);
   });
 });
 
@@ -150,7 +206,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     // On a loaded dev server (a full parallel run) that read wins the race.
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(
@@ -178,7 +234,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     // And it must match the Net Worth card exactly.
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     const cardValue = cardText.replace(/[$,]/g, "");
@@ -199,13 +255,46 @@ test.describe("Chart and summary cards agree after a mutation", () => {
 
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(
       "data-latest-value",
       cardText.replace(/[$,]/g, ""),
     );
+  });
+
+  test("hiding an account from net worth drops it from the totals and the chart but keeps it listed", async ({ page }) => {
+    const name = `E2E Agree Hide ${Date.now()}`;
+    await page.goto("/net-worth");
+
+    // A counted account of its own, so the chart still has points once the
+    // other one is hidden. On a fresh worker the hidden account would be the
+    // only one, and the chart would fall back to its empty state.
+    await addAccount(page, `E2E Hide Anchor ${Date.now()}`, "100");
+    await addAccount(page, name, "1357");
+    const withAccount = await latestChartValue(page);
+
+    await page.getByRole("button", { name: `Hide ${name} from Net Worth` }).click();
+    await expect(chart(page)).not.toHaveAttribute("data-latest-value", withAccount ?? "");
+
+    const row = page.locator("[data-bucket] li", { hasText: name });
+    await expect(row).toHaveAttribute("data-hidden-from-net-worth", "true");
+    await expect(row.getByRole("img", { name: "Hidden from net worth" })).toBeVisible();
+
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^-?\$/)
+      .first()
+      .innerText();
+    const cardValue = cardText.replace(/[$,]/g, "");
+    await expect(chart(page)).toHaveAttribute("data-latest-value", cardValue);
+    expect(Number(withAccount) - Number(cardValue)).toBeCloseTo(1357, 2);
+
+    // Showing it again counts it everywhere, back to exactly where it was.
+    await row.getByRole("button", { name: `Show ${name} in Net Worth` }).click();
+    await expect(chart(page)).toHaveAttribute("data-latest-value", withAccount ?? "");
+    await expect(row).not.toHaveAttribute("data-hidden-from-net-worth", "true");
   });
 
   test("restoring an account returns it to both the totals and the chart", async ({ page }) => {
@@ -235,7 +324,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
 
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(

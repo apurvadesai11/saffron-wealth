@@ -17,7 +17,7 @@ function ev(
 // the amendment — only the tests that specifically need a closed window pass
 // a non-null value explicitly.
 function acct(id: string, type: AccountType, archivedAt: string | null = null) {
-  return { id, type, archivedAt };
+  return { id, type, archivedAt, hiddenFromNetWorth: false };
 }
 
 describe("computeNetWorthSeries", () => {
@@ -417,6 +417,7 @@ describe("chart and summary card agree", () => {
       institution: null,
       balance: a.balance,
       balanceAsOf: `${DATE}T00:00:00.000Z`,
+      hiddenFromNetWorth: false,
       createdAt: `${DATE}T00:00:00.000Z`,
       updatedAt: `${DATE}T00:00:00.000Z`,
     }));
@@ -458,8 +459,8 @@ describe("chart and summary card agree", () => {
   // "-$0.00".
   it("agrees on a portfolio that nets to zero, without -0", () => {
     const accounts: Account[] = [
-      { id: "chk", name: "chk", type: "cash", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
-      { id: "cc", name: "cc", type: "credit_card", institution: null, balance: 0.3, balanceAsOf: DATE, createdAt: DATE, updatedAt: DATE },
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 0.3, balanceAsOf: DATE, hiddenFromNetWorth: false, createdAt: DATE, updatedAt: DATE },
+      { id: "cc", name: "cc", type: "credit_card", institution: null, balance: 0.3, balanceAsOf: DATE, hiddenFromNetWorth: false, createdAt: DATE, updatedAt: DATE },
     ];
     const points = computeNetWorthSeries(
       [ev("chk", DATE, 0.3), ev("cc", DATE, -0.3)],
@@ -489,8 +490,8 @@ describe("uncategorized accounts are excluded from the series", () => {
 
   it("keeps the chart's last point equal to the card with one uncategorized account present", () => {
     const accounts: Account[] = [
-      { id: "chk", name: "chk", type: "cash", institution: null, balance: 100, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
-      { id: "unk", name: "unk", type: "uncategorized", institution: null, balance: 999, balanceAsOf: "2026-02-14", createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+      { id: "chk", name: "chk", type: "cash", institution: null, balance: 100, balanceAsOf: "2026-02-14", hiddenFromNetWorth: false, createdAt: "2026-02-14", updatedAt: "2026-02-14" },
+      { id: "unk", name: "unk", type: "uncategorized", institution: null, balance: 999, balanceAsOf: "2026-02-14", hiddenFromNetWorth: false, createdAt: "2026-02-14", updatedAt: "2026-02-14" },
     ];
     const points = computeNetWorthSeries(
       [ev("chk", "2026-02-14", 100), ev("unk", "2026-02-14", 999)],
@@ -500,5 +501,43 @@ describe("uncategorized accounts are excluded from the series", () => {
 
     expect(points[points.length - 1].value).toBe(summary.netWorth);
     expect(summary.netWorth).toBe(100);
+  });
+});
+
+// Hiding an account from net worth removes it from the chart's whole history,
+// not just from today: the owner is saying it was never theirs to count, and
+// the chart's last point has to keep matching the card.
+describe("accounts hidden from net worth are excluded from the series", () => {
+  it("omits a hidden account's events from every point, including dates only it sampled", () => {
+    const points = computeNetWorthSeries(
+      [
+        ev("brk", "2025-06-01", 5000),
+        ev("chk", "2026-01-01", 100),
+        ev("brk", "2026-01-15", 5200),
+        ev("chk", "2026-02-01", 200),
+      ],
+      [acct("chk", "cash"), { ...acct("brk", "brokerage"), hiddenFromNetWorth: true }],
+    );
+
+    expect(points).toEqual([
+      { date: "2026-01-01", value: 100 },
+      { date: "2026-02-01", value: 200 },
+    ]);
+  });
+
+  it("keeps the chart's last point equal to the card with a hidden account present", () => {
+    const base = { institution: null, balanceAsOf: "2026-02-14", hiddenFromNetWorth: false, createdAt: "2026-02-14", updatedAt: "2026-02-14" };
+    const accounts: Account[] = [
+      { ...base, id: "chk", name: "chk", type: "cash", balance: 100, hiddenFromNetWorth: false },
+      { ...base, id: "card", name: "card", type: "credit_card", balance: 400, hiddenFromNetWorth: true },
+    ];
+    const points = computeNetWorthSeries(
+      [ev("chk", "2026-02-14", 100), ev("card", "2026-02-14", -400)],
+      [acct("chk", "cash"), { ...acct("card", "credit_card"), hiddenFromNetWorth: true }],
+    );
+    const summary = computeNetWorth(accounts);
+
+    expect(summary.netWorth).toBe(100);
+    expect(points[points.length - 1].value).toBe(summary.netWorth);
   });
 });

@@ -11,7 +11,7 @@ import type {
   AccountBucketGroup,
   NetWorthSummary,
 } from "./types";
-import { roundToCent } from "./money";
+import { formatUsd, roundToCent } from "./money";
 
 // Display order of buckets on the Net Worth page. Assets first, debt last.
 export const BUCKET_ORDER: AccountBucket[] = [
@@ -100,12 +100,12 @@ export function describeAccountBalance(
   const liability = isLiability(getBucketForType(type));
   if (liability) {
     return balance < 0
-      ? { text: `$${Math.abs(balance).toFixed(2)} credit`, sign: "credit" }
-      : { text: `$${balance.toFixed(2)}`, sign: "owed" };
+      ? { text: `${formatUsd(Math.abs(balance))} credit`, sign: "credit" }
+      : { text: formatUsd(balance), sign: "owed" };
   }
   return balance < 0
-    ? { text: `-$${Math.abs(balance).toFixed(2)}`, sign: "negative" }
-    : { text: `$${balance.toFixed(2)}`, sign: "normal" };
+    ? { text: formatUsd(balance), sign: "negative" }
+    : { text: formatUsd(balance), sign: "normal" };
 }
 
 export function computeNetWorth(accounts: Account[]): NetWorthSummary {
@@ -118,6 +118,9 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
     // page — groupAccountsByBucket gives it its own bucket — so the exclusion
     // is something the user can act on rather than a silent omission.
     if (getBucketForType(a.type) === "uncategorized") continue;
+    // The owner's own exclusion, for a real account they track but don't
+    // count as theirs. Still listed in its bucket, like the case above.
+    if (a.hiddenFromNetWorth) continue;
 
     if (isLiability(getBucketForType(a.type))) {
       totalLiabilities += a.balance;
@@ -135,6 +138,18 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
   };
 }
 
+// The section order after dropping `draggedId` on `targetId`: the dropped
+// account takes the target's slot, which reads as "insert above" when moving
+// up and "insert below" when moving down. An unknown id changes nothing.
+export function moveAccount(ids: string[], draggedId: string, targetId: string): string[] {
+  const from = ids.indexOf(draggedId);
+  const to = ids.indexOf(targetId);
+  if (from === -1 || to === -1 || from === to) return ids;
+  const next = ids.filter((id) => id !== draggedId);
+  next.splice(to, 0, draggedId);
+  return next;
+}
+
 // Groups accounts under their bucket in BUCKET_ORDER, omitting empty buckets.
 export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[] {
   return BUCKET_ORDER.flatMap((bucket) => {
@@ -145,7 +160,11 @@ export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[]
         bucket,
         label: ACCOUNT_BUCKET_LABELS[bucket],
         accounts: bucketAccounts,
-        bucketTotal: roundToCent(bucketAccounts.reduce((sum, a) => sum + a.balance, 0)),
+        // Hidden accounts stay in the list but not the total, so the bucket
+        // totals still add up to the summary cards.
+        bucketTotal: roundToCent(
+          bucketAccounts.reduce((sum, a) => (a.hiddenFromNetWorth ? sum : sum + a.balance), 0),
+        ),
       },
     ];
   });

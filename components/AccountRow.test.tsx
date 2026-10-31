@@ -13,6 +13,7 @@ function account(overrides: Partial<Account> = {}): Account {
     institution: "Fidelity",
     balance: 10000,
     balanceAsOf: "2026-07-17T12:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-17T12:00:00.000Z",
     ...overrides,
@@ -21,36 +22,36 @@ function account(overrides: Partial<Account> = {}): Account {
 
 describe("AccountRow", () => {
   it("shows name, type label, institution, balance, and as-of date", () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     expect(screen.getByText("Fidelity Brokerage")).toBeInTheDocument();
     const subline = screen.getByText(/as of 2026-07-17/);
     expect(subline.textContent).toMatch(/Brokerage/);
     expect(subline.textContent).toMatch(/Fidelity/);
-    expect(screen.getByText("$10000.00")).toBeInTheDocument();
+    expect(screen.getByText("$10,000.00")).toBeInTheDocument();
   });
 
   it("omits the institution segment when none is set", () => {
-    render(<AccountRow account={account({ institution: null })} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account({ institution: null })} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     const subline = screen.getByText(/as of/);
     expect(subline.textContent).not.toMatch(/Fidelity/);
   });
 
   it("marks liability accounts with data-liability=true and red balance", () => {
     const { container } = render(
-      <AccountRow account={account({ type: "credit_card", balance: 2000 })} onEdit={vi.fn()} onArchive={vi.fn()} />,
+      <AccountRow account={account({ type: "credit_card", balance: 2000 })} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />,
     );
     expect(container.querySelector('[data-liability="true"]')).toBeInTheDocument();
-    expect(screen.getByText("$2000.00").className).toMatch(/text-danger/);
+    expect(screen.getByText("$2,000.00").className).toMatch(/text-danger/);
   });
 
   it("marks asset accounts with data-liability=false", () => {
-    const { container } = render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    const { container } = render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     expect(container.querySelector('[data-liability="false"]')).toBeInTheDocument();
   });
 
   it("calls onEdit when the row is clicked", async () => {
     const onEdit = vi.fn();
-    render(<AccountRow account={account()} onEdit={onEdit} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={onEdit} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     await userEvent.click(screen.getByText("Fidelity Brokerage"));
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
@@ -63,7 +64,7 @@ describe("AccountRow", () => {
 // label described something the app does not do.
 describe("AccountRow archive confirmation", () => {
   it("names the action archive, not delete", () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 
     expect(
       screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }),
@@ -73,7 +74,7 @@ describe("AccountRow archive confirmation", () => {
 
   it("does not archive on the first click", async () => {
     const onArchive = vi.fn();
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
 
@@ -83,7 +84,7 @@ describe("AccountRow archive confirmation", () => {
 
   it("archives once the confirm is clicked", async () => {
     const onArchive = vi.fn();
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
     await userEvent.click(screen.getByRole("button", { name: /^Yes, archive/ }));
@@ -93,7 +94,7 @@ describe("AccountRow archive confirmation", () => {
 
   it("abandons the archive on cancel", async () => {
     const onArchive = vi.fn();
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={onArchive} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
     await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
@@ -108,7 +109,7 @@ describe("AccountRow archive confirmation", () => {
   // Recoverable, and the row stays visible with a working Restore path — so
   // the confirm says what happens rather than warning about danger.
   it("tells the user the account is kept, not removed", async () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
 
     expect(screen.getByRole("button", { name: /^Yes, archive/ })).toBeInTheDocument();
@@ -119,7 +120,7 @@ describe("AccountRow archive confirmation", () => {
   // confirm the user asked for is unreachable without tabbing from the top of
   // the document — inside the very item that exists to fix keyboard access.
   it("moves focus to the confirm when it appears", async () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
 
@@ -129,7 +130,7 @@ describe("AccountRow archive confirmation", () => {
   });
 
   it("announces the confirm, so it is not a silent change for a screen reader", async () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
 
@@ -137,7 +138,7 @@ describe("AccountRow archive confirmation", () => {
   });
 
   it("returns focus to the archive control on cancel", async () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ }));
     await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
@@ -149,7 +150,7 @@ describe("AccountRow archive confirmation", () => {
 
   it("marks the confirm state with a data attribute so styling is not the signal", async () => {
     const { container } = render(
-      <AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />,
+      <AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />,
     );
     expect(container.querySelector('[data-confirming="true"]')).toBeNull();
 
@@ -165,7 +166,7 @@ describe("AccountRow archive confirmation", () => {
 // owed and disagreed with the chart by $1,000.
 describe("AccountRow negative balances", () => {
   it("renders an overdrawn asset with the minus outside the dollar sign", () => {
-    render(<AccountRow account={account({ type: "cash", balance: -50 })} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account({ type: "cash", balance: -50 })} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 
     expect(screen.getByText("-$50.00")).toBeInTheDocument();
   });
@@ -177,7 +178,7 @@ describe("AccountRow negative balances", () => {
       <AccountRow
         account={account({ type: "credit_card", balance: -500 })}
         onEdit={vi.fn()}
-        onArchive={vi.fn()}
+        onArchive={vi.fn()}        onToggleHidden={vi.fn()}
       />,
     );
 
@@ -189,7 +190,7 @@ describe("AccountRow negative balances", () => {
       <AccountRow
         account={account({ type: "credit_card", balance: -500 })}
         onEdit={vi.fn()}
-        onArchive={vi.fn()}
+        onArchive={vi.fn()}        onToggleHidden={vi.fn()}
       />,
     );
 
@@ -208,7 +209,7 @@ const MIN_UI_CONTRAST = 3;
 
 describe("AccountRow control contrast", () => {
   it("the archive control clears WCAG 1.4.11's 3:1 for non-text controls", () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     const control = screen.getByRole("button", { name: /Archive Fidelity Brokerage/ });
 
     const token = textTokenClass(control);
@@ -222,7 +223,7 @@ describe("AccountRow control contrast", () => {
   });
 
   it("reserves at least a 24x24 CSS-pixel hit target", () => {
-    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
     const control = screen.getByRole("button", { name: /Archive Fidelity Brokerage/ });
 
     // happy-dom has no layout, so the reserved size is asserted through the
@@ -241,5 +242,74 @@ describe("contrast arithmetic sanity", () => {
     expect(contrastRatio(tokenHex("fg-disabled"), surface)).toBeLessThan(MIN_UI_CONTRAST);
     expect(contrastRatio(tokenHex("fg-faint"), surface)).toBeLessThan(MIN_UI_CONTRAST);
     expect(contrastRatio(tokenHex("fg-muted"), surface)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+  });
+});
+
+describe("AccountRow archive button", () => {
+  it("says Archive on the control instead of a bare ✕", () => {
+    render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /Archive Fidelity Brokerage/ })).toHaveTextContent(/^Archive$/);
+    expect(screen.queryByText("✕")).not.toBeInTheDocument();
+  });
+});
+
+// Hidden from net worth keeps the account in the list — it's a balance the
+// owner tracks but doesn't count — so the row has to say which state it's in.
+describe("AccountRow hide from net worth", () => {
+  it("offers Hide from Net Worth on a counted account and reports the click", async () => {
+    const onToggleHidden = vi.fn();
+    const onEdit = vi.fn();
+    render(<AccountRow account={account()} onEdit={onEdit} onArchive={vi.fn()} onToggleHidden={onToggleHidden} />);
+
+    const control = screen.getByRole("button", { name: "Hide Fidelity Brokerage from Net Worth" });
+    expect(control).toHaveTextContent(/^Hide from Net Worth$/);
+    await userEvent.click(control);
+
+    expect(onToggleHidden).toHaveBeenCalledTimes(1);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it("shows no closed-eye icon on a counted account", () => {
+    const { container } = render(
+      <AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />,
+    );
+
+    expect(screen.queryByRole("img", { name: "Hidden from net worth" })).not.toBeInTheDocument();
+    expect(container.querySelector("[data-hidden-from-net-worth]")).toBeNull();
+  });
+
+  it("shows a closed-eye icon and offers Show in Net Worth on a hidden account", async () => {
+    const onToggleHidden = vi.fn();
+    const { container } = render(
+      <AccountRow
+        account={account({ hiddenFromNetWorth: true })}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+        onToggleHidden={onToggleHidden}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Hidden from net worth" })).toBeInTheDocument();
+    expect(container.querySelector('[data-hidden-from-net-worth="true"]')).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /from Net Worth$/ })).not.toBeInTheDocument();
+
+    const control = screen.getByRole("button", { name: "Show Fidelity Brokerage in Net Worth" });
+    expect(control).toHaveTextContent(/^Show in Net Worth$/);
+    await userEvent.click(control);
+    expect(onToggleHidden).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows a hidden account's balance", () => {
+    render(
+      <AccountRow
+        account={account({ hiddenFromNetWorth: true })}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+        onToggleHidden={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("$10,000.00")).toBeInTheDocument();
   });
 });

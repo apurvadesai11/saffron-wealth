@@ -44,6 +44,7 @@ interface AccountInput {
   id: string;
   type: AccountType;
   archivedAt: string | null;
+  hiddenFromNetWorth: boolean;
 }
 
 // One account's events reduced to what the sweep needs: the order carry-
@@ -90,6 +91,10 @@ export function computeNetWorthSeries(
     // it while the summary card did not, the chart's last point and the card
     // would differ by exactly that account's balance.
     if (account.type === "uncategorized") continue;
+    // Hidden from net worth means never counted, so its history leaves every
+    // point, past ones included, the same way. Its event dates aren't sampled
+    // either: a point that only it produced would be a flat duplicate.
+    if (account.hiddenFromNetWorth) continue;
 
     // Lexicographic comparison is valid for "YYYY-MM-DD" and avoids building
     // a Date per event in what's otherwise a hot sort.

@@ -215,6 +215,54 @@ describe("PATCH /api/accounts/[id]", () => {
     const res = await PATCH(req, params(otherAccount.id));
     expect(res.status).toBe(404);
   });
+
+  it("hides an account from net worth and shows it again, without touching its balance history", async () => {
+    const user = await seedUser();
+    userId = user.id;
+    const account = await prisma.account.create({
+      data: { userId: user.id, name: "Joint Brokerage", type: "brokerage", balance: 5000 },
+    });
+    await prisma.accountBalanceEvent.create({
+      data: { userId: user.id, accountId: account.id, balance: 5000 },
+    });
+    const { rawToken } = await seedSession(user.id);
+    mocks.sessionToken = rawToken;
+
+    const hide = await PATCH(
+      makeRequest({ method: "PATCH", csrfToken: "csrf", body: { hiddenFromNetWorth: true } }),
+      params(account.id),
+    );
+    expect(hide.status).toBe(200);
+    expect((await hide.json()).data.account.hiddenFromNetWorth).toBe(true);
+    expect((await prisma.account.findUnique({ where: { id: account.id } }))?.hiddenFromNetWorth).toBe(true);
+
+    const show = await PATCH(
+      makeRequest({ method: "PATCH", csrfToken: "csrf", body: { hiddenFromNetWorth: false } }),
+      params(account.id),
+    );
+    expect(show.status).toBe(200);
+    expect((await show.json()).data.account.hiddenFromNetWorth).toBe(false);
+
+    const events = await prisma.accountBalanceEvent.findMany({ where: { accountId: account.id } });
+    expect(events.map((e) => e.balance.toNumber())).toEqual([5000]);
+  });
+
+  it("hiding another user's account returns 404 and leaves it counted", async () => {
+    const me = await seedUser();
+    userId = me.id;
+    const other = await seedUser();
+    otherUserId = other.id;
+    const otherAccount = await prisma.account.create({
+      data: { userId: other.id, name: "Not mine", type: "cash", balance: 100 },
+    });
+    const { rawToken } = await seedSession(me.id);
+    mocks.sessionToken = rawToken;
+
+    const req = makeRequest({ method: "PATCH", csrfToken: "csrf", body: { hiddenFromNetWorth: true } });
+    const res = await PATCH(req, params(otherAccount.id));
+    expect(res.status).toBe(404);
+    expect((await prisma.account.findUnique({ where: { id: otherAccount.id } }))?.hiddenFromNetWorth).toBe(false);
+  });
 });
 
 describe("DELETE /api/accounts/[id]", () => {

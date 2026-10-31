@@ -109,6 +109,32 @@ export function parseCreateAccountBody(body: unknown): ParseResult<AccountInput>
   };
 }
 
+// Far past any real account count; the bound is there so the update loop in
+// reorderAccounts is never handed an arbitrarily long list.
+const REORDER_MAX = 500;
+
+// PUT /api/accounts/order: one section's account ids, in their new order.
+export function parseReorderAccountsBody(body: unknown): ParseResult<{ accountIds: string[] }> {
+  if (typeof body !== "object" || body === null) {
+    return { ok: false, fieldErrors: {} };
+  }
+  const ids = (body as Record<string, unknown>).accountIds;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { ok: false, fieldErrors: { accountIds: "List the accounts in their new order." } };
+  }
+  if (ids.length > REORDER_MAX) {
+    return { ok: false, fieldErrors: { accountIds: `At most ${REORDER_MAX} accounts can be reordered at once.` } };
+  }
+  if (!ids.every((id) => typeof id === "string" && id.length > 0)) {
+    return { ok: false, fieldErrors: { accountIds: "Every account id must be a non-empty string." } };
+  }
+  // A repeated id has no single position to save.
+  if (new Set(ids).size !== ids.length) {
+    return { ok: false, fieldErrors: { accountIds: "An account can appear only once." } };
+  }
+  return { ok: true, value: { accountIds: ids as string[] } };
+}
+
 export function parseUpdateAccountBody(body: unknown): ParseResult<AccountPatch> {
   if (typeof body !== "object" || body === null) {
     return { ok: false, fieldErrors: {} };
@@ -144,6 +170,15 @@ export function parseUpdateAccountBody(body: unknown): ParseResult<AccountPatch>
       fieldErrors.archivedAt = "archivedAt can only be cleared (set to null) to restore an account.";
     } else {
       value.archivedAt = null;
+    }
+  }
+  // Strictly boolean: the string "false" is truthy, and coercing it would
+  // hide the account the caller asked to show.
+  if ("hiddenFromNetWorth" in b) {
+    if (typeof b.hiddenFromNetWorth !== "boolean") {
+      fieldErrors.hiddenFromNetWorth = "hiddenFromNetWorth must be true or false.";
+    } else {
+      value.hiddenFromNetWorth = b.hiddenFromNetWorth;
     }
   }
 

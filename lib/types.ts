@@ -137,6 +137,9 @@ export interface Account {
   // convention. See docs/decisions/0011-signed-contribution-at-write-time.md.
   balance: number;
   balanceAsOf: string;  // ISO — updated only when the balance changes
+  // Left out of every net-worth figure — the cards, the bucket totals, and the
+  // chart's whole history — while staying listed in its bucket.
+  hiddenFromNetWorth: boolean;
   createdAt: string;    // ISO
   updatedAt: string;    // ISO
 }
@@ -170,8 +173,12 @@ export interface AccountInput {
 // archive an account, that stays DELETE-only (archiveAccount). Restoring is
 // an explicit user action, which is the authority level the monotone-
 // archiving ruling in lib/accounts.ts reserves for overriding an
-// import-inferred archive.
-export type AccountPatch = Partial<AccountInput> & { archivedAt?: null };
+// import-inferred archive. `hiddenFromNetWorth` is PATCH-only too: creating
+// an account always counts it.
+export type AccountPatch = Partial<AccountInput> & {
+  archivedAt?: null;
+  hiddenFromNetWorth?: boolean;
+};
 
 // --- Financial Profile -------------------------------------------------------
 // Declared planning inputs. String unions enforced in the app layer (like

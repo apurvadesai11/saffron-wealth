@@ -15,9 +15,9 @@ describe("SummaryCards", () => {
       transactions,
     });
 
-    expect(screen.getByText("$1800.00")).toBeInTheDocument(); // Balance
-    expect(screen.getByText("$3000.00")).toBeInTheDocument(); // Income
-    expect(screen.getByText("$1200.00")).toBeInTheDocument(); // Expenses
+    expect(screen.getByText("$1,800.00")).toBeInTheDocument(); // Balance
+    expect(screen.getByText("$3,000.00")).toBeInTheDocument(); // Income
+    expect(screen.getByText("$1,200.00")).toBeInTheDocument(); // Expenses
   });
 
   it("uses red text for a negative balance when expenses > income", () => {
@@ -30,7 +30,7 @@ describe("SummaryCards", () => {
       transactions,
     });
 
-    const balance = screen.getByText("$-1000.00");
+    const balance = screen.getByText("-$1,000.00");
     expect(balance).toBeInTheDocument();
     expect(balance.className).toMatch(/text-danger/);
   });

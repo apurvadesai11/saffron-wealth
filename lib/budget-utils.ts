@@ -10,6 +10,7 @@ import {
   CashflowProjection,
   BudgetProgress,
 } from './types';
+import { formatUsd } from './money';
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -482,7 +483,7 @@ export function formatAlertMessage(
     const remaining = Math.max(0, budgetAmount - spent);
     return (
       `You've used ${percent}% of your ${categoryName} budget. ` +
-      `$${remaining.toFixed(0)} left with ${daysRemaining} ${dayWord} to go.`
+      `${formatUsd(remaining, { wholeDollars: true })} left with ${daysRemaining} ${dayWord} to go.`
     );
   }
 
@@ -490,6 +491,6 @@ export function formatAlertMessage(
   const overage = Math.max(0, spent - budgetAmount);
   return (
     `You've reached your ${categoryName} budget. ` +
-    `You're $${overage.toFixed(0)} over with ${daysRemaining} ${dayWord} remaining.`
+    `You're ${formatUsd(overage, { wholeDollars: true })} over with ${daysRemaining} ${dayWord} remaining.`
   );
 }

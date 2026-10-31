@@ -12,6 +12,7 @@ function account(overrides: Partial<Account> = {}): Account {
     institution: "Fidelity",
     balance: 5200,
     balanceAsOf: "2026-01-02T00:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2025-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
     ...overrides,
@@ -26,9 +27,9 @@ describe("ArchivedAccountsGroup", () => {
 
   it("shows the archived count, account name, type, and balance", () => {
     render(<ArchivedAccountsGroup accounts={[account()]} onRestore={vi.fn()} />);
-    expect(screen.getByText("Archived (1)")).toBeInTheDocument();
+    expect(screen.getByText("Archived accounts (1)")).toBeInTheDocument();
     expect(screen.getByText("Legacy Brokerage")).toBeInTheDocument();
-    expect(screen.getByText("$5200.00")).toBeInTheDocument();
+    expect(screen.getByText("$5,200.00")).toBeInTheDocument();
   });
 
   it("calls onRestore with the account when Restore is clicked", async () => {
@@ -47,7 +48,7 @@ describe("ArchivedAccountsGroup", () => {
         onRestore={vi.fn()}
       />,
     );
-    expect(screen.getByText("Archived (2)")).toBeInTheDocument();
+    expect(screen.getByText("Archived accounts (2)")).toBeInTheDocument();
     expect(screen.getByText("Old Checking")).toBeInTheDocument();
     expect(screen.getByText("Old 401k")).toBeInTheDocument();
   });

@@ -24,7 +24,7 @@ export async function seedSession(userId: string) {
 }
 
 export function makeRequest(opts: {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   url?: string;
   body?: unknown;
   csrfToken?: string | null;

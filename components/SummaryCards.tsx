@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/app-context";
+import { formatUsd } from "@/lib/money";
 
 export default function SummaryCards() {
   const { transactions } = useApp();
@@ -14,16 +15,16 @@ export default function SummaryCards() {
       <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
         <p className="text-sm text-fg-muted mb-1">Balance</p>
         <p className={`text-2xl font-bold ${balance >= 0 ? "text-success" : "text-danger"}`}>
-          ${balance.toFixed(2)}
+          {formatUsd(balance)}
         </p>
       </div>
       <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
         <p className="text-sm text-fg-muted mb-1">Income</p>
-        <p className="text-2xl font-bold text-success">${totalIncome.toFixed(2)}</p>
+        <p className="text-2xl font-bold text-success">{formatUsd(totalIncome)}</p>
       </div>
       <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
         <p className="text-sm text-fg-muted mb-1">Expenses</p>
-        <p className="text-2xl font-bold text-danger">${totalExpenses.toFixed(2)}</p>
+        <p className="text-2xl font-bold text-danger">{formatUsd(totalExpenses)}</p>
       </div>
     </div>
   );

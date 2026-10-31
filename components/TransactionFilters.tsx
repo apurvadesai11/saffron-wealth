@@ -1,6 +1,8 @@
 "use client";
 
 import { useApp } from "@/lib/app-context";
+import { validateDate } from "@/lib/transaction-validation";
+import CategoryMultiSelect from "./CategoryMultiSelect";
 
 const inputClass =
   "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
@@ -27,6 +29,49 @@ export const EMPTY_FILTERS: TransactionFilterState = {
   amountMax: "",
 };
 
+// The URL form of a filter, under the names GET /api/transactions reads. The
+// page's API query is built from it, and so are links into the page (Monthly
+// Review's cashflow rows), which the page reads back on load. Empty values
+// are left out, and "all" is the no-type-filter sentinel.
+export function filtersToSearchParams(f: TransactionFilterState): URLSearchParams {
+  const params = new URLSearchParams();
+  if (f.search.trim()) params.set("search", f.search.trim());
+  if (f.type !== "all") params.set("type", f.type);
+  if (f.categoryIds.length) params.set("categoryIds", f.categoryIds.join(","));
+  if (f.dateFrom) params.set("from", f.dateFrom);
+  if (f.dateTo) params.set("to", f.dateTo);
+  if (f.amountMin) params.set("amountMin", f.amountMin);
+  if (f.amountMax) params.set("amountMax", f.amountMax);
+  return params;
+}
+
+// A value the API would reject is dropped rather than carried into a field: a
+// stale or hand-edited link should show the list, not a filter error.
+export function filtersFromSearchParams(sp: URLSearchParams): TransactionFilterState {
+  const date = (name: string) => {
+    const raw = sp.get(name) ?? "";
+    return raw && validateDate(raw) === null ? raw : "";
+  };
+  const amount = (name: string) => {
+    const raw = sp.get(name) ?? "";
+    const n = Number(raw);
+    return raw.trim() && Number.isFinite(n) && n >= 0 ? raw : "";
+  };
+  const type = sp.get("type");
+  return {
+    search: sp.get("search") ?? "",
+    type: type === "income" || type === "expense" ? type : "all",
+    categoryIds: (sp.get("categoryIds") ?? "")
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0),
+    dateFrom: date("from"),
+    dateTo: date("to"),
+    amountMin: amount("amountMin"),
+    amountMax: amount("amountMax"),
+  };
+}
+
 interface Props {
   value: TransactionFilterState;
   onChange: (next: TransactionFilterState) => void;
@@ -45,16 +90,6 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
     value.amountMin === "" &&
     value.amountMax === "";
 
-  function toggleCategory(id: string) {
-    const selected = value.categoryIds.includes(id);
-    onChange({
-      ...value,
-      categoryIds: selected
-        ? value.categoryIds.filter(c => c !== id)
-        : [...value.categoryIds, id],
-    });
-  }
-
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-line-subtle px-6 py-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -69,8 +104,8 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
         )}
       </div>
 
-      {/* Row 1: search + type */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Row 1: search + type + categories */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="sm:col-span-2">
           <label htmlFor="tx-filter-search" className="block text-xs font-medium text-fg-muted mb-1">Search</label>
           <input
@@ -94,6 +129,15 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
             <option value="income">Income</option>
             <option value="expense">Expense</option>
           </select>
+        </div>
+        <div>
+          <label htmlFor="tx-filter-categories" className="block text-xs font-medium text-fg-muted mb-1">Categories</label>
+          <CategoryMultiSelect
+            id="tx-filter-categories"
+            categories={categories}
+            selectedIds={value.categoryIds}
+            onChange={categoryIds => onChange({ ...value, categoryIds })}
+          />
         </div>
       </div>
 
@@ -144,35 +188,6 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
             onChange={e => onChange({ ...value, amountMax: e.target.value })}
             className={inputClass}
           />
-        </div>
-      </div>
-
-      {/* Categories — colored chips, toggle multi-select */}
-      <div>
-        <label className="block text-xs font-medium text-fg-muted mb-2">
-          Categories {value.categoryIds.length > 0 && (
-            <span className="text-fg-faint">({value.categoryIds.length} selected)</span>
-          )}
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {categories.map(cat => {
-            const selected = value.categoryIds.includes(cat.id);
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => toggleCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                  selected
-                    ? "bg-accent-soft border-accent-line text-accent-strong"
-                    : "bg-surface border-line text-fg-tertiary hover:border-line-strong"
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${cat.color}`} />
-                {cat.name}
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>

@@ -117,6 +117,72 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     }
   }
 
+  async function handleToggleHidden(account: Account) {
+    setError(null);
+    const csrf = readCsrfCookie() ?? "";
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrf,
+        },
+        body: JSON.stringify({ hiddenFromNetWorth: !account.hiddenFromNetWorth }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data?.error?.message ?? "Save failed.");
+        return;
+      }
+      const saved = data.data.account as Account;
+      setAccounts((prev) => prev.map((a) => (a.id === saved.id ? saved : a)));
+      // Hiding removes the account from the chart's whole history, which only
+      // the server-side series can recompute.
+      router.refresh();
+    } catch {
+      setError("Network error.");
+    }
+  }
+
+  async function handleReorder(orderedIds: string[]) {
+    setError(null);
+    const previous = accounts;
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    const moving = new Set(orderedIds);
+    // The section's accounts go to the end of the array as a block. The page
+    // groups by bucket and keeps array order within one, so this sets the
+    // section's order and leaves every other section's alone.
+    setAccounts([
+      ...accounts.filter((a) => !moving.has(a.id)),
+      ...orderedIds.flatMap((id) => byId.get(id) ?? []),
+    ]);
+    const csrf = readCsrfCookie() ?? "";
+    try {
+      const res = await fetch("/api/accounts/order", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrf,
+        },
+        body: JSON.stringify({ accountIds: orderedIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setAccounts(previous);
+        setError(data?.error?.message ?? "Couldn't save the new order.");
+        return;
+      }
+      // Order changes no total, but a refresh from an earlier save (adding an
+      // account, say) can land after this drop carrying the old order, and
+      // the prop sync above would put it back on screen. Next runs refreshes
+      // in sequence, so this one, requested after the save, lands last.
+      router.refresh();
+    } catch {
+      setAccounts(previous);
+      setError("Network error.");
+    }
+  }
+
   async function handleRestore(account: Account) {
     setError(null);
     const csrf = readCsrfCookie() ?? "";
@@ -191,6 +257,8 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
               group={group}
               onEdit={(account) => setEditingAccount(account)}
               onArchive={handleArchive}
+              onToggleHidden={handleToggleHidden}
+              onReorder={handleReorder}
             />
           ))
         )}

@@ -315,6 +315,11 @@ describe("formatAlertMessage", () => {
     expect(msg).toBe("You've reached your Dining Out budget. You're $50 over with 5 days remaining.");
   });
 
+  it("puts thousands separators in the remaining and overage figures", () => {
+    expect(formatAlertMessage(80, "Housing", 8000, 10000, 10)).toContain("$2,000 left");
+    expect(formatAlertMessage(100, "Housing", 3500, 2000, 10)).toContain("$1,500 over");
+  });
+
   it("uses singular 'day' for 1 day", () => {
     expect(formatAlertMessage(80, "X", 80, 100, 1)).toContain("1 day to");
     expect(formatAlertMessage(100, "X", 100, 100, 1)).toContain("1 day remaining");

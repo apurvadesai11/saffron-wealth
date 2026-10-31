@@ -146,16 +146,23 @@ model AuthEvent {
 // an archived account is hidden from net worth but its balance history is kept
 // so a future net-worth-over-time graph can still reflect it.
 model Account {
-  id          String    @id @default(cuid())
-  userId      String
-  name        String
-  type        String
-  institution String?
-  balance     Decimal   @db.Decimal(14, 2)
-  balanceAsOf DateTime  @default(now())
-  archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  userId             String
+  name               String
+  type               String
+  institution        String?
+  balance            Decimal   @db.Decimal(14, 2)
+  balanceAsOf        DateTime  @default(now())
+  archivedAt         DateTime?
+  // The owner's choice to leave this account out of every net-worth total,
+  // past and present, while keeping it listed. Unlike archivedAt it doesn't
+  // say the account closed, so it has no date.
+  hiddenFromNetWorth Boolean   @default(false)
+  // The owner's drag-and-drop position within the account's section. Null
+  // until they first reorder it; null sorts after placed accounts.
+  sortOrder          Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   user                User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
   balanceHistory      AccountBalanceEvent[]

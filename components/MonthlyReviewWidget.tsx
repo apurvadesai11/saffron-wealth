@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useApp } from "@/lib/app-context";
+import { formatUsd } from "@/lib/money";
 import { useAlertState, getAsOf } from "@/lib/use-alert-state";
 import {
   buildBudgetProgressList,
@@ -13,6 +15,7 @@ import {
 import BudgetCategoryList from "./BudgetCategoryList";
 import BudgetEditModal from "./BudgetEditModal";
 import MonthNavigator from "./MonthNavigator";
+import { EMPTY_FILTERS, filtersToSearchParams } from "./TransactionFilters";
 
 type WidgetTab = "cashflow" | "budget";
 
@@ -40,7 +43,8 @@ export default function MonthlyReviewWidget() {
 
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear]   = useState(now.getFullYear());
-  const [widgetTab, setWidgetTab] = useState<WidgetTab>("budget");
+  // Cashflow is listed first, so it's the tab the widget opens on.
+  const [widgetTab, setWidgetTab] = useState<WidgetTab>("cashflow");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const asOf = useMemo(() => getAsOf(month, year), [month, year]);
@@ -160,6 +164,19 @@ export default function MonthlyReviewWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awaitingOlderData, monthStart]);
 
+  // Last calendar day of the selected month, built in local time like the
+  // rest of the period math; day 0 of next month is this month's last.
+  const monthEnd = `${monthPrefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
+  function transactionsHref(categoryId: string) {
+    const params = filtersToSearchParams({
+      ...EMPTY_FILTERS,
+      categoryIds: [categoryId],
+      dateFrom: monthStart,
+      dateTo: monthEnd,
+    });
+    return `/transactions?${params.toString()}`;
+  }
+
   const maxCategory = categoryTotals[0]?.amount ?? 0;
   const noData      = getNoDataState(month, year);
 
@@ -175,10 +192,11 @@ export default function MonthlyReviewWidget() {
         {/* Header: tabs + shared month navigator */}
         <div className="flex items-center justify-between px-5 pt-3 pb-3">
           <div className="flex gap-1">
-            {(["budget", "cashflow"] as WidgetTab[]).map(tab => (
+            {(["cashflow", "budget"] as WidgetTab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setWidgetTab(tab)}
+                aria-pressed={widgetTab === tab}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg capitalize transition-colors ${
                   widgetTab === tab
                     ? "bg-surface-muted text-fg"
@@ -211,16 +229,16 @@ export default function MonthlyReviewWidget() {
         <div className="grid grid-cols-3 gap-3 px-5 pt-4 pb-3">
           <div className="bg-success-soft rounded-lg p-3">
             <p className="text-xs text-success font-medium mb-1">Earned</p>
-            <p className="text-lg font-bold text-success-strong">${monthIncome.toFixed(2)}</p>
+            <p className="text-lg font-bold text-success-strong">{formatUsd(monthIncome)}</p>
           </div>
           <div className="bg-danger-soft rounded-lg p-3">
             <p className="text-xs text-danger-muted font-medium mb-1">Spent</p>
-            <p className="text-lg font-bold text-danger">${monthExpenses.toFixed(2)}</p>
+            <p className="text-lg font-bold text-danger">{formatUsd(monthExpenses)}</p>
           </div>
           <div className={`rounded-lg p-3 ${monthNet >= 0 ? "bg-accent-soft" : "bg-caution-soft"}`}>
             <p className={`text-xs font-medium mb-1 ${monthNet >= 0 ? "text-accent-muted" : "text-caution-muted"}`}>Net</p>
             <p className={`text-lg font-bold ${monthNet >= 0 ? "text-accent-strong" : "text-caution"}`}>
-              {monthNet >= 0 ? "+" : ""}${monthNet.toFixed(2)}
+              {monthNet >= 0 ? "+" : ""}{formatUsd(monthNet)}
             </p>
           </div>
         </div>
@@ -296,16 +314,21 @@ export default function MonthlyReviewWidget() {
                 <ul className="space-y-3">
                   {categoryTotals.map(({ categoryId, name, color, amount }) => (
                     <li key={categoryId}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-fg-secondary">{name}</span>
-                        <span className="text-sm font-semibold text-fg-soft">${amount.toFixed(2)}</span>
-                      </div>
-                      <div className="w-full bg-surface-muted rounded-full h-1.5">
-                        <div
-                          className={`${color} h-1.5 rounded-full transition-all`}
-                          style={{ width: `${(amount / maxCategory) * 100}%` }}
-                        />
-                      </div>
+                      <Link
+                        href={transactionsHref(categoryId)}
+                        className="block rounded-lg px-1 -mx-1 py-1 -my-1 hover:bg-surface-sunken transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-fg-secondary">{name}</span>
+                          <span className="text-sm font-semibold text-fg-soft">{formatUsd(amount)}</span>
+                        </div>
+                        <div className="w-full bg-surface-muted rounded-full h-1.5">
+                          <div
+                            className={`${color} h-1.5 rounded-full transition-all`}
+                            style={{ width: `${(amount / maxCategory) * 100}%` }}
+                          />
+                        </div>
+                      </Link>
                     </li>
                   ))}
                 </ul>

@@ -319,5 +319,120 @@ describe("AppProvider memoization", () => {
     expect(last.addTransaction).toBe(first.addTransaction);
     expect(last.deleteTransaction).toBe(first.deleteTransaction);
     expect(last.beginRefresh).toBe(first.beginRefresh);
+    expect(last.updateTransaction).toBe(first.updateTransaction);
+  });
+});
+
+describe("AppProvider updateTransaction", () => {
+  let update: ReturnType<typeof useApp>["updateTransaction"];
+  function EditProbe() {
+    const { transactions, updateTransaction } = useApp();
+    update = updateTransaction;
+    return (
+      <span data-testid="rows">
+        {transactions.map((t) => `${t.id}:${t.date}:${t.amount}`).join(",")}
+      </span>
+    );
+  }
+
+  function renderEditProbe(seedTransactions: Transaction[], transactionsFrom?: string) {
+    return render(
+      <AppProvider
+        seedCategories={[]}
+        seedBudgets={[]}
+        seedTransactions={seedTransactions}
+        transactionsFrom={transactionsFrom}
+      >
+        <EditProbe />
+      </AppProvider>,
+    );
+  }
+
+  function saved(transaction: Transaction) {
+    return { ok: true, json: async () => ({ ok: true, data: { transaction } }) };
+  }
+
+  const edit = (t: Transaction) => ({
+    description: t.description, amount: t.amount, categoryId: t.categoryId, type: t.type, date: t.date,
+  });
+
+  it("PATCHes the five editable fields and replaces the row with the server's copy", async () => {
+    renderEditProbe([tx("a", "2026-09-01", 10)]);
+    const changed = tx("a", "2026-09-01", 25);
+    fetchMock.mockResolvedValueOnce(saved(changed));
+
+    await act(() => update("a", edit(changed)));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/transactions/a",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify(edit(changed)) }),
+    );
+    expect(screen.getByTestId("rows")).toHaveTextContent("a:2026-09-01:25");
+  });
+
+  it("keeps the list newest-first when an edit moves a row's date", async () => {
+    renderEditProbe([tx("b", "2026-09-10"), tx("a", "2026-09-01")]);
+    fetchMock.mockResolvedValueOnce(saved(tx("a", "2026-09-20")));
+
+    await act(() => update("a", edit(tx("a", "2026-09-20"))));
+
+    expect(screen.getByTestId("rows")).toHaveTextContent("a:2026-09-20:10,b:2026-09-10:10");
+  });
+
+  // The window claims every row from its start onward is present. A row
+  // edited from the Transactions page can come from before the window, and
+  // if its new date lands inside, leaving it out would make that month read
+  // short.
+  it("adds an edited row it didn't hold when the new date falls inside the window", async () => {
+    renderEditProbe([], "2025-09-01");
+    fetchMock.mockResolvedValueOnce(saved(tx("old", "2026-09-05")));
+
+    await act(() => update("old", edit(tx("old", "2026-09-05"))));
+
+    expect(screen.getByTestId("rows")).toHaveTextContent("old:2026-09-05:10");
+  });
+
+  it("does not add an edited row whose date is still before the window", async () => {
+    renderEditProbe([], "2025-09-01");
+    fetchMock.mockResolvedValueOnce(saved(tx("old", "2020-01-01")));
+
+    await act(() => update("old", edit(tx("old", "2020-01-01"))));
+
+    expect(screen.getByTestId("rows")).toBeEmptyDOMElement();
+  });
+
+  // The Transactions page re-fetches its rows when this array's identity
+  // changes. An edit to a row outside the window still has to change it, or
+  // the page keeps showing the row as it was before the save.
+  it("still signals a change when the edited row stays outside the window", async () => {
+    const seen: Transaction[][] = [];
+    function IdentityProbe() {
+      const { transactions, updateTransaction } = useApp();
+      update = updateTransaction;
+      seen.push(transactions);
+      return null;
+    }
+    render(
+      <AppProvider seedCategories={[]} seedBudgets={[]} seedTransactions={[]} transactionsFrom="2025-09-01">
+        <IdentityProbe />
+      </AppProvider>,
+    );
+    fetchMock.mockResolvedValueOnce(saved(tx("old", "2020-01-01")));
+
+    await act(() => update("old", edit(tx("old", "2020-01-01"))));
+
+    expect(seen[seen.length - 1]).not.toBe(seen[0]);
+    expect(seen[seen.length - 1]).toEqual([]);
+  });
+
+  it("throws and leaves the row alone when the save fails", async () => {
+    renderEditProbe([tx("a", "2026-09-01", 10)]);
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ ok: false, error: { message: "Category not found." } }),
+    });
+
+    await expect(update("a", edit(tx("a", "2026-09-01", 99)))).rejects.toThrow("Category not found.");
+    expect(screen.getByTestId("rows")).toHaveTextContent("a:2026-09-01:10");
   });
 });

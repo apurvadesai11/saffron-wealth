@@ -133,20 +133,24 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4 py-6"
       onClick={step === "loading" ? undefined : onClose}
       aria-label="Close modal"
     >
+      {/* Capped at the overlay's height with only the body scrolling: a
+          preview listing many new accounts is taller than most windows, and
+          the fixed overlay can't scroll, so the header and Confirm button
+          were pushed off-screen with no way to reach them. */}
       <div
         ref={dialogRef}
-        className="bg-surface rounded-2xl shadow-xl w-full max-w-lg"
+        className="bg-surface rounded-2xl shadow-xl w-full max-w-lg max-h-full flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-labelledby="balance-history-import-title"
         data-import-step={step}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 border-b border-line-subtle">
+        <div className="px-6 pt-6 pb-4 border-b border-line-subtle shrink-0">
           <div className="flex items-start justify-between">
             <h2 id="balance-history-import-title" className="text-xl font-bold text-fg">
               Import Balance History
@@ -163,7 +167,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0">
           {error && (
             <p
               role="alert"
@@ -322,7 +326,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
         </div>
 
         {step !== "loading" && (
-          <div className="px-6 pb-6 flex gap-3">
+          <div className="px-6 pt-4 pb-6 flex gap-3 shrink-0 border-t border-line-subtle">
             {step === "pick" && (
               <button
                 onClick={onClose}

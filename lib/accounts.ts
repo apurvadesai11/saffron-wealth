@@ -27,6 +27,7 @@ function mapAccount(row: PrismaAccount): Account {
     institution: row.institution,
     balance: row.balance.toNumber(),
     balanceAsOf: row.balanceAsOf.toISOString(),
+    hiddenFromNetWorth: row.hiddenFromNetWorth,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -35,7 +36,9 @@ function mapAccount(row: PrismaAccount): Account {
 export async function listAccounts(userId: string): Promise<Account[]> {
   const rows = await prisma.account.findMany({
     where: { userId, archivedAt: null },
-    orderBy: { createdAt: "asc" },
+    // Placed accounts in the owner's order, then never-placed ones (new, or
+    // in a section that's never been reordered) by creation.
+    orderBy: [{ sortOrder: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
   });
   return rows.map(mapAccount);
 }
@@ -115,6 +118,11 @@ export async function updateAccount(
         ...(patch.type !== undefined ? { type: patch.type } : {}),
         ...(patch.institution !== undefined ? { institution: patch.institution } : {}),
         ...(isRestore ? { archivedAt: null } : {}),
+        // No balance event either way: hiding changes what's counted, not
+        // what the account held.
+        ...(patch.hiddenFromNetWorth !== undefined
+          ? { hiddenFromNetWorth: patch.hiddenFromNetWorth }
+          : {}),
         ...(balanceChanged
           ? { balance: nextBalance, balanceAsOf: new Date() }
           : {}),
@@ -140,6 +148,22 @@ export async function updateAccount(
   });
 
   return mapAccount(row);
+}
+
+// Saves one section's drag-and-drop order. Only the named accounts move, so a
+// section's save leaves every other section's order alone. Returns false
+// without writing anything if any id isn't one of the user's active accounts.
+export async function reorderAccounts(userId: string, accountIds: string[]): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const owned = await tx.account.count({
+      where: { id: { in: accountIds }, userId, archivedAt: null },
+    });
+    if (owned !== accountIds.length) return false;
+    for (const [sortOrder, id] of accountIds.entries()) {
+      await tx.account.update({ where: { id }, data: { sortOrder } });
+    }
+    return true;
+  });
 }
 
 // Soft-delete: marks the account archived (hidden from listAccounts / net
@@ -467,6 +491,7 @@ export interface AccountSeriesRosterRow {
   id: string;
   type: AccountType;
   archivedAt: string | null;
+  hiddenFromNetWorth: boolean;
 }
 
 // EVERY account, archived included — deliberately NOT listAccounts, whose
@@ -479,12 +504,13 @@ export interface AccountSeriesRosterRow {
 export async function listAccountsForSeries(userId: string): Promise<AccountSeriesRosterRow[]> {
   const rows = await prisma.account.findMany({
     where: { userId },
-    select: { id: true, type: true, archivedAt: true },
+    select: { id: true, type: true, archivedAt: true, hiddenFromNetWorth: true },
   });
   return rows.map((r) => ({
     id: r.id,
     type: r.type as AccountType,
     archivedAt: r.archivedAt ? r.archivedAt.toISOString() : null,
+    hiddenFromNetWorth: r.hiddenFromNetWorth,
   }));
 }
 

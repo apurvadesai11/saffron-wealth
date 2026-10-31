@@ -113,6 +113,33 @@ test.describe("Transactions: add + filter", () => {
     await expect(page.getByText("-$12.34")).toBeVisible();
   });
 
+  test("edits a transaction and the change survives a reload", async ({ page }) => {
+    const original = `Edit me ${Date.now()}`;
+    const edited = `${original} (edited)`;
+    await page.goto("/transactions");
+    await page.getByRole("button", { name: "+ Add Transaction" }).click();
+    await page.getByLabel("Description").fill(original);
+    await page.getByLabel("Amount").fill("20");
+    await page.getByRole("button", { name: "Save Transaction" }).click();
+    await expect(page.getByText(original)).toBeVisible();
+
+    await page.getByRole("button", { name: `Edit ${original}` }).click();
+    const modal = page.getByRole("dialog", { name: "Edit Transaction" });
+    await expect(modal.getByLabel("Description")).toHaveValue(original);
+    await modal.getByLabel("Description").fill(edited);
+    await modal.getByLabel("Amount").fill("1234.56");
+    await modal.getByRole("button", { name: "Save Changes" }).click();
+    await expect(modal).not.toBeVisible();
+
+    const row = page.locator("li", { hasText: edited });
+    await expect(row).toBeVisible();
+    await expect(row.getByText("-$1,234.56")).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator("li", { hasText: edited }).getByText("-$1,234.56")).toBeVisible();
+    await expect(page.getByText(original, { exact: true })).toHaveCount(0);
+  });
+
   test("filters by search text (description match)", async ({ page }) => {
     await page.goto("/transactions");
     await page.getByLabel("Search").fill("Netflix");
@@ -132,9 +159,12 @@ test.describe("Transactions: add + filter", () => {
     await expect(page.getByText("Whole Foods")).toHaveCount(0);
   });
 
-  test("filters by category chip (Groceries)", async ({ page }) => {
+  test("filters by a category picked from the searchable dropdown (Groceries)", async ({ page }) => {
     await page.goto("/transactions");
-    await page.getByRole("button", { name: /^Groceries$/ }).click();
+    await page.getByRole("button", { name: /^Categories:/ }).click();
+    await page.getByRole("searchbox", { name: "Search categories" }).fill("groc");
+    await page.getByRole("checkbox", { name: "Groceries" }).check();
+    await page.keyboard.press("Escape");
 
     await expect(page.getByText("Whole Foods").first()).toBeVisible();
     await expect(page.getByText("Rent")).toHaveCount(0);
@@ -155,6 +185,8 @@ test.describe("Transactions: add + filter", () => {
 test.describe("Setting a monthly budget", () => {
   test("updates an existing category budget via the BudgetEditModal", async ({ page }) => {
     await page.goto("/monthly-review");
+    // The budget rows live on the Budget tab; Cashflow is the default.
+    await page.getByRole("button", { name: /^budget$/i }).click();
 
     // Open the edit modal for Groceries (a budgeted category in mock data — $400)
     await page.getByRole("button", { name: /Groceries/ }).first().click();
@@ -175,6 +207,8 @@ test.describe("Setting a monthly budget", () => {
 
   test("Use this → applies the historical average suggestion", async ({ page }) => {
     await page.goto("/monthly-review");
+    // The budget rows live on the Budget tab; Cashflow is the default.
+    await page.getByRole("button", { name: /^budget$/i }).click();
     await page.getByRole("button", { name: /Groceries/ }).first().click();
 
     const modal = page.getByRole("dialog");
@@ -189,5 +223,29 @@ test.describe("Setting a monthly budget", () => {
     // Cancel — we're only testing that the suggestion populates the input
     await modal.getByRole("button", { name: "Cancel" }).click();
     await expect(modal).not.toBeVisible();
+  });
+});
+
+test.describe("Monthly Review → Transactions", () => {
+  test("a cashflow category opens the Transactions page filtered to it and the month", async ({ page }) => {
+    await page.goto("/monthly-review");
+    // The seeded spending is in February 2026.
+    const prev = page.getByRole("button", { name: "Previous month" });
+    while (!(await page.getByText("February 2026").isVisible())) {
+      await prev.click();
+    }
+
+    await page.getByRole("link", { name: /Groceries/ }).click();
+
+    await expect(page).toHaveURL(/\/transactions\?/);
+    await expect(page.getByLabel("From", { exact: true })).toHaveValue("2026-02-01");
+    await expect(page.getByLabel("To", { exact: true })).toHaveValue("2026-02-28");
+    await expect(page.getByRole("button", { name: /^Categories:/ })).toHaveText(/Groceries/);
+    await expect(page.getByText("Whole Foods")).toBeVisible();
+    await expect(page.getByText("Trader Joe's")).toBeVisible();
+    // Every row on the page is a February grocery.
+    const sublines = await page.locator("ul li button p.text-xs").allInnerTexts();
+    expect(sublines.length).toBeGreaterThan(0);
+    for (const line of sublines) expect(line).toMatch(/^Groceries · 2026-02-/);
   });
 });

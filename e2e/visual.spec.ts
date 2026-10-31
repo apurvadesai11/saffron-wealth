@@ -75,10 +75,11 @@ for (const scheme of ["light", "dark"] as const) {
       while (!(await page.getByText(/February 2026/).isVisible())) {
         await prev.click();
       }
+      await page.getByRole("button", { name: /^budget$/i }).click();
       await settle(page);
       await expect(page).toHaveScreenshot(name("review-budget"), SHOT);
 
-      await page.getByRole("button", { name: "cashflow" }).click();
+      await page.getByRole("button", { name: /^cashflow$/i }).click();
       await settle(page);
       await expect(page).toHaveScreenshot(name("review-cashflow"), SHOT);
 

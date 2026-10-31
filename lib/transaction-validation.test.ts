@@ -6,6 +6,7 @@ import {
   validateDate,
   parseTransactionQueryParams,
   parseCreateTransactionBody,
+  parseUpdateTransactionBody,
 } from "./transaction-validation";
 
 describe("validateDescription", () => {
@@ -114,6 +115,53 @@ describe("parseCreateTransactionBody", () => {
       type: "expense", date: "2026-07-01", accountId: "acc-1",
     });
     expect(r.ok && r.value.accountId).toBe("acc-1");
+  });
+});
+
+describe("parseUpdateTransactionBody", () => {
+  const valid = {
+    description: "  Weekly shop  ", amount: 1234.56, categoryId: "cat-groceries",
+    type: "expense", date: "2026-07-02",
+  };
+
+  it("rejects a non-object body", () => {
+    expect(parseUpdateTransactionBody(null).ok).toBe(false);
+  });
+
+  it("normalizes the five editable fields", () => {
+    const r = parseUpdateTransactionBody(valid);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value).toEqual({
+        description: "Weekly shop", amount: 1234.56, categoryId: "cat-groceries",
+        type: "expense", date: "2026-07-02",
+      });
+    }
+  });
+
+  // The edit form has no account input, and an imported row's account must
+  // survive an edit, so the parser doesn't carry one through.
+  it("leaves accountId out of the update even when the body sends one", () => {
+    const r = parseUpdateTransactionBody({ ...valid, accountId: "acc-1" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).not.toHaveProperty("accountId");
+  });
+
+  it("accepts a transfer, which imported rows can be", () => {
+    const r = parseUpdateTransactionBody({ ...valid, type: "transfer" });
+    expect(r.ok && r.value.type).toBe("transfer");
+  });
+
+  it("collects field errors for bad input, as create does", () => {
+    const r = parseUpdateTransactionBody({
+      description: "", amount: -5, type: "bogus", date: "2026-02-30",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(Object.keys(r.fieldErrors).sort()).toEqual(
+        ["amount", "categoryId", "date", "description", "type"],
+      );
+    }
   });
 });
 

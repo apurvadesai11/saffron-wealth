@@ -87,16 +87,23 @@ User-visible v1 capabilities:
   a bell icon in the top nav. Each alert shows category, %, remaining $, and
   days left in month. Alerts reset automatically when a budget increase drops
   spend back below a previously-fired threshold (FR-19).
-- **Monthly Review widget** with Budget / Cashflow tabs and a shared month
-  navigator. Earned / Spent / Net summary cards pinned above tab content.
-- **Transactions** screen (separate route) with add/delete, filter by type,
-  category, date range, amount range, and free-text search.
+- **Monthly Review widget** with Cashflow / Budget tabs (Cashflow first and
+  default) and a shared month navigator with a Today button. Earned / Spent /
+  Net summary cards pinned above tab content. Each Cashflow category row links
+  to the Transactions page filtered to that category and month.
+- **Transactions** screen (separate route) with add/edit/delete, filter by type,
+  category (a searchable multi-select dropdown), date range, amount range, and
+  free-text search; rows are divided by month.
 - **Net Worth** screen (separate route, persisted) — Total Assets / Total
   Liabilities / Net Worth summary; accounts grouped by bucket (Cash,
   Investments, Retirement, Real Estate, Debt); add / edit (incl. changing
-  type) / delete an account. Net-worth-over-time chart (hand-rolled SVG,
+  type) / archive an account. Net-worth-over-time chart (hand-rolled SVG,
   3M/6M/YTD/1Y/3Y/5Y/10Y/MAX) above the summary cards. Archived accounts
-  shown in a collapsed group, excluded from totals, with a Restore action.
+  shown in a collapsed "Archived accounts" group, excluded from totals, with a
+  Restore action. "Hide from Net Worth" keeps an account in its bucket (with a
+  closed-eye icon) but out of every total and the chart's whole history.
+  Sections collapse from their headings, and accounts reorder within a section
+  by drag-and-drop (`Account.sortOrder`, saved by `PUT /api/accounts/order`).
 - **Financial Profile** screen (`/financial-profile`, persisted, append-only
   versions) — income as typed streams (salary, bonus, RSUs, ESPP, rental, …),
   current and target retirement age, real return / safe withdrawal / inflation
@@ -205,9 +212,10 @@ app/
     profile/__tests__/                Integration tests for /api/profile/*
     accounts/route.ts                 GET (list) + POST (create) — real Postgres
     accounts/[id]/route.ts            PATCH (update) + DELETE (soft-delete/archive)
+    accounts/order/route.ts           PUT — one section's drag-and-drop order
     accounts/__tests__/                Integration tests for /api/accounts/*
     transactions/route.ts             POST (create) — real Postgres
-    transactions/[id]/route.ts        DELETE
+    transactions/[id]/route.ts        PATCH (edit the five form fields) + DELETE
     transactions/__tests__/           Integration tests for /api/transactions/*
     budgets/route.ts                  PUT — batch upsert (one manual edit or Auto-Set All)
     budgets/__tests__/                Integration tests for /api/budgets/*
@@ -221,7 +229,8 @@ components/
   BudgetCategoryList.tsx, BudgetCategoryRow.tsx, BudgetProgressBar.tsx
   BudgetEditModal.tsx, CashflowCard.tsx
   AlertsButton.tsx, AlertBanner.tsx, AlertPanel.tsx
-  TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx
+  TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx, TransactionEditModal.tsx,
+  CategoryMultiSelect.tsx
   NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
   AccountRow.tsx, AccountEditModal.tsx
   FinancialProfileClient.tsx, IncomeStreamsEditor.tsx, ContributionTargetsEditor.tsx
@@ -340,7 +349,10 @@ The Transactions page does **not** read this array for its rows. It queries
 `GET /api/transactions` directly (server-side filtering on date range, type,
 categories, amount range, and a description/merchant/category-name search,
 with cursor paging), because the window can't answer a filter that reaches
-further back than it does.
+further back than it does. Its starting filter comes from the URL, under the
+API's own parameter names (`filtersFromSearchParams` / `filtersToSearchParams`
+in `components/TransactionFilters.tsx`), which is how Monthly Review links into
+it. It reads the URL once; the controls don't write back to it.
 
 State slices:
 
@@ -467,6 +479,15 @@ reflect an account that's since been archived. This convention was recovered
 from an earlier, uncommitted persistence experiment found live in the dev
 database (which used `archivedAt` on `Account`/`Category`) — adopted
 deliberately to stay consistent with that prior design.
+
+**Hidden from net worth is a separate flag, not a kind of archive.**
+`Account.hiddenFromNetWorth` is the owner saying "track this, don't count it"
+(a joint or managed-for-someone account). Unlike archiving, it has no date and
+isn't windowed: `computeNetWorth`, `groupAccountsByBucket`'s `bucketTotal` and
+`computeNetWorthSeries` all skip the account outright, so its whole history
+leaves the chart and the chart's last point still equals the card. The account
+stays listed in its bucket. Toggling it (`PATCH { hiddenFromNetWorth }`) writes
+no balance event.
 
 **Balance history is append-only and silent.** `AccountBalanceEvent` gets one
 row when an account is created (opening balance) and one more **only when a

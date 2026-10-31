@@ -22,3 +22,28 @@
 export function roundToCent(value: number): number {
   return Math.round(value * 100) / 100 || 0;
 }
+
+// The one display convention for dollars, for the same reason: every screen
+// hand-rolled `$${n.toFixed(2)}`, which has no thousands separators and puts
+// the sign inside the symbol ("$-50.00"). The locale is pinned rather than
+// left to the runtime so the server render and the browser can't disagree.
+//
+// signDisplay "negative" drops the minus from anything that rounds to zero,
+// so -0 and -0.001 read "$0.00" rather than "-$0.00" — a zero shown as a debt.
+const USD = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  signDisplay: "negative",
+});
+const USD_WHOLE = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+  signDisplay: "negative",
+});
+
+/** "$1,234.56", or "$1,235" with `wholeDollars` (budget figures). */
+export function formatUsd(value: number, opts: { wholeDollars?: boolean } = {}): string {
+  return (opts.wholeDollars ? USD_WHOLE : USD).format(value);
+}
