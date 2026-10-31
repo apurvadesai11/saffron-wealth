@@ -172,3 +172,79 @@ export interface AccountInput {
 // archiving ruling in lib/accounts.ts reserves for overriding an
 // import-inferred archive.
 export type AccountPatch = Partial<AccountInput> & { archivedAt?: null };
+
+// --- Financial Profile -------------------------------------------------------
+// Declared planning inputs. String unions enforced in the app layer (like
+// AccountType), so a new kind or frequency needs no migration. Labels and type
+// guards live in lib/financial-profile-utils.ts.
+
+export type IncomeKind =
+  | 'salary'
+  | 'bonus'
+  | 'rsu'
+  | 'espp'
+  | 'rental'
+  | 'self_employment'
+  | 'interest_dividends'
+  | 'other';
+
+// How a stream is paid. Informational: every calculation reads annualAmount.
+export type PayFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual'
+  | 'irregular';
+
+export type FilingStatus =
+  | 'single'
+  | 'married_joint'
+  | 'married_separate'
+  | 'head_of_household'
+  | 'qualifying_surviving_spouse';
+
+export interface IncomeStream {
+  kind: IncomeKind;
+  label: string | null;
+  annualAmount: number; // gross, before tax
+  frequency: PayFrequency | null;
+}
+
+// The employer matches `matchPct`% of the user's contributions, up to
+// `limitPct`% of salary.
+export interface EmployerMatch {
+  matchPct: number;
+  limitPct: number;
+}
+
+export interface ContributionTarget {
+  accountId: string;
+  annualAmount: number;
+}
+
+// The write shape: what the form sends and the parser returns. `age` is the
+// user's current age as typed; it is stored as FinancialProfile.ageAtEffective.
+// Percents are as typed (4 means 4%).
+export interface FinancialProfileInput {
+  age: number;
+  targetRetirementAge: number;
+  expectedRealReturnPct: number;
+  safeWithdrawalRatePct: number;
+  inflationPct: number;
+  filingStatus: FilingStatus | null;
+  employerMatch: EmployerMatch | null;
+  incomeStreams: IncomeStream[];
+  contributionTargets: ContributionTarget[];
+}
+
+// One saved version. The age is stored as typed, anchored to effectiveAt —
+// derive the current age with ageOn() rather than reading ageAtEffective as if
+// it were today's.
+export type FinancialProfile = Omit<FinancialProfileInput, 'age'> & {
+  version: number;
+  effectiveAt: string; // ISO timestamp
+  ageAtEffective: number;
+};
