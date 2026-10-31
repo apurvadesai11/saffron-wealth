@@ -90,6 +90,28 @@ test.describe("Net Worth — history chart and balance-history import", () => {
     expect(Math.abs(chartValue - cardValue)).toBeLessThanOrEqual(0.01);
   });
 
+  // Same overflow as the Monarch import's: a fixed, unscrollable overlay cut
+  // off a preview taller than the window. Preview only — nothing committed.
+  test("in a short window the preview scrolls inside the dialog and Confirm import stays on screen", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 320 });
+    await page.goto("/net-worth");
+    await page.getByRole("button", { name: "Import balance history" }).click();
+
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Monarch balance history CSV").setInputFiles(RANGE_FIXTURE_PATH);
+    await expect(modal).toHaveAttribute("data-import-step", "preview");
+
+    await expect(modal.getByRole("button", { name: "Confirm import" })).toBeInViewport({ ratio: 1 });
+    await expect(modal.getByRole("heading", { name: "Import Balance History" })).toBeInViewport({ ratio: 1 });
+
+    const bottom = modal.getByText("Range Test Credit Card");
+    await bottom.scrollIntoViewIfNeeded();
+    await expect(bottom).toBeInViewport({ ratio: 1 });
+    const top = modal.getByText("Date range");
+    await top.scrollIntoViewIfNeeded();
+    await expect(top).toBeInViewport({ ratio: 1 });
+  });
+
   test("archiving an account moves it to Archived and excludes it from net worth; restoring returns it to its bucket and the total", async ({
     page,
   }) => {

@@ -61,6 +61,29 @@ test.describe("Monarch import", () => {
     await expect(page.getByText("City Cab Co")).toBeVisible();
   });
 
+  // A preview taller than the window used to overflow a fixed overlay that
+  // couldn't scroll, cutting off both the header and the Confirm button.
+  // Preview only — nothing is committed, so the worker's data is untouched.
+  test("in a short window the preview scrolls inside the dialog and Confirm import stays on screen", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 320 });
+    await page.goto("/transactions");
+    await page.getByRole("button", { name: "Import from Monarch" }).click();
+
+    const modal = page.getByRole("dialog");
+    await modal.getByLabel("Monarch transactions CSV").setInputFiles(FIXTURE_PATH);
+    await expect(modal).toHaveAttribute("data-import-step", "preview");
+
+    await expect(modal.getByRole("button", { name: "Confirm import" })).toBeInViewport({ ratio: 1 });
+    await expect(modal.getByRole("heading", { name: "Import from Monarch" })).toBeInViewport({ ratio: 1 });
+
+    const bottom = modal.getByRole("heading", { name: "New categories" });
+    await bottom.scrollIntoViewIfNeeded();
+    await expect(bottom).toBeInViewport({ ratio: 1 });
+    const top = modal.getByText("Date range");
+    await top.scrollIntoViewIfNeeded();
+    await expect(top).toBeInViewport({ ratio: 1 });
+  });
+
   // Reproduces the exact shape the guard in lib/app-context.tsx exists to
   // handle: a local mutation (unrelated to the import) that happened BEFORE
   // the import was even opened, not one that races the refresh. A guard that
