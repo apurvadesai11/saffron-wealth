@@ -66,7 +66,7 @@ for (const scheme of ["light", "dark"] as const) {
     test.use({ colorScheme: scheme });
 
     test("monthly review — budget and cashflow", async ({ page }) => {
-      await page.goto("/");
+      await page.goto("/monthly-review");
       await settle(page);
       await expect(page).toHaveScreenshot(name("review-current"), SHOT);
 

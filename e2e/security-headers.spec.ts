@@ -105,7 +105,7 @@ anon.describe("Security headers on unauthenticated surfaces", () => {
 });
 
 authed.describe("Security headers on authenticated surfaces", () => {
-  const paths = ["/", "/transactions", "/net-worth", "/profile"];
+  const paths = ["/monthly-review", "/transactions", "/net-worth", "/profile"];
 
   for (const path of paths) {
     authed(`sets every security header on ${path}`, async ({ page }) => {

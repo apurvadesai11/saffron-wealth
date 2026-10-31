@@ -92,9 +92,9 @@ app/
   globals.css                Tailwind layers, body and form-field base styles
   (app)/                     Auth-gated route group
     layout.tsx               DB-backed session gate, AppProvider, sidebar/header chrome
-    page.tsx                 Monthly Review (summary cards + tabbed budget/cashflow)
+    monthly-review/page.tsx  Monthly Review (summary cards + tabbed budget/cashflow)
     transactions/page.tsx    Transactions list + filters + add form + CSV import
-    net-worth/page.tsx       Net worth chart, summary, accounts by bucket
+    net-worth/page.tsx       Net worth chart, summary, accounts by bucket (the landing page; / redirects here)
     financial-profile/page.tsx  Declared planning inputs (income, ages, assumptions, savings)
     profile/page.tsx         Account, password, picture, sessions
   (auth)/                    Unauthenticated route group
@@ -223,7 +223,7 @@ Each import shows a preview before it writes, and both are safe to re-run: trans
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server on :3000 |
+| `npm run dev` | Start development server on :3000 (runs `prisma generate` first) |
 | `npm run build` | Production build (runs `prisma generate`) |
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |

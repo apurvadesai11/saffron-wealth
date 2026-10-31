@@ -6,21 +6,27 @@ import { test, expect } from "./fixtures";
 // attaches the resulting sw_session cookie to the browser context.
 
 test.describe("App shell", () => {
-  test("loads the Monthly Review page at /", async ({ page }) => {
+  test("lands on Net Worth at /", async ({ page }) => {
     await page.goto("/");
+    await expect(page).toHaveURL("/net-worth");
+    await expect(page.getByRole("heading", { name: "Net Worth", exact: true })).toBeVisible();
+  });
+
+  test("loads the Monthly Review page at /monthly-review", async ({ page }) => {
+    await page.goto("/monthly-review");
     await expect(page.getByRole("heading", { name: "Saffron Wealth 💰" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Monthly Review" })).toBeVisible();
   });
 
   test("shows the saffron brand mark at the top of the sidebar", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     const brand = page.getByRole("img", { name: "Saffron Wealth" });
     await expect(brand).toBeVisible();
     await expect(brand).toHaveAttribute("src", /saffron\.jpg/);
   });
 
   test("top header stays visible on scroll", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     const header = page.getByRole("heading", { name: "Saffron Wealth 💰" });
     await expect(header).toBeVisible();
     await page.mouse.wheel(0, 1500);
@@ -30,15 +36,15 @@ test.describe("App shell", () => {
 
 test.describe("Sidebar navigation", () => {
   test("navigates between Monthly Review and Transactions", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL("/");
+    await page.goto("/monthly-review");
+    await expect(page).toHaveURL("/monthly-review");
 
     await page.getByRole("link", { name: /Transactions/ }).click();
     await expect(page).toHaveURL("/transactions");
     await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
 
     await page.getByRole("link", { name: /Monthly Review/ }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/monthly-review");
     await expect(page.getByRole("heading", { name: "Monthly Review" })).toBeVisible();
   });
 
@@ -54,7 +60,7 @@ test.describe("Sidebar navigation", () => {
 
 test.describe("Alerts popover", () => {
   test("opens on click and closes on Escape", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     const bell = page.getByRole("button", { name: /budget alert/ });
     await bell.click();
     const popover = page.getByRole("dialog", { name: "Budget alerts" });
@@ -65,7 +71,7 @@ test.describe("Alerts popover", () => {
   });
 
   test("closes on click outside", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     await page.getByRole("button", { name: /budget alert/ }).click();
     const popover = page.getByRole("dialog", { name: "Budget alerts" });
     await expect(popover).toBeVisible();
@@ -148,7 +154,7 @@ test.describe("Transactions: add + filter", () => {
 
 test.describe("Setting a monthly budget", () => {
   test("updates an existing category budget via the BudgetEditModal", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
 
     // Open the edit modal for Groceries (a budgeted category in mock data — $400)
     await page.getByRole("button", { name: /Groceries/ }).first().click();
@@ -168,7 +174,7 @@ test.describe("Setting a monthly budget", () => {
   });
 
   test("Use this → applies the historical average suggestion", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/monthly-review");
     await page.getByRole("button", { name: /Groceries/ }).first().click();
 
     const modal = page.getByRole("dialog");

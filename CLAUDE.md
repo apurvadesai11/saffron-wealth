@@ -183,9 +183,10 @@ app/
   (app)/                   Auth-gated route group
     layout.tsx             getSession() gate + fetches categories/transactions/budgets and
                             wraps children in AppProvider (financial-data hydration)
-    page.tsx               Monthly Review (SummaryCards + MonthlyReviewWidget)
+    monthly-review/page.tsx  Monthly Review (SummaryCards + MonthlyReviewWidget)
     transactions/page.tsx  Transactions list + filters + add form
-    net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres)
+    net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres).
+                            The landing page: next.config.ts redirects / here
     financial-profile/page.tsx  Financial Profile (RSC; current version + account options → client form)
     profile/page.tsx       Account / password / picture / sessions
   (auth)/                  Unauthed route group
@@ -810,6 +811,11 @@ touches the database, it is UTC.
 - **`prepare` script in `package.json`** installs the git hooks pointer
   automatically on `npm install`. New contributors get pre-push checks
   without any extra step.
+- **`predev` runs `prisma generate`.** Pulling or switching to a branch that
+  changes `schema.prisma` doesn't regenerate the client, and a stale one asks
+  the migrated database for columns it no longer has (this happened with the
+  Financial Profile's renamed age column). Restart the dev server after a
+  schema change; a running one keeps the client it loaded.
 - **`prisma/migrations/` is now the source of truth, and CI enforces it.**
   Author schema changes with `npm run db:migrate`, not `db:push`. `db:push`
   remains in `package.json` as an escape hatch, but reaching for it is what
@@ -877,8 +883,9 @@ following the setup instructions got `/login?oauth=unconfigured`.
 
 A few likely places that need a touch:
 
-- **New nav surface?** Append to `NAV_ITEMS` in `lib/nav-config.ts`. The
-  sidebar renders from this; no Sidebar.tsx edit needed.
+- **New nav surface?** Add it to the right section of `NAV_SECTIONS` in
+  `lib/nav-config.ts`. The sidebar renders from this, with a divider between
+  sections; no Sidebar.tsx edit needed.
 - **New protected page?** Drop it inside `app/(app)/` — gating is automatic
   via the layout.
 - **New unauthed page?** Drop it inside `app/(auth)/` and add the path to
@@ -918,7 +925,7 @@ A few likely places that need a touch:
 ### Quick reference
 
 ```
-npm run dev                Start Next.js dev server (port 3000)
+npm run dev                prisma generate, then start Next.js dev server (port 3000)
 npm run build              prisma generate && next build
 npm run start              Serve production build
 npm run lint               ESLint
