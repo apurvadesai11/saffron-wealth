@@ -115,6 +115,42 @@ describe("TransactionList", () => {
   });
 });
 
+describe("TransactionList month dividers", () => {
+  const rows: Transaction[] = [
+    { ...EXPENSE_TX, id: "oct-2", description: "Oct later", date: "2026-10-05" },
+    { ...EXPENSE_TX, id: "oct-1", description: "Oct earlier", date: "2026-10-01" },
+    { ...EXPENSE_TX, id: "sep-1", description: "Sep last", date: "2026-09-30" },
+    { ...EXPENSE_TX, id: "jan-1", description: "Jan", date: "2025-01-15" },
+  ];
+
+  it("labels the start of each month, once, above that month's rows", () => {
+    renderWithApp(<TransactionList transactions={rows} onEdit={vi.fn()} />, {
+      categories: CATS,
+      transactions: rows,
+    });
+
+    const items = screen.getAllByRole("listitem").map((li) =>
+      li.querySelector("h3")?.textContent ?? li.querySelector("p")?.textContent,
+    );
+    expect(items).toEqual([
+      "October 2026", "Oct later", "Oct earlier",
+      "September 2026", "Sep last",
+      "January 2025", "Jan",
+    ]);
+  });
+
+  it("names each divider as a heading", () => {
+    renderWithApp(<TransactionList transactions={rows} onEdit={vi.fn()} />, {
+      categories: CATS,
+      transactions: rows,
+    });
+
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "October 2026", "September 2026", "January 2025",
+    ]);
+  });
+});
+
 // 14b — the plan asks for this control to be audited for the same contrast and
 // hit-target problems AccountRow's had. The wording is not in scope here:
 // deleteTransaction really does remove the row, so "Delete" is accurate.
