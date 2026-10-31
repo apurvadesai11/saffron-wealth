@@ -208,6 +208,35 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     );
   });
 
+  test("hiding an account from net worth drops it from the totals and the chart but keeps it listed", async ({ page }) => {
+    const name = `E2E Agree Hide ${Date.now()}`;
+    await page.goto("/net-worth");
+
+    await addAccount(page, name, "1357");
+    const withAccount = await latestChartValue(page);
+
+    await page.getByRole("button", { name: `Hide ${name} from Net Worth` }).click();
+    await expect(chart(page)).not.toHaveAttribute("data-latest-value", withAccount ?? "");
+
+    const row = page.locator("[data-bucket] li", { hasText: name });
+    await expect(row).toHaveAttribute("data-hidden-from-net-worth", "true");
+    await expect(row.getByRole("img", { name: "Hidden from net worth" })).toBeVisible();
+
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^-?\$/)
+      .first()
+      .innerText();
+    const cardValue = cardText.replace(/[$,]/g, "");
+    await expect(chart(page)).toHaveAttribute("data-latest-value", cardValue);
+    expect(Number(withAccount) - Number(cardValue)).toBeCloseTo(1357, 2);
+
+    // Showing it again counts it everywhere, back to exactly where it was.
+    await row.getByRole("button", { name: `Show ${name} in Net Worth` }).click();
+    await expect(chart(page)).toHaveAttribute("data-latest-value", withAccount ?? "");
+    await expect(row).not.toHaveAttribute("data-hidden-from-net-worth", "true");
+  });
+
   test("restoring an account returns it to both the totals and the chart", async ({ page }) => {
     const name = `E2E Agree Restore ${Date.now()}`;
     await page.goto("/net-worth");

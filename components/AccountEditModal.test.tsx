@@ -12,6 +12,7 @@ function account(overrides: Partial<Account> = {}): Account {
     institution: "Fidelity",
     balance: 10000,
     balanceAsOf: "2026-07-17T00:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-17T00:00:00.000Z",
     ...overrides,

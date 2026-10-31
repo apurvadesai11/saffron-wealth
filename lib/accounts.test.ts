@@ -154,6 +154,7 @@ describe("the archived-roster bug this two-query split exists to prevent", () =>
       id: a.id,
       type: a.type,
       archivedAt: null as string | null,
+      hiddenFromNetWorth: a.hiddenFromNetWorth,
     }));
     const buggySeries = computeNetWorthSeries(events, wrongRoster);
     const buggyFirstPoint = buggySeries.find((p) => p.date === "2026-01-01")!;

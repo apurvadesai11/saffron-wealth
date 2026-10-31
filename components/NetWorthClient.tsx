@@ -117,6 +117,33 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
     }
   }
 
+  async function handleToggleHidden(account: Account) {
+    setError(null);
+    const csrf = readCsrfCookie() ?? "";
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: csrf,
+        },
+        body: JSON.stringify({ hiddenFromNetWorth: !account.hiddenFromNetWorth }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data?.error?.message ?? "Save failed.");
+        return;
+      }
+      const saved = data.data.account as Account;
+      setAccounts((prev) => prev.map((a) => (a.id === saved.id ? saved : a)));
+      // Hiding removes the account from the chart's whole history, which only
+      // the server-side series can recompute.
+      router.refresh();
+    } catch {
+      setError("Network error.");
+    }
+  }
+
   async function handleRestore(account: Account) {
     setError(null);
     const csrf = readCsrfCookie() ?? "";
@@ -191,6 +218,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
               group={group}
               onEdit={(account) => setEditingAccount(account)}
               onArchive={handleArchive}
+              onToggleHidden={handleToggleHidden}
             />
           ))
         )}

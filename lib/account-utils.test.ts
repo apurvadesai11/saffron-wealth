@@ -31,6 +31,7 @@ function acct(type: AccountType, balance: number, over: Partial<Account> = {}): 
     institution: null,
     balance,
     balanceAsOf: "2026-07-17T00:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2026-07-17T00:00:00.000Z",
     updatedAt: "2026-07-17T00:00:00.000Z",
     ...over,
@@ -264,5 +265,41 @@ describe("uncategorized accounts are excluded from totals", () => {
   // It sorts last so the page reads assets, debt, then "needs attention".
   it("sorts after every real bucket", () => {
     expect(BUCKET_ORDER[BUCKET_ORDER.length - 1]).toBe("uncategorized");
+  });
+});
+
+// Hidden from net worth is the owner's choice to leave a real, classified
+// account out of every total: a balance they track but don't count as theirs.
+describe("accounts hidden from net worth are excluded from totals", () => {
+  it("leaves a hidden asset out of total assets and net worth", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("brokerage", 5000, { hiddenFromNetWorth: true }),
+    ]);
+
+    expect(result).toEqual({ totalAssets: 100, totalLiabilities: 0, netWorth: 100 });
+  });
+
+  it("leaves a hidden debt out of total liabilities", () => {
+    const result = computeNetWorth([
+      acct("cash", 100),
+      acct("credit_card", 400, { hiddenFromNetWorth: true }),
+    ]);
+
+    expect(result).toEqual({ totalAssets: 100, totalLiabilities: 0, netWorth: 100 });
+  });
+
+  // It stays in its bucket so its owner can find it and count it again; only
+  // the bucket's total leaves it out, so the bucket totals still add up to
+  // the cards above them.
+  it("keeps a hidden account in its bucket but out of the bucket total", () => {
+    const groups = groupAccountsByBucket([
+      acct("cash", 100, { id: "counted" }),
+      acct("cash", 250, { id: "hidden", hiddenFromNetWorth: true }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].accounts.map((a) => a.id)).toEqual(["counted", "hidden"]);
+    expect(groups[0].bucketTotal).toBe(100);
   });
 });

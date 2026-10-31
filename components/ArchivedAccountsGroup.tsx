@@ -21,7 +21,7 @@ export default function ArchivedAccountsGroup({ accounts, onRestore }: Props) {
   return (
     <details data-state="archived-group">
       <summary className="text-xs font-semibold text-fg-faint uppercase tracking-wide cursor-pointer select-none">
-        Archived ({accounts.length})
+        Archived accounts ({accounts.length})
       </summary>
       <ul className="divide-y divide-line-faint mt-2">
         {accounts.map((account) => (

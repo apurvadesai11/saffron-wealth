@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Account } from "@/lib/types";
 import type { NetWorthPoint } from "@/lib/net-worth-history";
@@ -33,6 +33,7 @@ function account(overrides: Partial<Account> = {}): Account {
     institution: "Chase",
     balance: 5000,
     balanceAsOf: "2026-07-17T00:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-17T00:00:00.000Z",
     ...overrides,
@@ -241,6 +242,65 @@ describe("NetWorthClient — refresh after restoring", () => {
     await userEvent.click(screen.getByRole("button", { name: "Restore" }));
 
     await waitFor(() => expect(screen.getByText("Restore failed.")).toBeInTheDocument());
+    expect(routerMocks.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("NetWorthClient — hiding an account from net worth", () => {
+  const checking = account();
+  const brokerage = account({ id: "acc-2", name: "Joint Brokerage", type: "brokerage", balance: 3000 });
+
+  function netWorthCard(container: HTMLElement) {
+    return within(container.querySelector("[data-net-worth-sign]") as HTMLElement);
+  }
+
+  it("PATCHes the flag, drops the balance from the totals, keeps the row listed, and refreshes", async () => {
+    const spy = mockFetchOk({ account: { ...brokerage, hiddenFromNetWorth: true } });
+    const { container } = render(
+      <NetWorthClient initialAccounts={[checking, brokerage]} initialArchivedAccounts={[]} series={series} />,
+    );
+    expect(netWorthCard(container).getByText("$8,000.00")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide Joint Brokerage from Net Worth" }));
+
+    await waitFor(() => expect(netWorthCard(container).getByText("$5,000.00")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledWith(
+      "/api/accounts/acc-2",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ hiddenFromNetWorth: true }) }),
+    );
+    expect(screen.getByText("Joint Brokerage")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hidden from net worth" })).toBeInTheDocument();
+    expect(routerMocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a hidden account again when it's shown in net worth", async () => {
+    const hidden = { ...brokerage, hiddenFromNetWorth: true };
+    const spy = mockFetchOk({ account: { ...hidden, hiddenFromNetWorth: false } });
+    const { container } = render(
+      <NetWorthClient initialAccounts={[checking, hidden]} initialArchivedAccounts={[]} series={series} />,
+    );
+    expect(netWorthCard(container).getByText("$5,000.00")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show Joint Brokerage in Net Worth" }));
+
+    await waitFor(() => expect(netWorthCard(container).getByText("$8,000.00")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledWith(
+      "/api/accounts/acc-2",
+      expect.objectContaining({ body: JSON.stringify({ hiddenFromNetWorth: false }) }),
+    );
+    expect(screen.queryByRole("img", { name: "Hidden from net worth" })).not.toBeInTheDocument();
+  });
+
+  it("leaves the account counted and does not refresh when the save fails", async () => {
+    mockFetchFailure("Save failed.");
+    const { container } = render(
+      <NetWorthClient initialAccounts={[checking, brokerage]} initialArchivedAccounts={[]} series={series} />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide Joint Brokerage from Net Worth" }));
+
+    await waitFor(() => expect(screen.getByText("Save failed.")).toBeInTheDocument());
+    expect(netWorthCard(container).getByText("$8,000.00")).toBeInTheDocument();
     expect(routerMocks.refresh).not.toHaveBeenCalled();
   });
 });

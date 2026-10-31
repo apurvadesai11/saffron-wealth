@@ -17,9 +17,36 @@ interface Props {
   // working Restore. Calling this "delete" described something the app has
   // never done.
   onArchive: () => void;
+  // Flips hiddenFromNetWorth. The row only reports the click; NetWorthClient
+  // owns the PATCH and the totals.
+  onToggleHidden: () => void;
 }
 
-export default function AccountRow({ account, onEdit, onArchive }: Props) {
+// Feather's "eye-off" glyph, drawn like the sidebar icons in lib/nav-config.ts.
+function ClosedEyeIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role="img"
+      aria-label="Hidden from net worth"
+    >
+      <title>Hidden from net worth</title>
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
+export default function AccountRow({ account, onEdit, onArchive, onToggleHidden }: Props) {
   // Inline rather than a modal: the action is recoverable, and nesting a
   // dialog inside the page for a reversible archive is heavier than the
   // decision warrants. It still has to be an explicit second action — the
@@ -47,8 +74,14 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
     account.balance,
   );
   // A credited card ADDS to net worth, so it reads in the ordinary colour
-  // rather than the debt red that would imply money owed.
-  const amountClass = balanceSign === "owed" ? "text-danger" : "text-fg-soft";
+  // rather than the debt red that would imply money owed. A hidden balance is
+  // real but uncounted, so it's muted instead.
+  const hidden = account.hiddenFromNetWorth;
+  const amountClass = hidden
+    ? "text-fg-faint"
+    : balanceSign === "owed"
+      ? "text-danger"
+      : "text-fg-soft";
   // balanceAsOf is a full ISO timestamp; only the date portion is shown.
   const asOfDate = account.balanceAsOf.slice(0, 10);
 
@@ -56,13 +89,21 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
     <li
       data-liability={liability ? "true" : "false"}
       data-confirming={confirming ? "true" : undefined}
+      data-hidden-from-net-worth={hidden ? "true" : undefined}
       className="flex items-center justify-between py-4"
     >
       <button
         onClick={onEdit}
         className="flex-1 text-left hover:opacity-80 transition-opacity"
       >
-        <p className="text-sm font-medium text-fg-soft">{account.name}</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium text-fg-soft">
+          {account.name}
+          {hidden && (
+            <span className="text-fg-muted">
+              <ClosedEyeIcon />
+            </span>
+          )}
+        </p>
         <p className="text-xs text-fg-faint">
           {ACCOUNT_TYPE_LABELS[account.type]}
           {account.institution ? ` · ${account.institution}` : ""}
@@ -99,18 +140,31 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
             </button>
           </span>
         ) : (
-          // text-fg-muted is ~4.8:1 on surface; the previous text-fg-disabled was
-          // ~1.5:1, under WCAG 1.4.11's 3:1 floor for a non-text control.
-          // min-h-6/min-w-6 is 24x24 CSS px, the SC 2.5.8 target minimum —
-          // the bare glyph reserved roughly 10px.
-          <button
-            ref={triggerRef}
-            onClick={() => setConfirming(true)}
-            className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-fg-muted hover:text-danger hover:bg-surface-muted transition-colors"
-            aria-label={`Archive ${account.name}`}
-          >
-            ✕
-          </button>
+          <>
+            <button
+              onClick={onToggleHidden}
+              className="min-h-6 px-2 rounded text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-muted transition-colors"
+              aria-label={
+                hidden
+                  ? `Show ${account.name} in Net Worth`
+                  : `Hide ${account.name} from Net Worth`
+              }
+            >
+              {hidden ? "Show in Net Worth" : "Hide from Net Worth"}
+            </button>
+            {/* A word rather than the old ✕, which read as delete. The confirm
+                step stays: it still sits beside the row's edit target.
+                text-fg-muted is ~4.8:1 on surface, clear of WCAG 1.4.11's 3:1;
+                min-h-6/min-w-6 is SC 2.5.8's 24x24 CSS px. */}
+            <button
+              ref={triggerRef}
+              onClick={() => setConfirming(true)}
+              className="min-h-6 min-w-6 px-2 flex items-center justify-center rounded text-xs font-medium text-fg-muted hover:text-danger hover:bg-surface-muted transition-colors"
+              aria-label={`Archive ${account.name}`}
+            >
+              Archive
+            </button>
+          </>
         )}
       </div>
     </li>

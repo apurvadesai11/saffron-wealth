@@ -20,6 +20,7 @@ function account(over: Partial<Account> = {}): Account {
     institution: null,
     balance: 1000,
     balanceAsOf: "2026-02-14T00:00:00.000Z",
+    hiddenFromNetWorth: false,
     createdAt: "2026-02-14T00:00:00.000Z",
     updatedAt: "2026-02-14T00:00:00.000Z",
     ...over,
@@ -37,7 +38,7 @@ function group(over: Partial<Group> = {}): Group {
 }
 
 function renderGroup(g: Group) {
-  return render(<AccountBucketGroup group={g} onEdit={vi.fn()} onArchive={vi.fn()} />);
+  return render(<AccountBucketGroup group={g} onEdit={vi.fn()} onArchive={vi.fn()} onToggleHidden={vi.fn()} />);
 }
 
 // The bucket total and a single account's balance can render the same string,

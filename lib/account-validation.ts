@@ -146,6 +146,15 @@ export function parseUpdateAccountBody(body: unknown): ParseResult<AccountPatch>
       value.archivedAt = null;
     }
   }
+  // Strictly boolean: the string "false" is truthy, and coercing it would
+  // hide the account the caller asked to show.
+  if ("hiddenFromNetWorth" in b) {
+    if (typeof b.hiddenFromNetWorth !== "boolean") {
+      fieldErrors.hiddenFromNetWorth = "hiddenFromNetWorth must be true or false.";
+    } else {
+      value.hiddenFromNetWorth = b.hiddenFromNetWorth;
+    }
+  }
 
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
   if (Object.keys(value).length === 0) {

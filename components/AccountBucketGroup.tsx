@@ -6,9 +6,10 @@ interface Props {
   group: AccountBucketGroupType;
   onEdit: (account: Account) => void;
   onArchive: (account: Account) => void;
+  onToggleHidden: (account: Account) => void;
 }
 
-export default function AccountBucketGroup({ group, onEdit, onArchive }: Props) {
+export default function AccountBucketGroup({ group, onEdit, onArchive, onToggleHidden }: Props) {
   // The uncategorized bucket contributes to none of the summary cards above
   // this list (see lib/account-utils.ts's computeNetWorth). Rendered
   // identically to Cash or Debt it read as counted, so the page showed a
@@ -57,6 +58,7 @@ export default function AccountBucketGroup({ group, onEdit, onArchive }: Props) 
             account={account}
             onEdit={() => onEdit(account)}
             onArchive={() => onArchive(account)}
+            onToggleHidden={() => onToggleHidden(account)}
           />
         ))}
       </ul>

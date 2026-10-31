@@ -118,6 +118,9 @@ export function computeNetWorth(accounts: Account[]): NetWorthSummary {
     // page — groupAccountsByBucket gives it its own bucket — so the exclusion
     // is something the user can act on rather than a silent omission.
     if (getBucketForType(a.type) === "uncategorized") continue;
+    // The owner's own exclusion, for a real account they track but don't
+    // count as theirs. Still listed in its bucket, like the case above.
+    if (a.hiddenFromNetWorth) continue;
 
     if (isLiability(getBucketForType(a.type))) {
       totalLiabilities += a.balance;
@@ -145,7 +148,11 @@ export function groupAccountsByBucket(accounts: Account[]): AccountBucketGroup[]
         bucket,
         label: ACCOUNT_BUCKET_LABELS[bucket],
         accounts: bucketAccounts,
-        bucketTotal: roundToCent(bucketAccounts.reduce((sum, a) => sum + a.balance, 0)),
+        // Hidden accounts stay in the list but not the total, so the bucket
+        // totals still add up to the summary cards.
+        bucketTotal: roundToCent(
+          bucketAccounts.reduce((sum, a) => (a.hiddenFromNetWorth ? sum : sum + a.balance), 0),
+        ),
       },
     ];
   });

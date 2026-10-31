@@ -166,6 +166,20 @@ describe("parseUpdateAccountBody", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value).toEqual({ archivedAt: null, name: "Restored Account" });
   });
+
+  it.each([true, false])("accepts hiddenFromNetWorth: %s as the sole patch field", (hidden) => {
+    const r = parseUpdateAccountBody({ hiddenFromNetWorth: hidden });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ hiddenFromNetWorth: hidden });
+  });
+
+  // A string "false" is truthy; coercing it would hide the account the caller
+  // asked to show.
+  it.each(["false", 1, null])("rejects a non-boolean hiddenFromNetWorth (%s)", (value) => {
+    const r = parseUpdateAccountBody({ hiddenFromNetWorth: value });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.hiddenFromNetWorth).toBeTruthy();
+  });
 });
 
 describe("Decimal(14,2) boundary", () => {

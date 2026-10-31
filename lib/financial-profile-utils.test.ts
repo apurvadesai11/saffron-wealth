@@ -105,6 +105,7 @@ describe("contributionAccountOptions", () => {
     return {
       id, name: `Name ${id}`, type, institution: null, balance: 0,
       balanceAsOf: "2026-01-01T00:00:00.000Z",
+      hiddenFromNetWorth: false,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };

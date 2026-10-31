@@ -27,6 +27,7 @@ function mapAccount(row: PrismaAccount): Account {
     institution: row.institution,
     balance: row.balance.toNumber(),
     balanceAsOf: row.balanceAsOf.toISOString(),
+    hiddenFromNetWorth: row.hiddenFromNetWorth,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -115,6 +116,11 @@ export async function updateAccount(
         ...(patch.type !== undefined ? { type: patch.type } : {}),
         ...(patch.institution !== undefined ? { institution: patch.institution } : {}),
         ...(isRestore ? { archivedAt: null } : {}),
+        // No balance event either way: hiding changes what's counted, not
+        // what the account held.
+        ...(patch.hiddenFromNetWorth !== undefined
+          ? { hiddenFromNetWorth: patch.hiddenFromNetWorth }
+          : {}),
         ...(balanceChanged
           ? { balance: nextBalance, balanceAsOf: new Date() }
           : {}),
@@ -467,6 +473,7 @@ export interface AccountSeriesRosterRow {
   id: string;
   type: AccountType;
   archivedAt: string | null;
+  hiddenFromNetWorth: boolean;
 }
 
 // EVERY account, archived included — deliberately NOT listAccounts, whose
@@ -479,12 +486,13 @@ export interface AccountSeriesRosterRow {
 export async function listAccountsForSeries(userId: string): Promise<AccountSeriesRosterRow[]> {
   const rows = await prisma.account.findMany({
     where: { userId },
-    select: { id: true, type: true, archivedAt: true },
+    select: { id: true, type: true, archivedAt: true, hiddenFromNetWorth: true },
   });
   return rows.map((r) => ({
     id: r.id,
     type: r.type as AccountType,
     archivedAt: r.archivedAt ? r.archivedAt.toISOString() : null,
+    hiddenFromNetWorth: r.hiddenFromNetWorth,
   }));
 }
 
