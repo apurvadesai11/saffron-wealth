@@ -1,4 +1,5 @@
 import type { NetWorthSummary } from "@/lib/types";
+import { formatUsd } from "@/lib/money";
 
 interface Props {
   summary: NetWorthSummary;
@@ -15,16 +16,16 @@ export default function NetWorthSummaryCards({ summary }: Props) {
       >
         <p className="text-sm text-fg-muted mb-1">Net Worth</p>
         <p className={`text-2xl font-bold ${netWorth >= 0 ? "text-success" : "text-danger"}`}>
-          ${netWorth.toFixed(2)}
+          {formatUsd(netWorth)}
         </p>
       </div>
       <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
         <p className="text-sm text-fg-muted mb-1">Total Assets</p>
-        <p className="text-2xl font-bold text-success">${totalAssets.toFixed(2)}</p>
+        <p className="text-2xl font-bold text-success">{formatUsd(totalAssets)}</p>
       </div>
       <div className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle">
         <p className="text-sm text-fg-muted mb-1">Total Liabilities</p>
-        <p className="text-2xl font-bold text-danger">${totalLiabilities.toFixed(2)}</p>
+        <p className="text-2xl font-bold text-danger">{formatUsd(totalLiabilities)}</p>
       </div>
     </div>
   );

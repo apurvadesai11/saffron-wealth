@@ -1,5 +1,6 @@
 import type { Account } from "@/lib/types";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/account-utils";
+import { formatUsd } from "@/lib/money";
 
 interface Props {
   accounts: Account[];
@@ -33,7 +34,7 @@ export default function ArchivedAccountsGroup({ accounts, onRestore }: Props) {
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm text-fg-faint">${account.balance.toFixed(2)}</span>
+              <span className="text-sm text-fg-faint">{formatUsd(account.balance)}</span>
               <button
                 onClick={() => onRestore(account)}
                 className="text-xs font-medium text-accent hover:text-accent-strong transition-colors"

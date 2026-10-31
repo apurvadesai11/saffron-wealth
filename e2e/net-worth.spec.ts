@@ -54,7 +54,7 @@ test.describe("Net Worth page", () => {
 
     await expect(modal).not.toBeVisible();
     await expect(page.getByText(name)).toBeVisible();
-    await expect(page.getByText("$10000.00").first()).toBeVisible();
+    await expect(page.getByText("$10,000.00").first()).toBeVisible();
   });
 
   test("edits an account's balance and the summary updates", async ({ page }) => {
@@ -79,7 +79,7 @@ test.describe("Net Worth page", () => {
     await modal.getByRole("button", { name: "Save Changes" }).click();
     await expect(modal).not.toBeVisible();
 
-    await expect(page.getByText("$2500.00").first()).toBeVisible();
+    await expect(page.getByText("$2,500.00").first()).toBeVisible();
   });
 
   // "Delete" is a soft-archive (see lib/accounts.ts's archiveAccount) — as of
@@ -150,7 +150,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     // On a loaded dev server (a full parallel run) that read wins the race.
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(
@@ -178,7 +178,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     // And it must match the Net Worth card exactly.
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     const cardValue = cardText.replace(/[$,]/g, "");
@@ -199,7 +199,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
 
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(
@@ -235,7 +235,7 @@ test.describe("Chart and summary cards agree after a mutation", () => {
 
     const cardText = await page
       .locator("[data-net-worth-sign]")
-      .getByText(/^\$/)
+      .getByText(/^-?\$/)
       .first()
       .innerText();
     await expect(chart(page)).toHaveAttribute(

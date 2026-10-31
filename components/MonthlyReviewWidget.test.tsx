@@ -72,6 +72,18 @@ describe("MonthlyReviewWidget", () => {
     expect(items[1]).toHaveTextContent(/Groceries/);
   });
 
+  it("shows Earned, Spent, and a negative Net with thousands separators and the sign outside the $", () => {
+    const transactions: Transaction[] = [
+      sampleTx({ amount: 1000, categoryId: CAT_SALARY.id, type: "income", description: "Pay" }),
+      sampleTx({ amount: 2500, categoryId: CAT_RENT.id, description: "Rent" }),
+    ];
+    renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions, budgets: [] });
+
+    expect(screen.getByText("$1,000.00")).toBeInTheDocument();
+    expect(screen.getByText("$2,500.00")).toBeInTheDocument();
+    expect(screen.getByText("-$1,500.00")).toBeInTheDocument();
+  });
+
   it("'Auto-Set All' is shown only when categories are missing budgets, and clicking it auto-sets categories with history", async () => {
     const transactions: Transaction[] = [
       // 3 months of grocery history → Auto-Set has something to pull from.

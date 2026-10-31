@@ -25,6 +25,18 @@ describe("BudgetCategoryRow", () => {
     expect(screen.getByText(/50% used/)).toBeInTheDocument();
   });
 
+  it("puts thousands separators in the spent, budget, and remaining figures", () => {
+    render(<BudgetCategoryRow progress={progress({ spent: 1250, budgetAmount: 2500 })} />);
+    expect(screen.getByText("$1,250")).toBeInTheDocument();
+    expect(screen.getByText("/ $2,500")).toBeInTheDocument();
+    expect(screen.getByText("$1,250 left")).toBeInTheDocument();
+  });
+
+  it("puts thousands separators in an over-budget figure", () => {
+    render(<BudgetCategoryRow progress={progress({ spent: 3700, budgetAmount: 2500 })} />);
+    expect(screen.getByText("$1,200 over budget")).toBeInTheDocument();
+  });
+
   it("shows '$X over budget' and over-budget data attribute for an expense category over budget", () => {
     const { container } = render(
       <BudgetCategoryRow

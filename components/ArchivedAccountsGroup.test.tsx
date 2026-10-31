@@ -28,7 +28,7 @@ describe("ArchivedAccountsGroup", () => {
     render(<ArchivedAccountsGroup accounts={[account()]} onRestore={vi.fn()} />);
     expect(screen.getByText("Archived (1)")).toBeInTheDocument();
     expect(screen.getByText("Legacy Brokerage")).toBeInTheDocument();
-    expect(screen.getByText("$5200.00")).toBeInTheDocument();
+    expect(screen.getByText("$5,200.00")).toBeInTheDocument();
   });
 
   it("calls onRestore with the account when Restore is clicked", async () => {

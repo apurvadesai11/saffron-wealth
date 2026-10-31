@@ -57,7 +57,7 @@ describe("TransactionList", () => {
       transactions: [INCOME_TX],
     });
     expect(screen.getByText("Paycheck")).toBeInTheDocument();
-    expect(screen.getByText(/\+\$3000\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/\+\$3,000\.00/)).toBeInTheDocument();
     expect(screen.getByText(/Salary/)).toBeInTheDocument();
   });
 

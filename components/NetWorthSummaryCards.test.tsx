@@ -9,9 +9,9 @@ describe("NetWorthSummaryCards", () => {
         summary={{ totalAssets: 10000, totalLiabilities: 2000, netWorth: 8000 }}
       />,
     );
-    expect(screen.getByText("$10000.00")).toBeInTheDocument();
-    expect(screen.getByText("$2000.00")).toBeInTheDocument();
-    const netWorth = screen.getByText("$8000.00");
+    expect(screen.getByText("$10,000.00")).toBeInTheDocument();
+    expect(screen.getByText("$2,000.00")).toBeInTheDocument();
+    const netWorth = screen.getByText("$8,000.00");
     expect(netWorth).toBeInTheDocument();
     expect(netWorth.className).toMatch(/text-success/);
   });
@@ -22,7 +22,7 @@ describe("NetWorthSummaryCards", () => {
         summary={{ totalAssets: 1000, totalLiabilities: 5000, netWorth: -4000 }}
       />,
     );
-    const netWorth = screen.getByText("$-4000.00");
+    const netWorth = screen.getByText("-$4,000.00");
     expect(netWorth.className).toMatch(/text-danger/);
     expect(container.querySelector('[data-net-worth-sign="negative"]')).toBeInTheDocument();
   });

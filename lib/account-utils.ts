@@ -11,7 +11,7 @@ import type {
   AccountBucketGroup,
   NetWorthSummary,
 } from "./types";
-import { roundToCent } from "./money";
+import { formatUsd, roundToCent } from "./money";
 
 // Display order of buckets on the Net Worth page. Assets first, debt last.
 export const BUCKET_ORDER: AccountBucket[] = [
@@ -100,12 +100,12 @@ export function describeAccountBalance(
   const liability = isLiability(getBucketForType(type));
   if (liability) {
     return balance < 0
-      ? { text: `$${Math.abs(balance).toFixed(2)} credit`, sign: "credit" }
-      : { text: `$${balance.toFixed(2)}`, sign: "owed" };
+      ? { text: `${formatUsd(Math.abs(balance))} credit`, sign: "credit" }
+      : { text: formatUsd(balance), sign: "owed" };
   }
   return balance < 0
-    ? { text: `-$${Math.abs(balance).toFixed(2)}`, sign: "negative" }
-    : { text: `$${balance.toFixed(2)}`, sign: "normal" };
+    ? { text: formatUsd(balance), sign: "negative" }
+    : { text: formatUsd(balance), sign: "normal" };
 }
 
 export function computeNetWorth(accounts: Account[]): NetWorthSummary {

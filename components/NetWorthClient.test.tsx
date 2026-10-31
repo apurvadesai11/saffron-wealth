@@ -118,9 +118,9 @@ describe("NetWorthClient — refresh after a balance edit", () => {
     // The value appears in the account row, its bucket total and the summary
     // card, which is itself the evidence it propagated.
     await waitFor(() => {
-      expect(screen.getAllByText("$9000.00").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("$9,000.00").length).toBeGreaterThan(0);
     });
-    expect(screen.queryByText("$5000.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("$5,000.00")).not.toBeInTheDocument();
     expect(routerMocks.refresh).toHaveBeenCalled();
   });
 

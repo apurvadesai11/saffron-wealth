@@ -26,7 +26,7 @@ describe("AccountRow", () => {
     const subline = screen.getByText(/as of 2026-07-17/);
     expect(subline.textContent).toMatch(/Brokerage/);
     expect(subline.textContent).toMatch(/Fidelity/);
-    expect(screen.getByText("$10000.00")).toBeInTheDocument();
+    expect(screen.getByText("$10,000.00")).toBeInTheDocument();
   });
 
   it("omits the institution segment when none is set", () => {
@@ -40,7 +40,7 @@ describe("AccountRow", () => {
       <AccountRow account={account({ type: "credit_card", balance: 2000 })} onEdit={vi.fn()} onArchive={vi.fn()} />,
     );
     expect(container.querySelector('[data-liability="true"]')).toBeInTheDocument();
-    expect(screen.getByText("$2000.00").className).toMatch(/text-danger/);
+    expect(screen.getByText("$2,000.00").className).toMatch(/text-danger/);
   });
 
   it("marks asset accounts with data-liability=false", () => {

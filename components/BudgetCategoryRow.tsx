@@ -1,5 +1,6 @@
 import { BudgetProgress } from '@/lib/types';
 import BudgetProgressBar from './BudgetProgressBar';
+import { formatUsd } from '@/lib/money';
 
 interface Props {
   progress: BudgetProgress;
@@ -38,9 +39,9 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
           {!isHidden && (
             <span className="text-sm">
               <span className={`font-semibold ${amountColor}`}>
-                ${spent.toFixed(0)}
+                {formatUsd(spent, { wholeDollars: true })}
               </span>
-              <span className="text-fg-faint"> / ${budgetAmount.toFixed(0)}</span>
+              <span className="text-fg-faint"> / {formatUsd(budgetAmount, { wholeDollars: true })}</span>
             </span>
           )}
           {onEdit && (
@@ -64,8 +65,8 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
             }`}
           >
             {delta < 0
-              ? `$${Math.abs(delta).toFixed(0)} ${overLabel}`
-              : `$${delta.toFixed(0)} ${remainLabel}`
+              ? `${formatUsd(Math.abs(delta), { wholeDollars: true })} ${overLabel}`
+              : `${formatUsd(delta, { wholeDollars: true })} ${remainLabel}`
             }
           </span>
         </div>

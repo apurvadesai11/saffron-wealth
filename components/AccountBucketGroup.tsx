@@ -1,4 +1,5 @@
 import type { AccountBucketGroup as AccountBucketGroupType, Account } from "@/lib/types";
+import { formatUsd } from "@/lib/money";
 import AccountRow from "./AccountRow";
 
 interface Props {
@@ -41,7 +42,7 @@ export default function AccountBucketGroup({ group, onEdit, onArchive }: Props) 
               : "text-xs font-medium text-fg-muted"
           }
         >
-          ${group.bucketTotal.toFixed(2)}
+          {formatUsd(group.bucketTotal)}
         </span>
       </div>
       {excluded && (

@@ -2,6 +2,7 @@
 
 import { useApp } from "@/lib/app-context";
 import type { Transaction } from "@/lib/types";
+import { formatUsd } from "@/lib/money";
 
 interface Props {
   transactions: Transaction[];
@@ -31,7 +32,7 @@ export default function TransactionList({ transactions }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <span className={`text-sm font-semibold ${t.type === "income" ? "text-success" : "text-danger"}`}>
-              {t.type === "income" ? "+" : "-"}${t.amount.toFixed(2)}
+              {t.type === "income" ? "+" : "-"}{formatUsd(t.amount)}
             </span>
             <button
               onClick={() => {

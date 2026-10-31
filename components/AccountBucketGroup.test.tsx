@@ -53,7 +53,7 @@ describe("AccountBucketGroup", () => {
     );
 
     expect(screen.getByText("Cash")).toBeInTheDocument();
-    expect(headerTotal(container)).toBe("$1000.00");
+    expect(headerTotal(container)).toBe("$1,000.00");
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 

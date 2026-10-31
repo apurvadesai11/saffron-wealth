@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/lib/app-context";
+import { formatUsd } from "@/lib/money";
 import { useAlertState, getAsOf } from "@/lib/use-alert-state";
 import {
   buildBudgetProgressList,
@@ -211,16 +212,16 @@ export default function MonthlyReviewWidget() {
         <div className="grid grid-cols-3 gap-3 px-5 pt-4 pb-3">
           <div className="bg-success-soft rounded-lg p-3">
             <p className="text-xs text-success font-medium mb-1">Earned</p>
-            <p className="text-lg font-bold text-success-strong">${monthIncome.toFixed(2)}</p>
+            <p className="text-lg font-bold text-success-strong">{formatUsd(monthIncome)}</p>
           </div>
           <div className="bg-danger-soft rounded-lg p-3">
             <p className="text-xs text-danger-muted font-medium mb-1">Spent</p>
-            <p className="text-lg font-bold text-danger">${monthExpenses.toFixed(2)}</p>
+            <p className="text-lg font-bold text-danger">{formatUsd(monthExpenses)}</p>
           </div>
           <div className={`rounded-lg p-3 ${monthNet >= 0 ? "bg-accent-soft" : "bg-caution-soft"}`}>
             <p className={`text-xs font-medium mb-1 ${monthNet >= 0 ? "text-accent-muted" : "text-caution-muted"}`}>Net</p>
             <p className={`text-lg font-bold ${monthNet >= 0 ? "text-accent-strong" : "text-caution"}`}>
-              {monthNet >= 0 ? "+" : ""}${monthNet.toFixed(2)}
+              {monthNet >= 0 ? "+" : ""}{formatUsd(monthNet)}
             </p>
           </div>
         </div>
@@ -298,7 +299,7 @@ export default function MonthlyReviewWidget() {
                     <li key={categoryId}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm text-fg-secondary">{name}</span>
-                        <span className="text-sm font-semibold text-fg-soft">${amount.toFixed(2)}</span>
+                        <span className="text-sm font-semibold text-fg-soft">{formatUsd(amount)}</span>
                       </div>
                       <div className="w-full bg-surface-muted rounded-full h-1.5">
                         <div
