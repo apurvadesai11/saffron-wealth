@@ -86,7 +86,9 @@ export default function CategoryMultiSelect({ id, categories, selectedIds, onCha
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 w-full min-w-56 bg-surface border border-line rounded-lg shadow-lg">
+        // Anchored to the button's right edge: it sits in the filter card's
+        // last column, and min-w-56 is wider than that column.
+        <div className="absolute right-0 z-30 mt-1 w-full min-w-56 bg-surface border border-line rounded-lg shadow-lg">
           <div className="p-2 border-b border-line-subtle">
             <input
               ref={searchRef}
