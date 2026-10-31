@@ -6,7 +6,7 @@ import type { CategoryType } from "@/lib/types";
 import AuthFormError from "@/components/auth/AuthFormError";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 interface Props {
   onSubmitted?: () => void;
@@ -62,7 +62,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="tx-form-type" className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+          <label htmlFor="tx-form-type" className="block text-sm font-medium text-fg-secondary mb-1">Type</label>
           <select
             id="tx-form-type"
             value={form.type}
@@ -74,7 +74,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
           </select>
         </div>
         <div>
-          <label htmlFor="tx-form-category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <label htmlFor="tx-form-category" className="block text-sm font-medium text-fg-secondary mb-1">Category</label>
           <select
             id="tx-form-category"
             value={form.categoryId}
@@ -89,7 +89,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="tx-form-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label htmlFor="tx-form-description" className="block text-sm font-medium text-fg-secondary mb-1">Description</label>
           <input
             id="tx-form-description"
             type="text"
@@ -101,7 +101,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
           />
         </div>
         <div>
-          <label htmlFor="tx-form-amount" className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+          <label htmlFor="tx-form-amount" className="block text-sm font-medium text-fg-secondary mb-1">Amount ($)</label>
           <input
             id="tx-form-amount"
             type="number"
@@ -116,7 +116,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
         </div>
       </div>
       <div>
-        <label htmlFor="tx-form-date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+        <label htmlFor="tx-form-date" className="block text-sm font-medium text-fg-secondary mb-1">Date</label>
         <input
           id="tx-form-date"
           type="date"
@@ -129,7 +129,7 @@ export default function TransactionForm({ onSubmitted }: Props) {
       <button
         type="submit"
         disabled={submitting}
-        className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+        className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
       >
         {submitting ? "Saving…" : "Save Transaction"}
       </button>

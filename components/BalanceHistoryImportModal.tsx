@@ -133,28 +133,28 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
       onClick={step === "loading" ? undefined : onClose}
       aria-label="Close modal"
     >
       <div
         ref={dialogRef}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg"
+        className="bg-surface rounded-2xl shadow-xl w-full max-w-lg"
         role="dialog"
         aria-modal="true"
         aria-labelledby="balance-history-import-title"
         data-import-step={step}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="px-6 pt-6 pb-4 border-b border-line-subtle">
           <div className="flex items-start justify-between">
-            <h2 id="balance-history-import-title" className="text-xl font-bold text-gray-900">
+            <h2 id="balance-history-import-title" className="text-xl font-bold text-fg">
               Import Balance History
             </h2>
             {step !== "loading" && (
               <button
                 onClick={onClose}
-                className="text-gray-300 hover:text-gray-500 transition-colors text-2xl leading-none mt-0.5"
+                className="text-fg-disabled hover:text-fg-muted transition-colors text-2xl leading-none mt-0.5"
                 aria-label="Close"
               >
                 ×
@@ -167,7 +167,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
           {error && (
             <p
               role="alert"
-              className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2"
+              className="text-sm text-danger bg-danger-soft border border-danger-line-soft rounded-lg px-4 py-2"
             >
               {error}
             </p>
@@ -177,7 +177,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
             <div>
               <label
                 htmlFor="balance-history-import-file"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-fg-secondary mb-2"
               >
                 Monarch balance history CSV
               </label>
@@ -187,16 +187,16 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                 type="file"
                 accept=".csv,text/csv"
                 onChange={handleFileChange}
-                className="w-full text-sm text-gray-600"
+                className="w-full text-sm text-fg-tertiary"
               />
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="text-xs text-fg-faint mt-2">
                 We&apos;ll show you a preview before anything is saved.
               </p>
             </div>
           )}
 
           {step === "loading" && (
-            <p className="text-sm text-gray-500 text-center py-6">
+            <p className="text-sm text-fg-muted text-center py-6">
               {result === null && summary === null ? "Analyzing file…" : "Importing…"}
             </p>
           )}
@@ -205,35 +205,35 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
             <div className="space-y-4">
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <dt className="text-xs text-gray-400">Date range</dt>
-                  <dd className="text-gray-800 font-medium">
+                  <dt className="text-xs text-fg-faint">Date range</dt>
+                  <dd className="text-fg-soft font-medium">
                     {summary.dateRange.from} – {summary.dateRange.to}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-400">Accounts found</dt>
-                  <dd className="text-gray-800 font-medium">{summary.accountsFound}</dd>
+                  <dt className="text-xs text-fg-faint">Accounts found</dt>
+                  <dd className="text-fg-soft font-medium">{summary.accountsFound}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-400">New balance events</dt>
-                  <dd className="text-gray-800 font-medium">{summary.newEventRows}</dd>
+                  <dt className="text-xs text-fg-faint">New balance events</dt>
+                  <dd className="text-fg-soft font-medium">{summary.newEventRows}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-400">Duplicates skipped</dt>
-                  <dd className="text-gray-800 font-medium">{summary.duplicateEventRows}</dd>
+                  <dt className="text-xs text-fg-faint">Duplicates skipped</dt>
+                  <dd className="text-fg-soft font-medium">{summary.duplicateEventRows}</dd>
                 </div>
               </dl>
 
               {summary.typeConflicts.length > 0 && (
                 <div data-testid="type-conflicts">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1.5">
                     Type disagreements
                   </h3>
-                  <ul className="text-sm divide-y divide-amber-100 border border-amber-200 bg-amber-50 rounded-lg">
+                  <ul className="text-sm divide-y divide-warning-line-soft border border-warning-line bg-warning-soft rounded-lg">
                     {summary.typeConflicts.map((c) => (
                       <li key={c.name} className="px-3 py-1.5">
-                        <span className="text-gray-800">{c.name}</span>
-                        <span className="block text-xs text-gray-500">
+                        <span className="text-fg-soft">{c.name}</span>
+                        <span className="block text-xs text-fg-muted">
                           {/* When the name matches no rule the suggestion is
                               'uncategorized', which is not a suggestion —
                               saying "looks like Uncategorized" would be
@@ -256,7 +256,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                       </li>
                     ))}
                   </ul>
-                  <p className="text-xs text-gray-400 mt-1.5">
+                  <p className="text-xs text-fg-faint mt-1.5">
                     The import won&apos;t change these types. If the file is right, edit the
                     account after importing.
                   </p>
@@ -264,27 +264,27 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
               )}
 
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1.5">
                   New accounts
                 </h3>
                 {summary.newAccounts.length === 0 ? (
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-fg-faint">
                     No new accounts — every row matched an existing account.
                   </p>
                 ) : (
-                  <ul className="text-sm divide-y divide-gray-50 border border-gray-100 rounded-lg">
+                  <ul className="text-sm divide-y divide-line-faint border border-line-subtle rounded-lg">
                     {summary.newAccounts.map((a) => (
                       <li
                         key={a.name}
                         className="flex items-center justify-between px-3 py-1.5"
                         data-uncategorized={a.guessedType === "uncategorized" ? "true" : undefined}
                       >
-                        <span className="text-gray-800">{a.name}</span>
+                        <span className="text-fg-soft">{a.name}</span>
                         <span
                           className={
                             a.guessedType === "uncategorized"
-                              ? "text-xs text-amber-700"
-                              : "text-xs text-gray-400"
+                              ? "text-xs text-warning-strong"
+                              : "text-xs text-fg-faint"
                           }
                         >
                           {ACCOUNT_TYPE_LABELS[a.guessedType]}
@@ -300,7 +300,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
                     with a number nobody confirmed, so they are held out of the
                     totals until their owner says what they are. */}
                 {uncategorizedCount > 0 && (
-                  <p className="text-xs text-amber-700 mt-1.5" data-testid="uncategorized-note">
+                  <p className="text-xs text-warning-strong mt-1.5" data-testid="uncategorized-note">
                     {uncategorizedCount === 1
                       ? "1 account couldn't be classified from its name."
                       : `${uncategorizedCount} accounts couldn't be classified from their names.`}{" "}
@@ -313,9 +313,9 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
           )}
 
           {step === "success" && result && (
-            <p className="text-sm text-gray-700 text-center py-4">
+            <p className="text-sm text-fg-secondary text-center py-4">
               Imported{" "}
-              <span className="font-semibold text-gray-900">{result.eventsInserted}</span>{" "}
+              <span className="font-semibold text-fg">{result.eventsInserted}</span>{" "}
               new balance history event{result.eventsInserted === 1 ? "" : "s"}.
             </p>
           )}
@@ -326,7 +326,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
             {step === "pick" && (
               <button
                 onClick={onClose}
-                className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+                className="flex-1 border border-line text-fg-secondary rounded-lg py-2.5 text-sm font-medium hover:bg-surface-sunken transition-colors"
               >
                 Cancel
               </button>
@@ -335,13 +335,13 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
               <>
                 <button
                   onClick={onClose}
-                  className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+                  className="flex-1 border border-line text-fg-secondary rounded-lg py-2.5 text-sm font-medium hover:bg-surface-sunken transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors"
+                  className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
                 >
                   Confirm import
                 </button>
@@ -350,7 +350,7 @@ export default function BalanceHistoryImportModal({ onClose, onImported }: Props
             {step === "success" && (
               <button
                 onClick={onClose}
-                className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors"
+                className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
               >
                 Done
               </button>

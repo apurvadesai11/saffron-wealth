@@ -44,7 +44,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
       transactionsFrom={transactionsFrom}
       seedBudgets={budgets}
     >
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-canvas">
         <Sidebar />
         <div className="ml-14 sm:ml-56 flex flex-col min-h-screen">
           <TopHeader />

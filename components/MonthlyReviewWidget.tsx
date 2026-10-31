@@ -165,12 +165,12 @@ export default function MonthlyReviewWidget() {
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-800 px-5 pt-5 pb-3">
+      <div className="bg-surface rounded-xl shadow-sm border border-line-subtle">
+        <h2 className="text-lg font-semibold text-fg-soft px-5 pt-5 pb-3">
           Monthly Review
         </h2>
 
-        <div className="border-t border-gray-100" />
+        <div className="border-t border-line-subtle" />
 
         {/* Header: tabs + shared month navigator */}
         <div className="flex items-center justify-between px-5 pt-3 pb-3">
@@ -181,8 +181,8 @@ export default function MonthlyReviewWidget() {
                 onClick={() => setWidgetTab(tab)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg capitalize transition-colors ${
                   widgetTab === tab
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-400 hover:text-gray-700"
+                    ? "bg-surface-muted text-fg"
+                    : "text-fg-faint hover:text-fg-secondary"
                 }`}
               >
                 {tab}
@@ -196,47 +196,47 @@ export default function MonthlyReviewWidget() {
           />
         </div>
 
-        <div className="border-t border-gray-100" />
+        <div className="border-t border-line-subtle" />
 
         {awaitingOlderData ? (
           <div
             className="flex flex-col items-center justify-center py-12 px-6 text-center"
             aria-live="polite"
           >
-            <p className="text-gray-400 text-sm">Loading earlier transactions…</p>
+            <p className="text-fg-faint text-sm">Loading earlier transactions…</p>
           </div>
         ) : (
         <>
         {/* Earned / Spent / Net */}
         <div className="grid grid-cols-3 gap-3 px-5 pt-4 pb-3">
-          <div className="bg-green-50 rounded-lg p-3">
-            <p className="text-xs text-green-600 font-medium mb-1">Earned</p>
-            <p className="text-lg font-bold text-green-700">${monthIncome.toFixed(2)}</p>
+          <div className="bg-success-soft rounded-lg p-3">
+            <p className="text-xs text-success font-medium mb-1">Earned</p>
+            <p className="text-lg font-bold text-success-strong">${monthIncome.toFixed(2)}</p>
           </div>
-          <div className="bg-red-50 rounded-lg p-3">
-            <p className="text-xs text-red-500 font-medium mb-1">Spent</p>
-            <p className="text-lg font-bold text-red-600">${monthExpenses.toFixed(2)}</p>
+          <div className="bg-danger-soft rounded-lg p-3">
+            <p className="text-xs text-danger-muted font-medium mb-1">Spent</p>
+            <p className="text-lg font-bold text-danger">${monthExpenses.toFixed(2)}</p>
           </div>
-          <div className={`rounded-lg p-3 ${monthNet >= 0 ? "bg-blue-50" : "bg-orange-50"}`}>
-            <p className={`text-xs font-medium mb-1 ${monthNet >= 0 ? "text-blue-500" : "text-orange-500"}`}>Net</p>
-            <p className={`text-lg font-bold ${monthNet >= 0 ? "text-blue-700" : "text-orange-600"}`}>
+          <div className={`rounded-lg p-3 ${monthNet >= 0 ? "bg-accent-soft" : "bg-caution-soft"}`}>
+            <p className={`text-xs font-medium mb-1 ${monthNet >= 0 ? "text-accent-muted" : "text-caution-muted"}`}>Net</p>
+            <p className={`text-lg font-bold ${monthNet >= 0 ? "text-accent-strong" : "text-caution"}`}>
               {monthNet >= 0 ? "+" : ""}${monthNet.toFixed(2)}
             </p>
           </div>
         </div>
 
-        <div className="border-t border-gray-100" />
+        <div className="border-t border-line-subtle" />
 
         {widgetTab === "budget" && (
           <div className="pb-4">
             {unbudgetedCategories.length > 0 && (
-              <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50">
-                <p className="text-xs text-gray-400">
+              <div className="flex items-center justify-between px-5 py-2.5 border-b border-line-faint">
+                <p className="text-xs text-fg-faint">
                   {unbudgetedCategories.length} categor{unbudgetedCategories.length === 1 ? "y" : "ies"} without a budget
                 </p>
                 <button
                   onClick={handleAutoSetAll}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                  className="text-xs font-medium text-accent hover:text-accent-strong transition-colors"
                 >
                   Auto-Set All
                 </button>
@@ -244,12 +244,12 @@ export default function MonthlyReviewWidget() {
             )}
 
             {progressItems.length === 0 && unbudgetedCategories.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-10">No categories found.</p>
+              <p className="text-sm text-fg-faint text-center py-10">No categories found.</p>
             ) : (
               <>
                 <BudgetCategoryList label="Expenses" items={expenseItems} onEdit={setEditingCategoryId} />
                 {expenseItems.length > 0 && incomeItems.length > 0 && (
-                  <div className="border-t border-gray-100 my-2" />
+                  <div className="border-t border-line-subtle my-2" />
                 )}
                 <BudgetCategoryList label="Income" items={incomeItems} onEdit={setEditingCategoryId} />
               </>
@@ -257,9 +257,9 @@ export default function MonthlyReviewWidget() {
 
             {unbudgetedCategories.length > 0 && (
               <>
-                {progressItems.length > 0 && <div className="border-t border-gray-100 my-2" />}
+                {progressItems.length > 0 && <div className="border-t border-line-subtle my-2" />}
                 <div className="px-5 pt-3 pb-1">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                  <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-2">
                     No Budget Set
                   </p>
                   <ul className="space-y-1">
@@ -267,10 +267,10 @@ export default function MonthlyReviewWidget() {
                       <li key={cat.id}>
                         <button
                           onClick={() => setEditingCategoryId(cat.id)}
-                          className="w-full flex items-center justify-between py-1.5 hover:bg-gray-50 rounded-lg px-1 -mx-1 transition-colors"
+                          className="w-full flex items-center justify-between py-1.5 hover:bg-surface-sunken rounded-lg px-1 -mx-1 transition-colors"
                         >
-                          <span className="text-sm text-gray-600">{cat.name}</span>
-                          <span className="text-sm text-blue-500 font-medium">+ Set Budget</span>
+                          <span className="text-sm text-fg-tertiary">{cat.name}</span>
+                          <span className="text-sm text-accent-muted font-medium">+ Set Budget</span>
                         </button>
                       </li>
                     ))}
@@ -286,21 +286,21 @@ export default function MonthlyReviewWidget() {
             {categoryTotals.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
                 <span className="text-4xl mb-3">{noData.icon}</span>
-                <p className="text-gray-400 text-sm max-w-xs">{noData.message}</p>
+                <p className="text-fg-faint text-sm max-w-xs">{noData.message}</p>
               </div>
             ) : (
               <div className="px-5 py-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide mb-3">
                   Spending by Category
                 </p>
                 <ul className="space-y-3">
                   {categoryTotals.map(({ categoryId, name, color, amount }) => (
                     <li key={categoryId}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-gray-700">{name}</span>
-                        <span className="text-sm font-semibold text-gray-800">${amount.toFixed(2)}</span>
+                        <span className="text-sm text-fg-secondary">{name}</span>
+                        <span className="text-sm font-semibold text-fg-soft">${amount.toFixed(2)}</span>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5">
+                      <div className="w-full bg-surface-muted rounded-full h-1.5">
                         <div
                           className={`${color} h-1.5 rounded-full transition-all`}
                           style={{ width: `${(amount / maxCategory) * 100}%` }}

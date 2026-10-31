@@ -26,25 +26,25 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
 
   const amountColor =
     isExpense && (barColor === 'red' || barColor === 'deep-red')
-      ? 'text-red-600'
-      : 'text-gray-800';
+      ? 'text-danger'
+      : 'text-fg-soft';
 
   const inner = (
     <>
       {/* Row header: name + amounts + edit chevron */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-800">{categoryName}</span>
+        <span className="text-sm font-medium text-fg-soft">{categoryName}</span>
         <div className="flex items-center gap-2">
           {!isHidden && (
             <span className="text-sm">
               <span className={`font-semibold ${amountColor}`}>
                 ${spent.toFixed(0)}
               </span>
-              <span className="text-gray-400"> / ${budgetAmount.toFixed(0)}</span>
+              <span className="text-fg-faint"> / ${budgetAmount.toFixed(0)}</span>
             </span>
           )}
           {onEdit && (
-            <span className="text-gray-300 text-base leading-none">›</span>
+            <span className="text-fg-disabled text-base leading-none">›</span>
           )}
         </div>
       </div>
@@ -55,12 +55,12 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
       {/* Sub-row: percent + remaining / over */}
       {!isHidden && (
         <div className="flex justify-between mt-1.5">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-fg-faint">
             {percent.toFixed(0)}{percentSuffix}
           </span>
           <span
             className={`text-xs font-medium ${
-              delta < 0 ? 'text-red-500' : 'text-gray-400'
+              delta < 0 ? 'text-danger-muted' : 'text-fg-faint'
             }`}
           >
             {delta < 0
@@ -84,7 +84,7 @@ export default function BudgetCategoryRow({ progress, onEdit }: Props) {
       <li {...dataAttrs}>
         <button
           onClick={onEdit}
-          className="w-full text-left py-4 hover:bg-gray-50 transition-colors rounded-lg px-1 -mx-1"
+          className="w-full text-left py-4 hover:bg-surface-sunken transition-colors rounded-lg px-1 -mx-1"
         >
           {inner}
         </button>

@@ -9,7 +9,7 @@ import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 interface User {
   id: string;
@@ -159,20 +159,20 @@ export default function ProfilePage() {
   }
 
   if (loading || !user) {
-    return <p className="text-sm text-gray-500">Loading…</p>;
+    return <p className="text-sm text-fg-muted">Loading…</p>;
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Profile</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-xl font-bold text-fg">Profile</h1>
+        <p className="text-sm text-fg-muted mt-1">
           Manage your account, password, and profile picture.
         </p>
       </div>
 
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Photo</h2>
+      <section className="bg-surface rounded-2xl shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-fg-secondary mb-4">Photo</h2>
         <ProfilePictureUploader
           firstName={user.firstName}
           lastName={user.lastName}
@@ -181,12 +181,12 @@ export default function ProfilePage() {
         />
       </section>
 
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Account</h2>
+      <section className="bg-surface rounded-2xl shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-fg-secondary mb-4">Account</h2>
         <form onSubmit={saveProfile} className="space-y-4" noValidate>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="profile-first" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="profile-first" className="block text-sm font-medium text-fg-secondary mb-1">
                 First name
               </label>
               <input
@@ -199,7 +199,7 @@ export default function ProfilePage() {
               />
             </div>
             <div>
-              <label htmlFor="profile-last" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="profile-last" className="block text-sm font-medium text-fg-secondary mb-1">
                 Last name
               </label>
               <input
@@ -213,7 +213,7 @@ export default function ProfilePage() {
             </div>
           </div>
           <div>
-            <label htmlFor="profile-email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="profile-email" className="block text-sm font-medium text-fg-secondary mb-1">
               Email
             </label>
             <input
@@ -224,18 +224,18 @@ export default function ProfilePage() {
               className={inputClass}
               disabled={profileSaving}
             />
-            <p className="text-xs text-gray-400 mt-1.5">
+            <p className="text-xs text-fg-faint mt-1.5">
               A new address has to be confirmed from its own inbox before it
               takes effect. Confirming signs you out of other devices.
             </p>
           </div>
           <AuthFormError message={profileError} />
           {profileSaved ? (
-            <p className="text-xs text-emerald-600">Saved.</p>
+            <p className="text-xs text-gain">Saved.</p>
           ) : null}
           {pendingEmail ? (
             <p
-              className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+              className="text-xs text-warning-strong bg-warning-soft border border-warning-line rounded-lg px-3 py-2"
               role="status"
               data-email-change-pending={pendingEmail}
             >
@@ -247,7 +247,7 @@ export default function ProfilePage() {
           ) : null}
           <button
             type="submit"
-            className="bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
             disabled={profileSaving}
           >
             {profileSaving ? "Saving…" : "Save changes"}
@@ -255,11 +255,11 @@ export default function ProfilePage() {
         </form>
       </section>
 
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Password</h2>
+      <section className="bg-surface rounded-2xl shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-fg-secondary mb-4">Password</h2>
         <form onSubmit={changePassword} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="profile-current" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="profile-current" className="block text-sm font-medium text-fg-secondary mb-1">
               Current password
             </label>
             <input
@@ -273,7 +273,7 @@ export default function ProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="profile-new" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="profile-new" className="block text-sm font-medium text-fg-secondary mb-1">
               New password
             </label>
             <input
@@ -288,7 +288,7 @@ export default function ProfilePage() {
             <PasswordStrengthHint value={newPassword} />
           </div>
           <div>
-            <label htmlFor="profile-confirm" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="profile-confirm" className="block text-sm font-medium text-fg-secondary mb-1">
               Confirm new password
             </label>
             <input
@@ -303,13 +303,13 @@ export default function ProfilePage() {
           </div>
           <AuthFormError message={passwordError} />
           {passwordSaved ? (
-            <p className="text-xs text-emerald-600">
+            <p className="text-xs text-gain">
               Password updated. Other devices have been signed out.
             </p>
           ) : null}
           <button
             type="submit"
-            className="bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
             disabled={passwordSaving}
           >
             {passwordSaving ? "Updating…" : "Update password"}
@@ -317,20 +317,20 @@ export default function ProfilePage() {
         </form>
       </section>
 
-      <section className="bg-white rounded-2xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Sessions</h2>
+      <section className="bg-surface rounded-2xl shadow-sm p-6">
+        <h2 className="text-sm font-semibold text-fg-secondary mb-4">Sessions</h2>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={signOut}
-            className="border border-gray-200 text-gray-700 rounded-lg py-2 px-4 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="border border-line text-fg-secondary rounded-lg py-2 px-4 text-sm font-medium hover:bg-surface-sunken transition-colors"
           >
             Sign out
           </button>
           <button
             type="button"
             onClick={signOutEverywhere}
-            className="border border-red-200 text-red-700 rounded-lg py-2 px-4 text-sm font-medium hover:bg-red-50 transition-colors"
+            className="border border-danger-line text-danger-strong rounded-lg py-2 px-4 text-sm font-medium hover:bg-danger-soft transition-colors"
           >
             Sign out everywhere
           </button>

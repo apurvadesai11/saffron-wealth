@@ -12,10 +12,10 @@ export default function BudgetCategoryList({ label, items, onEdit }: Props) {
 
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-6 pt-4 pb-0">
+      <p className="text-xs font-semibold text-fg-faint uppercase tracking-wide px-6 pt-4 pb-0">
         {label}
       </p>
-      <ul className="divide-y divide-gray-50 px-6">
+      <ul className="divide-y divide-line-faint px-6">
         {items.map(item => (
           <BudgetCategoryRow
             key={item.categoryId}

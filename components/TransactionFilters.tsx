@@ -3,7 +3,7 @@
 import { useApp } from "@/lib/app-context";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 export type TransactionTypeFilter = "all" | "income" | "expense";
 
@@ -56,13 +56,13 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5 space-y-4">
+    <div className="bg-surface rounded-xl shadow-sm border border-line-subtle px-6 py-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Search & Filter</h3>
+        <h3 className="text-sm font-semibold text-fg-secondary">Search & Filter</h3>
         {!isDefault && (
           <button
             onClick={onReset}
-            className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+            className="text-xs font-medium text-accent hover:text-accent-strong transition-colors"
           >
             Reset filters
           </button>
@@ -72,7 +72,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
       {/* Row 1: search + type */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="sm:col-span-2">
-          <label htmlFor="tx-filter-search" className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <label htmlFor="tx-filter-search" className="block text-xs font-medium text-fg-muted mb-1">Search</label>
           <input
             id="tx-filter-search"
             type="text"
@@ -83,7 +83,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label htmlFor="tx-filter-type" className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+          <label htmlFor="tx-filter-type" className="block text-xs font-medium text-fg-muted mb-1">Type</label>
           <select
             id="tx-filter-type"
             value={value.type}
@@ -100,7 +100,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
       {/* Row 2: date range + amount range */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
-          <label htmlFor="tx-filter-date-from" className="block text-xs font-medium text-gray-500 mb-1">From</label>
+          <label htmlFor="tx-filter-date-from" className="block text-xs font-medium text-fg-muted mb-1">From</label>
           <input
             id="tx-filter-date-from"
             type="date"
@@ -110,7 +110,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label htmlFor="tx-filter-date-to" className="block text-xs font-medium text-gray-500 mb-1">To</label>
+          <label htmlFor="tx-filter-date-to" className="block text-xs font-medium text-fg-muted mb-1">To</label>
           <input
             id="tx-filter-date-to"
             type="date"
@@ -120,7 +120,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label htmlFor="tx-filter-amount-min" className="block text-xs font-medium text-gray-500 mb-1">Min ($)</label>
+          <label htmlFor="tx-filter-amount-min" className="block text-xs font-medium text-fg-muted mb-1">Min ($)</label>
           <input
             id="tx-filter-amount-min"
             type="number"
@@ -133,7 +133,7 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
           />
         </div>
         <div>
-          <label htmlFor="tx-filter-amount-max" className="block text-xs font-medium text-gray-500 mb-1">Max ($)</label>
+          <label htmlFor="tx-filter-amount-max" className="block text-xs font-medium text-fg-muted mb-1">Max ($)</label>
           <input
             id="tx-filter-amount-max"
             type="number"
@@ -149,9 +149,9 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
 
       {/* Categories — colored chips, toggle multi-select */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">
+        <label className="block text-xs font-medium text-fg-muted mb-2">
           Categories {value.categoryIds.length > 0 && (
-            <span className="text-gray-400">({value.categoryIds.length} selected)</span>
+            <span className="text-fg-faint">({value.categoryIds.length} selected)</span>
           )}
         </label>
         <div className="flex flex-wrap gap-1.5">
@@ -164,8 +164,8 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
                 onClick={() => toggleCategory(cat.id)}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${
                   selected
-                    ? "bg-blue-50 border-blue-300 text-blue-700"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    ? "bg-accent-soft border-accent-line text-accent-strong"
+                    : "bg-surface border-line text-fg-tertiary hover:border-line-strong"
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${cat.color}`} />

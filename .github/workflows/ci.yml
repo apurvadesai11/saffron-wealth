@@ -15,7 +15,11 @@ concurrency:
 jobs:
   test:
     name: Lint, build, unit, e2e
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest: when -latest moved to 26.04, Playwright
+    # 1.59 had no Chromium build for it and the browser install failed. Move
+    # this forward together with a Playwright upgrade that supports the newer
+    # image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     services:

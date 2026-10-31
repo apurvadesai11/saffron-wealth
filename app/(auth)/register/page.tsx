@@ -11,7 +11,7 @@ import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 interface FieldErrors {
   firstName?: string;
@@ -80,7 +80,7 @@ export default function RegisterPage() {
           Already have an account?{" "}
           <Link
             href="/login"
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-accent hover:text-accent-strong font-medium"
           >
             Sign in
           </Link>
@@ -89,16 +89,16 @@ export default function RegisterPage() {
     >
       <GoogleSignInButton label="Sign up with Google" />
       <div className="flex items-center gap-3 my-4">
-        <div className="h-px flex-1 bg-gray-200" />
-        <span className="text-xs text-gray-400 uppercase tracking-wide">or</span>
-        <div className="h-px flex-1 bg-gray-200" />
+        <div className="h-px flex-1 bg-surface-strong" />
+        <span className="text-xs text-fg-faint uppercase tracking-wide">or</span>
+        <div className="h-px flex-1 bg-surface-strong" />
       </div>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label
               htmlFor="reg-first"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-fg-secondary mb-1"
             >
               First name
             </label>
@@ -117,7 +117,7 @@ export default function RegisterPage() {
           <div>
             <label
               htmlFor="reg-last"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-fg-secondary mb-1"
             >
               Last name
             </label>
@@ -138,7 +138,7 @@ export default function RegisterPage() {
         <div>
           <label
             htmlFor="reg-email"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Email
           </label>
@@ -158,7 +158,7 @@ export default function RegisterPage() {
         <div>
           <label
             htmlFor="reg-password"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Password
           </label>
@@ -182,7 +182,7 @@ export default function RegisterPage() {
         <div>
           <label
             htmlFor="reg-confirm"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Confirm password
           </label>
@@ -203,7 +203,7 @@ export default function RegisterPage() {
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+          className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
           disabled={submitting}
         >
           {submitting ? "Creating account…" : "Create account"}

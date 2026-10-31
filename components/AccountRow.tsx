@@ -48,7 +48,7 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
   );
   // A credited card ADDS to net worth, so it reads in the ordinary colour
   // rather than the debt red that would imply money owed.
-  const amountClass = balanceSign === "owed" ? "text-red-600" : "text-gray-800";
+  const amountClass = balanceSign === "owed" ? "text-danger" : "text-fg-soft";
   // balanceAsOf is a full ISO timestamp; only the date portion is shown.
   const asOfDate = account.balanceAsOf.slice(0, 10);
 
@@ -62,8 +62,8 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
         onClick={onEdit}
         className="flex-1 text-left hover:opacity-80 transition-opacity"
       >
-        <p className="text-sm font-medium text-gray-800">{account.name}</p>
-        <p className="text-xs text-gray-400">
+        <p className="text-sm font-medium text-fg-soft">{account.name}</p>
+        <p className="text-xs text-fg-faint">
           {ACCOUNT_TYPE_LABELS[account.type]}
           {account.institution ? ` · ${account.institution}` : ""}
           {` · as of ${asOfDate}`}
@@ -80,33 +80,33 @@ export default function AccountRow({ account, onEdit, onArchive }: Props) {
           // role="alert" so the confirm is announced; a swap this small is
           // otherwise a silent change for a screen-reader user.
           <span className="flex items-center gap-2 text-xs" role="alert">
-            <span className="text-gray-600">Archive?</span>
+            <span className="text-fg-tertiary">Archive?</span>
             <button
               ref={confirmRef}
               onClick={() => {
                 setConfirming(false);
                 onArchive();
               }}
-              className="min-h-6 min-w-6 px-2 rounded text-red-700 font-medium hover:bg-red-50 transition-colors"
+              className="min-h-6 min-w-6 px-2 rounded text-danger-strong font-medium hover:bg-danger-soft transition-colors"
             >
               Yes, archive
             </button>
             <button
               onClick={() => setConfirming(false)}
-              className="min-h-6 min-w-6 px-2 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+              className="min-h-6 min-w-6 px-2 rounded text-fg-tertiary hover:bg-surface-muted transition-colors"
             >
               Cancel
             </button>
           </span>
         ) : (
-          // text-gray-500 is ~4.8:1 on white; the previous text-gray-300 was
+          // text-fg-muted is ~4.8:1 on surface; the previous text-fg-disabled was
           // ~1.5:1, under WCAG 1.4.11's 3:1 floor for a non-text control.
           // min-h-6/min-w-6 is 24x24 CSS px, the SC 2.5.8 target minimum —
           // the bare glyph reserved roughly 10px.
           <button
             ref={triggerRef}
             onClick={() => setConfirming(true)}
-            className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-gray-500 hover:text-red-600 hover:bg-gray-100 transition-colors"
+            className="min-h-6 min-w-6 flex items-center justify-center rounded text-xs text-fg-muted hover:text-danger hover:bg-surface-muted transition-colors"
             aria-label={`Archive ${account.name}`}
           >
             ✕

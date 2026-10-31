@@ -80,15 +80,15 @@ export default function ProfilePictureUploader({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="border border-gray-200 text-gray-700 rounded-lg py-1.5 px-3 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-60"
+          className="border border-line text-fg-secondary rounded-lg py-1.5 px-3 text-sm font-medium hover:bg-surface-sunken transition-colors disabled:opacity-60"
         >
           {uploading ? "Uploading…" : "Change photo"}
         </button>
-        <p className="text-xs text-gray-400 mt-1.5">
+        <p className="text-xs text-fg-faint mt-1.5">
           PNG, JPEG, or WebP. Max 5MB.
         </p>
         {error ? (
-          <p className="text-xs text-red-500 mt-1.5">{error}</p>
+          <p className="text-xs text-danger-muted mt-1.5">{error}</p>
         ) : null}
         <input
           ref={inputRef}

@@ -4,11 +4,11 @@ type BarColor = ExpenseBarColor | IncomeBarColor;
 
 // Explicit full class names so Tailwind v4 doesn't purge them
 const BAR_COLOR_CLASSES: Record<BarColor, string> = {
-  'green':    'bg-green-500',
-  'yellow':   'bg-yellow-400',
-  'orange':   'bg-orange-400',
-  'red':      'bg-red-500',
-  'deep-red': 'bg-red-700',
+  'green':    'bg-data-good',
+  'yellow':   'bg-data-caution',
+  'orange':   'bg-data-warn',
+  'red':      'bg-data-over',
+  'deep-red': 'bg-data-over-deep',
 };
 
 interface Props {
@@ -20,7 +20,7 @@ interface Props {
 export default function BudgetProgressBar({ percent, color, isHidden }: Props) {
   if (isHidden) {
     return (
-      <span data-state="hidden" className="text-xs text-gray-400 italic">Hidden from Budgets</span>
+      <span data-state="hidden" className="text-xs text-fg-faint italic">Hidden from Budgets</span>
     );
   }
 
@@ -28,7 +28,7 @@ export default function BudgetProgressBar({ percent, color, isHidden }: Props) {
   const fillWidth = Math.min(percent, 100);
 
   return (
-    <div data-testid="budget-progress-bar" className="w-full bg-gray-100 rounded-full h-2">
+    <div data-testid="budget-progress-bar" className="w-full bg-surface-muted rounded-full h-2">
       <div
         data-state={color}
         className={`${BAR_COLOR_CLASSES[color]} h-2 rounded-full transition-all duration-300`}

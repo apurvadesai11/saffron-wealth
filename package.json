@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:visual": "VISUAL=1 playwright test --grep @visual --workers=1",
     "typecheck": "tsc --noEmit",
     "check:env": "node scripts/check-env-parity.mjs",
     "db:generate": "prisma generate",

@@ -25,15 +25,15 @@ export default function MonthNavigator({ month, year, onChange }: Props) {
     <div className="flex items-center gap-1">
       <button
         onClick={prev}
-        className="text-gray-400 hover:text-gray-700 transition-colors text-xl leading-none px-1"
+        className="text-fg-faint hover:text-fg-secondary transition-colors text-xl leading-none px-1"
         aria-label="Previous month"
       >‹</button>
-      <span className="text-sm font-medium text-gray-700 w-32 text-center">
+      <span className="text-sm font-medium text-fg-secondary w-32 text-center">
         {MONTH_NAMES[month]} {year}
       </span>
       <button
         onClick={next}
-        className="text-gray-400 hover:text-gray-700 transition-colors text-xl leading-none px-1"
+        className="text-fg-faint hover:text-fg-secondary transition-colors text-xl leading-none px-1"
         aria-label="Next month"
       >›</button>
     </div>

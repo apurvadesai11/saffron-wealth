@@ -8,7 +8,7 @@ import {
   CAT_GROCERIES,
   CAT_SALARY,
 } from "./__tests__/test-utils";
-import { contrastRatio, textGrayClass, TAILWIND_GRAY, WHITE } from "./__tests__/contrast";
+import { contrastRatio, textTokenClass, tokenHex } from "./__tests__/contrast";
 import type { Transaction } from "@/lib/types";
 
 // In production, `TransactionsPage` reads the transactions slice from context
@@ -104,9 +104,9 @@ describe("TransactionList delete control accessibility", () => {
     });
     const [control] = screen.getAllByRole("button", { name: /^Delete / });
 
-    const cls = textGrayClass(control);
-    expect(cls).not.toBeNull();
-    expect(contrastRatio(TAILWIND_GRAY[cls!], WHITE)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    const token = textTokenClass(control);
+    expect(token).not.toBeNull();
+    expect(contrastRatio(tokenHex(token!), tokenHex("surface"))).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
     expect(control.className).toMatch(/min-h-6/);
     expect(control.className).toMatch(/min-w-6/);
   });

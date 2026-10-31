@@ -83,26 +83,26 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
       onClick={onClose}
       aria-label="Close modal"
     >
       <div
         ref={dialogRef}
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md"
+        className="bg-surface rounded-2xl shadow-xl w-full max-w-md"
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="px-6 pt-6 pb-4 border-b border-line-subtle">
           <div className="flex items-start justify-between">
-            <h2 id="account-modal-title" className="text-xl font-bold text-gray-900">
+            <h2 id="account-modal-title" className="text-xl font-bold text-fg">
               {isEditing ? "Edit Account" : "Add Account"}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-300 hover:text-gray-500 transition-colors text-2xl leading-none mt-0.5"
+              className="text-fg-disabled hover:text-fg-muted transition-colors text-2xl leading-none mt-0.5"
               aria-label="Close"
             >
               ×
@@ -112,7 +112,7 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
 
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label htmlFor="account-name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="account-name" className="block text-sm font-medium text-fg-secondary mb-1">
               Account name
             </label>
             <input
@@ -125,20 +125,20 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
                 setName(e.target.value);
                 setErrors((prev) => ({ ...prev, name: "" }));
               }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
-            {errors.name && <p className="text-xs text-red-500 mt-1.5">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-danger-muted mt-1.5">{errors.name}</p>}
           </div>
 
           <div>
-            <label htmlFor="account-type" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="account-type" className="block text-sm font-medium text-fg-secondary mb-1">
               Type
             </label>
             <select
               id="account-type"
               value={type}
               onChange={(e) => setType(e.target.value as AccountType)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring"
             >
               {bucketsForSelect.map((bucket) => (
                 <optgroup key={bucket} label={ACCOUNT_BUCKET_LABELS[bucket]}>
@@ -153,8 +153,8 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
           </div>
 
           <div>
-            <label htmlFor="account-institution" className="block text-sm font-medium text-gray-700 mb-1">
-              Institution <span className="text-gray-400 font-normal">(optional)</span>
+            <label htmlFor="account-institution" className="block text-sm font-medium text-fg-secondary mb-1">
+              Institution <span className="text-fg-faint font-normal">(optional)</span>
             </label>
             <input
               id="account-institution"
@@ -162,16 +162,16 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
               placeholder="e.g. Vanguard"
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring"
             />
           </div>
 
           <div>
-            <label htmlFor="account-balance" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="account-balance" className="block text-sm font-medium text-fg-secondary mb-1">
               Balance
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted font-medium">
                 $
               </span>
               <input
@@ -187,23 +187,23 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave();
                 }}
-                className="w-full border border-gray-200 rounded-lg pl-7 pr-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-line rounded-lg pl-7 pr-4 py-2.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring"
               />
             </div>
-            {errors.balance && <p className="text-xs text-red-500 mt-1.5">{errors.balance}</p>}
+            {errors.balance && <p className="text-xs text-danger-muted mt-1.5">{errors.balance}</p>}
           </div>
         </div>
 
         <div className="px-6 pb-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="flex-1 border border-line text-fg-secondary rounded-lg py-2.5 text-sm font-medium hover:bg-surface-sunken transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
           >
             {isEditing ? "Save Changes" : "Add Account"}
           </button>

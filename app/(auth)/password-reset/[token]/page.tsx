@@ -10,7 +10,7 @@ import { readCsrfCookie } from "@/lib/auth/csrf-client";
 import { CSRF_HEADER_NAME } from "@/lib/auth/csrf-shared";
 
 const inputClass =
-  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
 
 interface Props {
   params: Promise<{ token: string }>;
@@ -68,7 +68,7 @@ export default function PasswordResetConfirmPage({ params }: Props) {
         <div>
           <Link
             href="/login"
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-accent hover:text-accent-strong font-medium"
           >
             Back to sign in
           </Link>
@@ -79,7 +79,7 @@ export default function PasswordResetConfirmPage({ params }: Props) {
         <div>
           <label
             htmlFor="reset-password"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             New password
           </label>
@@ -98,7 +98,7 @@ export default function PasswordResetConfirmPage({ params }: Props) {
         <div>
           <label
             htmlFor="reset-confirm"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-fg-secondary mb-1"
           >
             Confirm new password
           </label>
@@ -117,7 +117,7 @@ export default function PasswordResetConfirmPage({ params }: Props) {
         <AuthFormError message={topError} />
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+          className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
           disabled={submitting}
         >
           {submitting ? "Updating…" : "Update password"}

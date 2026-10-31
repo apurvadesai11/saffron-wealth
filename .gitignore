@@ -51,3 +51,6 @@ next-env.d.ts
 Monarch_*
 /data/
 !**/__tests__/fixtures/*.csv
+
+# Local-only visual baselines (see e2e/visual.spec.ts)
+/e2e/visual.spec.ts-snapshots/

@@ -13,7 +13,7 @@ describe("NetWorthSummaryCards", () => {
     expect(screen.getByText("$2000.00")).toBeInTheDocument();
     const netWorth = screen.getByText("$8000.00");
     expect(netWorth).toBeInTheDocument();
-    expect(netWorth.className).toMatch(/text-green-600/);
+    expect(netWorth.className).toMatch(/text-success/);
   });
 
   it("shows a negative net worth in red with data-net-worth-sign=negative", () => {
@@ -23,7 +23,7 @@ describe("NetWorthSummaryCards", () => {
       />,
     );
     const netWorth = screen.getByText("$-4000.00");
-    expect(netWorth.className).toMatch(/text-red-600/);
+    expect(netWorth.className).toMatch(/text-danger/);
     expect(container.querySelector('[data-net-worth-sign="negative"]')).toBeInTheDocument();
   });
 

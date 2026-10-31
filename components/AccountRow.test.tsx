@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AccountRow from "./AccountRow";
-import { contrastRatio, textGrayClass, TAILWIND_GRAY, WHITE } from "./__tests__/contrast";
+import { contrastRatio, textTokenClass, tokenHex } from "./__tests__/contrast";
 import type { Account } from "@/lib/types";
 
 function account(overrides: Partial<Account> = {}): Account {
@@ -40,7 +40,7 @@ describe("AccountRow", () => {
       <AccountRow account={account({ type: "credit_card", balance: 2000 })} onEdit={vi.fn()} onArchive={vi.fn()} />,
     );
     expect(container.querySelector('[data-liability="true"]')).toBeInTheDocument();
-    expect(screen.getByText("$2000.00").className).toMatch(/text-red-600/);
+    expect(screen.getByText("$2000.00").className).toMatch(/text-danger/);
   });
 
   it("marks asset accounts with data-liability=false", () => {
@@ -198,7 +198,7 @@ describe("AccountRow negative balances", () => {
   });
 });
 
-// 14b — `text-gray-300` on white is about 1.5:1. WCAG 2.1 SC 1.4.11 requires
+// 14b — the control was `text-gray-300` (now fg-disabled), about 1.5:1 on white. WCAG 2.1 SC 1.4.11 requires
 // 3:1 for a non-text UI control. The aria-label was already correct, so
 // screen-reader users were better served here than sighted mouse users.
 //
@@ -211,11 +211,9 @@ describe("AccountRow control contrast", () => {
     render(<AccountRow account={account()} onEdit={vi.fn()} onArchive={vi.fn()} />);
     const control = screen.getByRole("button", { name: /Archive Fidelity Brokerage/ });
 
-    const cls = textGrayClass(control);
-    expect(cls).not.toBeNull();
-    const hex = TAILWIND_GRAY[cls!];
-    expect(hex, `no palette entry for ${cls}`).toBeDefined();
-    expect(contrastRatio(hex, WHITE)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    const token = textTokenClass(control);
+    expect(token).not.toBeNull();
+    expect(contrastRatio(tokenHex(token!), tokenHex("surface"))).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
   });
 
   it("reserves at least a 24x24 CSS-pixel hit target", () => {
@@ -233,9 +231,10 @@ describe("AccountRow control contrast", () => {
 // same two issues, since it is the same pattern.
 describe("contrast arithmetic sanity", () => {
   it("agrees with the published ratios for the greys in play", () => {
-    // The value the audit reported for the old control.
-    expect(contrastRatio(TAILWIND_GRAY["gray-300"], WHITE)).toBeLessThan(MIN_UI_CONTRAST);
-    expect(contrastRatio(TAILWIND_GRAY["gray-400"], WHITE)).toBeLessThan(MIN_UI_CONTRAST);
-    expect(contrastRatio(TAILWIND_GRAY["gray-500"], WHITE)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    // fg-disabled is the old control's grey (gray-300), the value the audit reported.
+    const surface = tokenHex("surface");
+    expect(contrastRatio(tokenHex("fg-disabled"), surface)).toBeLessThan(MIN_UI_CONTRAST);
+    expect(contrastRatio(tokenHex("fg-faint"), surface)).toBeLessThan(MIN_UI_CONTRAST);
+    expect(contrastRatio(tokenHex("fg-muted"), surface)).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
   });
 });

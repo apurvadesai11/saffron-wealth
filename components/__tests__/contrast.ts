@@ -4,21 +4,28 @@
 // happy-dom does not load Tailwind's stylesheet, so a computed `color` is not
 // available in a unit test. The class name IS the source of truth for the
 // colour here (Tailwind classes must appear as full strings in this codebase —
-// see CLAUDE.md), so the class is resolved through the palette below and the
-// ratio computed from the resulting hex. The real rendered box is asserted in
-// Playwright instead.
+// see CLAUDE.md), so the token in the class is resolved through
+// lib/theme-tokens.ts — the same module the stylesheet is generated from — and
+// the ratio computed from the resulting hex. The real rendered box is asserted
+// in Playwright instead.
 
-// Tailwind v3 default palette, only the greys these controls use.
-export const TAILWIND_GRAY: Record<string, string> = {
-  "gray-300": "#d1d5db",
-  "gray-400": "#9ca3af",
-  "gray-500": "#6b7280",
-  "gray-600": "#4b5563",
-  "gray-700": "#374151",
-  "gray-800": "#1f2937",
-};
+import { THEME_TOKENS, TOKEN_NAMES, type ThemeName, type ThemeToken } from "@/lib/theme-tokens";
 
-export const WHITE = "#ffffff";
+export function tokenHex(token: ThemeToken, theme: ThemeName = "light"): string {
+  return THEME_TOKENS[theme][token];
+}
+
+// Longest first, so `text-fg-muted` resolves to fg-muted rather than fg.
+const TOKENS_LONGEST_FIRST = [...TOKEN_NAMES].sort((a, b) => b.length - a.length);
+
+/** The colour token in `el`'s `text-*` class, or null if it carries none. */
+export function textTokenClass(el: Element): ThemeToken | null {
+  const classes = el.className.split(/\s+/);
+  for (const token of TOKENS_LONGEST_FIRST) {
+    if (classes.includes(`text-${token}`)) return token;
+  }
+  return null;
+}
 
 function channelLuminance(c: number): number {
   const s = c / 255;
@@ -42,10 +49,4 @@ export function contrastRatio(a: string, b: string): number {
   const lb = relativeLuminance(b);
   const [light, dark] = la > lb ? [la, lb] : [lb, la];
   return (light + 0.05) / (dark + 0.05);
-}
-
-/** The `text-gray-NNN` class on `el`, or null if it carries none. */
-export function textGrayClass(el: Element): string | null {
-  const match = el.className.match(/text-(gray-\d{3})\b/);
-  return match ? match[1] : null;
 }
