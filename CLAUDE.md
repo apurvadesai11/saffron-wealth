@@ -87,10 +87,13 @@ User-visible v1 capabilities:
   a bell icon in the top nav. Each alert shows category, %, remaining $, and
   days left in month. Alerts reset automatically when a budget increase drops
   spend back below a previously-fired threshold (FR-19).
-- **Monthly Review widget** with Budget / Cashflow tabs and a shared month
-  navigator. Earned / Spent / Net summary cards pinned above tab content.
+- **Monthly Review widget** with Cashflow / Budget tabs (Cashflow first and
+  default) and a shared month navigator with a Today button. Earned / Spent /
+  Net summary cards pinned above tab content. Each Cashflow category row links
+  to the Transactions page filtered to that category and month.
 - **Transactions** screen (separate route) with add/edit/delete, filter by type,
-  category, date range, amount range, and free-text search.
+  category (a searchable multi-select dropdown), date range, amount range, and
+  free-text search; rows are divided by month.
 - **Net Worth** screen (separate route, persisted) — Total Assets / Total
   Liabilities / Net Worth summary; accounts grouped by bucket (Cash,
   Investments, Retirement, Real Estate, Debt); add / edit (incl. changing
@@ -99,6 +102,8 @@ User-visible v1 capabilities:
   shown in a collapsed "Archived accounts" group, excluded from totals, with a
   Restore action. "Hide from Net Worth" keeps an account in its bucket (with a
   closed-eye icon) but out of every total and the chart's whole history.
+  Sections collapse from their headings, and accounts reorder within a section
+  by drag-and-drop (`Account.sortOrder`, saved by `PUT /api/accounts/order`).
 - **Financial Profile** screen (`/financial-profile`, persisted, append-only
   versions) — income as typed streams (salary, bonus, RSUs, ESPP, rental, …),
   current and target retirement age, real return / safe withdrawal / inflation
@@ -207,6 +212,7 @@ app/
     profile/__tests__/                Integration tests for /api/profile/*
     accounts/route.ts                 GET (list) + POST (create) — real Postgres
     accounts/[id]/route.ts            PATCH (update) + DELETE (soft-delete/archive)
+    accounts/order/route.ts           PUT — one section's drag-and-drop order
     accounts/__tests__/                Integration tests for /api/accounts/*
     transactions/route.ts             POST (create) — real Postgres
     transactions/[id]/route.ts        PATCH (edit the five form fields) + DELETE
@@ -223,7 +229,8 @@ components/
   BudgetCategoryList.tsx, BudgetCategoryRow.tsx, BudgetProgressBar.tsx
   BudgetEditModal.tsx, CashflowCard.tsx
   AlertsButton.tsx, AlertBanner.tsx, AlertPanel.tsx
-  TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx, TransactionEditModal.tsx
+  TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx, TransactionEditModal.tsx,
+  CategoryMultiSelect.tsx
   NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
   AccountRow.tsx, AccountEditModal.tsx
   FinancialProfileClient.tsx, IncomeStreamsEditor.tsx, ContributionTargetsEditor.tsx
@@ -342,7 +349,10 @@ The Transactions page does **not** read this array for its rows. It queries
 `GET /api/transactions` directly (server-side filtering on date range, type,
 categories, amount range, and a description/merchant/category-name search,
 with cursor paging), because the window can't answer a filter that reaches
-further back than it does.
+further back than it does. Its starting filter comes from the URL, under the
+API's own parameter names (`filtersFromSearchParams` / `filtersToSearchParams`
+in `components/TransactionFilters.tsx`), which is how Monthly Review links into
+it. It reads the URL once; the controls don't write back to it.
 
 State slices:
 
