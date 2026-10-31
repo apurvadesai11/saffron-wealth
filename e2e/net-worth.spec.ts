@@ -141,6 +141,22 @@ test.describe("Chart and summary cards agree after a mutation", () => {
     await modal.getByLabel("Balance").fill(balance);
     await modal.getByRole("button", { name: "Add Account" }).click();
     await expect(modal).not.toBeVisible();
+
+    // Wait for the chart to agree with the card before returning. The modal
+    // closes on the optimistic update, but the chart only moves when
+    // router.refresh lands. If an earlier test in this worker already left
+    // the chart rendered, a caller reading it straight away gets the
+    // pre-add value, and every later comparison against that value is wrong.
+    // On a loaded dev server (a full parallel run) that read wins the race.
+    const cardText = await page
+      .locator("[data-net-worth-sign]")
+      .getByText(/^\$/)
+      .first()
+      .innerText();
+    await expect(chart(page)).toHaveAttribute(
+      "data-latest-value",
+      cardText.replace(/[$,]/g, ""),
+    );
   }
 
   test("editing a balance moves the chart's last point with the summary card", async ({ page }) => {
