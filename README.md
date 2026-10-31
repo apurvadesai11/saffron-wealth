@@ -2,7 +2,7 @@
 
 A personal-wealth app built on the Boglehead and FIRE philosophy: track what you have, track what you spend, and close the gap between financial intention and real-time awareness. Set monthly budgets, track spending with color-coded progress bars, track net worth across accounts, and get contextual alerts before you overspend.
 
-> **Status:** v0.3 — Monthly Budget and Net Worth (Phases 1–3) shipped on a production-grade auth foundation. All first-class financial data is persisted to Postgres. Planning features (projections, FIRE calculator, retirement) are next — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status:** v0.4 — Monthly Budget, Net Worth (Phases 1–3) and the Financial Profile shipped on a production-grade auth foundation. All first-class financial data is persisted to Postgres. The planning features that run on the profile (projections, FIRE calculator, retirement) are next — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Features
 
@@ -14,6 +14,14 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 - **Append-only balance history** — `AccountBalanceEvent` distinguishes `asOf` (the balance's own date) from `recordedAt` (write time), so backfilled history and live edits coexist
 - **Archived accounts** in a collapsed group, excluded from totals, with a Restore action (soft delete via `archivedAt`)
 - **Monarch balance-history import** — one global CSV backfills every account's history, with a preview, in-file and cross-file dedup, and a "Type disagreements" block that surfaces stored-type-vs-imported-sign conflicts for the user to resolve rather than silently re-typing accounts
+
+### Financial Profile (shipped)
+- **Declared planning inputs** on their own page — the numbers projections, the FIRE calculator and retirement planning will run on, instead of each inventing its own form
+- **Income as typed streams** — salary, bonus, RSUs, ESPP, rental, self-employment, interest & dividends, other — each with a gross annual amount and how it's paid
+- **Current age and target retirement age** — the age is stored as typed and advances on its own each year from the save date
+- **Assumptions** — expected real return, safe withdrawal rate, inflation; deliberately no pre-filled defaults
+- **Optional** — filing status, employer match (% of contributions up to % of salary), and annual contribution targets per cash, investment or retirement account
+- **Append-only versions** — every save that changes something is kept as a dated version, so a number computed from last year's assumptions stays explicable; an unchanged save writes nothing
 
 ### Monthly Budget (shipped)
 - **Pre-commitment budgeting** — Set monthly budget targets for income and expense categories
@@ -43,7 +51,7 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 
 ### Not yet built
 
-Tracking is in good shape; **planning is one month deep**. The app can tell you where this month lands and nothing beyond that. Notably absent: investment holdings (accounts carry a balance only — no positions, cost basis, or asset allocation), loan amortization and payoff dates, a financial profile (salary, birth date, target retirement age), net-worth projections, a FIRE calculator, and retirement planning. Sequencing and rationale live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Tracking is in good shape; **planning is one month deep**. The app can tell you where this month lands and nothing beyond that. The Financial Profile now holds the declared inputs planning needs; nothing reads them yet. Notably absent: investment holdings (accounts carry a balance only — no positions, cost basis, or asset allocation), loan amortization and payoff dates, net-worth projections, a FIRE calculator, and retirement planning. Sequencing and rationale live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Tech Stack
 
@@ -67,7 +75,7 @@ Tracking is in good shape; **planning is one month deep**. The app can tell you 
 
 ### Persistence model
 
-Every first-class domain is persisted in Postgres: users, sessions, OAuth accounts, profile data, password-reset tokens, failed logins, audit events, **accounts, account balance history, categories, transactions, and budgets**.
+Every first-class domain is persisted in Postgres: users, sessions, OAuth accounts, profile data, password-reset tokens, failed logins, audit events, **accounts, account balance history, categories, transactions, budgets, and financial-profile versions**.
 
 The one exception is **alert dismissals**, which live in React state in `AppProvider` and reset on reload — deliberately, since the cost of losing one is that a dismissed alert re-shows.
 
@@ -87,6 +95,7 @@ app/
     page.tsx                 Monthly Review (summary cards + tabbed budget/cashflow)
     transactions/page.tsx    Transactions list + filters + add form + CSV import
     net-worth/page.tsx       Net worth chart, summary, accounts by bucket
+    financial-profile/page.tsx  Declared planning inputs (income, ages, assumptions, savings)
     profile/page.tsx         Account, password, picture, sessions
   (auth)/                    Unauthenticated route group
     login, register, password-reset, password-reset/[token]
@@ -94,6 +103,7 @@ app/
     accounts/                list/create, [id] patch/archive, balance-history import
     transactions/            list/create, [id] delete, import
     budgets/                 read/upsert budgets
+    financial-profile/       PUT — save the profile as a new version
     auth/                    login, register, logout, logout-all, me, oauth/google/*, password-reset/*
     profile/                 read/update profile, change password, upload picture
     cron/                    sweep-sessions (daily), sweep-audit-events (weekly)
@@ -104,6 +114,7 @@ components/
   TransactionForm, TransactionList, TransactionFilters, MonarchImportModal
   NetWorthClient, NetWorthChart, NetWorthSummaryCards, AccountBucketGroup,
   AccountRow, AccountEditModal, ArchivedAccountsGroup, BalanceHistoryImportModal
+  FinancialProfileClient, IncomeStreamsEditor, ContributionTargetsEditor
   __tests__/                 renderWithApp helper + contrast assertions
   auth/                      AuthCard, GoogleSignInButton, PasswordStrengthHint,
                              ProfilePictureUploader, AvatarFallback, AuthFormError
@@ -118,11 +129,13 @@ lib/
   categories.ts              Category query layer
   transactions.ts            Transaction query layer (server-side filter + page)
   budgets.ts                 Budget query layer
+  financial-profile.ts       Financial profile query layer (append-only versions)
+  financial-profile-utils.ts Profile taxonomy, age derivation, version equality
   csv.ts                     papaparse wrapper + header validation
   monarch-transform.ts       Pure row→domain transforms shared by both imports
   transaction-import.ts      Phase 2b import pipeline
   balance-history-import.ts  Phase 3 import pipeline
-  *-validation.ts            Hand-rolled validation (account, budget, transaction)
+  *-validation.ts            Hand-rolled validation (account, budget, transaction, financial profile)
   app-context.tsx            React Context provider (hydrated from Postgres)
   mock-data.ts               Test fixtures only — not a production fallback
   use-alert-state.ts         Derived-state hook for the alert bell + widget
@@ -141,13 +154,14 @@ lib/
 prisma/
   schema.prisma              User, Session, OAuthAccount, PasswordResetToken,
                              FailedLogin, AuthEvent, Account, AccountBalanceEvent,
-                             Category, Transaction, Budget
+                             Category, Transaction, Budget, FinancialProfile
+                             (+ FinancialProfileIncome, FinancialProfileContribution)
   migrations/                Versioned SQL migrations — the full schema. `migrate
                              deploy` on an empty database produces a working app
 proxy.ts                     Next.js Edge middleware (cookie shape check + CSRF cookie)
 middleware.ts                Re-exports from proxy.ts
 e2e/                         Playwright tests + worker-scoped auth fixture
-  smoke, net-worth, net-worth-history, monarch-import, auth-middleware,
+  smoke, net-worth, net-worth-history, monarch-import, financial-profile, auth-middleware,
   security-headers, accessibility
 docs/
   decisions/                                    Decision records (one per ruling)
@@ -156,6 +170,7 @@ docs/
   saffron-wealth-monthly-budget-prd.md          Monthly Budget PRD + implementation log
   saffron-wealth-net-worth-phase1-plan.md       Net Worth Phase 1 plan
   saffron-wealth-net-worth-phase2-3-plan.md     Net Worth Phases 2b & 3 plan
+  saffron-wealth-financial-profile-plan.md      Financial Profile plan (roadmap #1)
 scripts/
   fetch-blocklist.mjs        Refreshes lib/auth/blocklist-data.ts
   check-env-parity.mjs       Fails CI when code and .env.example disagree
@@ -238,4 +253,5 @@ A pre-push git hook runs `lint`, `typecheck`, and `test` before every push (inst
 - `docs/saffron-wealth-monthly-budget-prd.md` — Monthly Budget PRD and chronological implementation log
 - `docs/saffron-wealth-net-worth-phase1-plan.md` — Net Worth Phase 1 (accounts + current net worth)
 - `docs/saffron-wealth-net-worth-phase2-3-plan.md` — Net Worth Phases 2b & 3 (Monarch imports + over-time chart)
+- `docs/saffron-wealth-financial-profile-plan.md` — Financial Profile (declared planning inputs, append-only versions)
 - `CLAUDE.md` — In-depth architecture, auth subsystem, and conventions for AI coding agents

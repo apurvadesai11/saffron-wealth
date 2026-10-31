@@ -57,9 +57,9 @@ The app is intended to grow into an integrated personal-wealth platform:
 
 **`docs/ROADMAP.md` is the sequenced source of truth** for the order this gets
 built in and why. The list above is the unordered vision; the roadmap names the
-prerequisites (notably: `User` carries no declared financial inputs — no salary,
-birth date, or return assumptions — and that gap blocks projections, FIRE, and
-retirement planning). Update the roadmap when scope moves, not this list.
+prerequisites. The declared financial inputs that blocked projections, FIRE, and
+retirement planning now live in the Financial Profile (not on `User` — see
+"Architecture: Financial Profile"). Update the roadmap when scope moves, not this list.
 
 ### What's shipped right now (v1 scope)
 
@@ -97,6 +97,12 @@ User-visible v1 capabilities:
   type) / delete an account. Net-worth-over-time chart (hand-rolled SVG,
   3M/6M/YTD/1Y/3Y/5Y/10Y/MAX) above the summary cards. Archived accounts
   shown in a collapsed group, excluded from totals, with a Restore action.
+- **Financial Profile** screen (`/financial-profile`, persisted, append-only
+  versions) — income as typed streams (salary, bonus, RSUs, ESPP, rental, …),
+  current and target retirement age, real return / safe withdrawal / inflation
+  assumptions, and optionally filing status, employer match, and per-account
+  contribution targets. Nothing consumes it yet; it's the input layer for
+  roadmap #3/#4/#6.
 - **Profile** screen — name/email edit, password change, avatar upload, single
   & global sign-out.
 - **Authentication** — full email/password + Google OAuth sign-in, password
@@ -124,6 +130,7 @@ From the PRD:
 | Profile pictures                       | ✅ Vercel Blob (prod) / `public/uploads/avatars` (dev) | `lib/auth/picture-storage.ts` |
 | **Accounts**                            | ✅ Postgres | `Account` model (soft-deleted via `archivedAt`) — `lib/accounts.ts` |
 | **Account balance history**             | ✅ Postgres | `AccountBalanceEvent` — append-only; `asOf` (the balance's own date) + `recordedAt` (write time). Backfilled by the Monarch balance-history import; drives the Net Worth chart via `lib/net-worth-history.ts` |
+| **Financial profile**                   | ✅ Postgres | `FinancialProfile` + `FinancialProfileIncome` + `FinancialProfileContribution` — append-only versions, `lib/financial-profile.ts` |
 | **Categories**                         | ✅ Postgres | `Category` (soft-deleted via `archivedAt`) — `lib/categories.ts` |
 | **Transactions**                       | ✅ Postgres | `Transaction` — `lib/transactions.ts`              |
 | **Budgets**                            | ✅ Postgres | `Budget` — `lib/budgets.ts`                        |
@@ -179,6 +186,7 @@ app/
     page.tsx               Monthly Review (SummaryCards + MonthlyReviewWidget)
     transactions/page.tsx  Transactions list + filters + add form
     net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres)
+    financial-profile/page.tsx  Financial Profile (RSC; current version + account options → client form)
     profile/page.tsx       Account / password / picture / sessions
   (auth)/                  Unauthed route group
     layout.tsx
@@ -202,6 +210,8 @@ app/
     transactions/__tests__/           Integration tests for /api/transactions/*
     budgets/route.ts                  PUT — batch upsert (one manual edit or Auto-Set All)
     budgets/__tests__/                Integration tests for /api/budgets/*
+    financial-profile/route.ts        PUT — save the whole profile as a new version (or no-op)
+    financial-profile/__tests__/      Integration tests, incl. concurrency and derived-age no-op
     cron/sweep-sessions/route.ts      Daily — expired sessions + reset tokens
     cron/sweep-audit-events/route.ts  Weekly — audit log retention
 components/
@@ -213,6 +223,7 @@ components/
   TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx
   NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
   AccountRow.tsx, AccountEditModal.tsx
+  FinancialProfileClient.tsx, IncomeStreamsEditor.tsx, ContributionTargetsEditor.tsx
   ThemeSelector.tsx                   Light / System / Dark control on the profile page
   *.test.tsx                          RTL unit tests colocated with each component
   __tests__/test-utils.tsx            renderWithApp + category fixtures
@@ -233,6 +244,10 @@ lib/
   transaction-validation.ts  Hand-rolled validators, POST body parser, and GET query-param parser for /api/transactions
   budgets.ts               Query layer: listBudgets + saveBudgets (batch upsert, server-only)
   budget-validation.ts     Hand-rolled validators + body parser for PUT /api/budgets
+  financial-profile.ts     Query layer: getCurrentFinancialProfile + saveFinancialProfile (server-only)
+  financial-profile-utils.ts  Pure: income/frequency/filing taxonomy, ageOn, profileInputsEqual
+  financial-profile-validation.ts  Pure: parseFinancialProfileBody + parseNumberInput — shared by
+                            the route AND the client form
   db-errors.ts             InvalidReferenceError — cross-user FK reference caught by query layers
   app-context.tsx          AppProvider — hydrated from Postgres by app/(app)/layout.tsx (see below)
   mock-data.ts             Test-fixture data only (renderWithApp, E2E fixture) — not read in production
@@ -253,6 +268,7 @@ e2e/                       Playwright tests + worker-scoped auth fixture (incl. 
 docs/saffron-wealth-monthly-budget-prd.md   Monthly Budget PRD + Implementation Log
 docs/saffron-wealth-net-worth-phase1-plan.md   Net Worth Phase 1 plan (Accounts + page) — shipped
 docs/saffron-wealth-net-worth-phase2-3-plan.md Phase 2b (Monarch import) + Phase 3 (graph) — shipped; v2 records the validated export schemas and 15 build-time rulings
+docs/saffron-wealth-financial-profile-plan.md  Financial Profile (roadmap #1) — shipped
 scripts/fetch-blocklist.mjs   Refreshes lib/auth/blocklist-data.ts
 .githooks/pre-push         Runs lint + typecheck + unit tests before every push
 .github/workflows/ci.yml   GitHub Actions: lint, build, unit, e2e (Playwright)
@@ -487,6 +503,41 @@ captured that drift, the dev DB was baselined onto both migrations with
 status`. Edit `schema.prisma`, run `npm run db:migrate` to author the
 migration, and commit the generated SQL with the schema change.
 
+### Architecture: Financial Profile (`lib/financial-profile*.ts`)
+
+The declared planning inputs. Deliberately **not** columns on `User`: they are
+assumptions that change, and projections computed from last year's need to stay
+explicable.
+
+**Append-only versions.** Each save that changes anything inserts a complete
+`FinancialProfile` row with the next `version` (and fresh income / contribution
+child rows); nothing is updated in place. The current profile is the highest
+version. An unchanged save writes nothing and returns `changed: false`. Saves
+take a per-user `pg_advisory_xact_lock` before reading the latest version, so
+two tabs saving at once produce consecutive versions rather than a unique-
+constraint 500. See `docs/decisions/0013-financial-profile-append-only-versions.md`.
+
+**Age is anchored, not current.** The user types their current age; it's
+stored as `ageAtEffective` alongside `effectiveAt`, and `ageOn(profile, date)`
+derives the age at any instant. Never read `ageAtEffective` as today's age.
+The no-op comparison uses the derived age, so re-saving an untouched form a
+year later is still a no-op. See `docs/decisions/0014-age-anchored-to-effective-date.md`.
+
+**One parser, both sides.** `parseFinancialProfileBody` is pure and runs in the
+client form before sending as well as in the route. It rounds percents and
+amounts with `roundToHundredths` — on the number's decimal text, half away
+from zero — because that's what Postgres does to a scale-2 numeric, and
+`Math.round(x * 100) / 100` disagrees on values like 3.255. Without that, an
+identical re-save would compare unequal to what was stored.
+
+**Contribution targets** reference `Account` and must point at a cash,
+investment, or retirement account the user owns — archived ones included, so a
+version saved before an archive can still be re-saved. The page offers archived
+accounts only when the current version names them.
+
+**Not built yet:** a reader for an *old* version (`getFinancialProfileAsOf`).
+Roadmap #3 is its first consumer.
+
 ### Auth subsystem (`lib/auth/`)
 
 This is the most production-grade part of the codebase. It exists partly as a
@@ -538,7 +589,7 @@ Two test runners, three scopes:
   2. **`lib/budget-utils.test.ts`**, **`proxy.test.ts`** — pure-logic tests
      for the budget engine and the Edge middleware. The proxy test uses a
      hand-rolled `NextRequest` shim.
-  3. **API route integration tests** in `app/api/{profile,accounts,transactions,budgets}/__tests__/` —
+  3. **API route integration tests** in `app/api/{profile,accounts,transactions,budgets,financial-profile}/__tests__/` —
      e.g. `route.test.ts`, `id.test.ts` (or feature-specific names like
      `picture.test.ts`, `change-password.test.ts`). These call the actual
      route handlers with a constructed `NextRequest` against a real local
@@ -569,7 +620,8 @@ Two test runners, three scopes:
 
   Files: `e2e/smoke.spec.ts` (app shell, nav, alerts popover, transaction
   filters, budget editing, transaction persistence across a reload);
-  `e2e/net-worth.spec.ts` (account add/edit/delete); `e2e/auth-middleware.spec.ts`
+  `e2e/net-worth.spec.ts` (account add/edit/delete); `e2e/financial-profile.spec.ts`
+  (save, reload, versioning, unchanged-save no-op); `e2e/auth-middleware.spec.ts`
   (gating — proxy redirect, forged shape-valid cookie rejected by the (app)
   layout); `e2e/theme.spec.ts` (OS default, explicit override, and the
   server-rendered `data-theme` after a reload).
@@ -599,7 +651,7 @@ Coverage notes:
 - Heavy on auth — every primitive has a test file.
 - Budget logic has one big test file (`lib/budget-utils.test.ts`), including
   the `'transfer'`-category-exclusion cases added in Phase 2a.
-- All `/api/{profile,accounts,transactions,budgets}/*` routes have integration
+- All `/api/{profile,accounts,transactions,budgets,financial-profile}/*` routes have integration
   tests against real Postgres.
 - All Budget* and Transaction* components have unit tests, plus
   `SummaryCards`, `MonthNavigator`, `MonthlyReviewWidget`, `AccountRow`,
