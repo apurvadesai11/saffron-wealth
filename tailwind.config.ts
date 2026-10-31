@@ -47,7 +47,17 @@ const config: Config = {
   },
   plugins: [
     plugin(({ addBase }) => {
-      addBase({ ":root": themeVariables("light") });
+      // System is the default: no data-theme attribute, and the OS media query
+      // decides. app/layout.tsx sets data-theme only for an explicit choice.
+      // `color-scheme` makes native controls (date pickers, selects,
+      // scrollbars) follow the theme as well.
+      const light = { ...themeVariables("light"), colorScheme: "light" };
+      const dark = { ...themeVariables("dark"), colorScheme: "dark" };
+      addBase({
+        ":root": light,
+        "@media (prefers-color-scheme: dark)": { ':root:not([data-theme="light"])': dark },
+        ':root[data-theme="dark"]': dark,
+      });
     }),
   ],
 };

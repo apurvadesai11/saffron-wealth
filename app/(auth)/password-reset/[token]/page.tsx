@@ -117,7 +117,7 @@ export default function PasswordResetConfirmPage({ params }: Props) {
         <AuthFormError message={topError} />
         <button
           type="submit"
-          className="w-full bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors disabled:opacity-60"
+          className="w-full bg-accent-solid text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors disabled:opacity-60"
           disabled={submitting}
         >
           {submitting ? "Updating…" : "Update password"}

@@ -213,7 +213,12 @@ describe("AccountRow control contrast", () => {
 
     const token = textTokenClass(control);
     expect(token).not.toBeNull();
-    expect(contrastRatio(tokenHex(token!), tokenHex("surface"))).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    for (const theme of ["light", "dark"] as const) {
+      expect(
+        contrastRatio(tokenHex(token!, theme), tokenHex("surface", theme)),
+        `${token} on surface, ${theme}`,
+      ).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    }
   });
 
   it("reserves at least a 24x24 CSS-pixel hit target", () => {

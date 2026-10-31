@@ -12,7 +12,7 @@
 // tokens share a value — so converting a class to its token changed nothing on
 // screen. Merging shades is a design change and should look like one.
 
-export type ThemeName = "light";
+export type ThemeName = "light" | "dark";
 
 export const THEME_TOKENS = {
   light: {
@@ -43,8 +43,13 @@ export const THEME_TOKENS = {
     "fg-ghost": "#e5e7eb",
     "on-solid": "#ffffff", // text on accent, danger, inverse and avatar fills
 
-    accent: "#2563eb",
+    accent: "#2563eb", // links, chart line, selected text
     "accent-strong": "#1d4ed8",
+    // Button fills. Separate from `accent` because text and fill want
+    // different shades on a dark surface: text has to lighten to stay
+    // readable, a fill has to stay dark enough for white text.
+    "accent-solid": "#2563eb",
+    "accent-solid-hover": "#1d4ed8",
     "accent-muted": "#3b82f6",
     "accent-ring": "#3b82f6",
     "accent-soft": "#eff6ff",
@@ -57,6 +62,7 @@ export const THEME_TOKENS = {
     "danger-line-soft": "#fee2e2",
     "danger-line": "#fecaca",
     "danger-line-strong": "#f87171",
+    "danger-solid": "#ef4444", // the alert-count badge, under white text
 
     success: "#16a34a",
     "success-strong": "#15803d",
@@ -85,6 +91,78 @@ export const THEME_TOKENS = {
     "data-over-deep": "#b91c1c",
 
     scrim: "#000000", // always used with an opacity modifier
+  },
+  // Not an inversion of light. Elevation reverses — shadows barely show on a
+  // dark page, so hierarchy comes from brightness: the page is darkest and each
+  // layer above it is lighter. Text and status hues move up their ramps to stay
+  // readable; fills that carry white text stay dark. The contrast rule each
+  // text token must keep is in theme-tokens.test.ts.
+  dark: {
+    canvas: "#0b0f17",
+    surface: "#131a26",
+    "surface-sunken": "#0f1520",
+    "surface-muted": "#1f2937",
+    "surface-strong": "#2b3647",
+    inverse: "#2b3647",
+
+    "line-faint": "#182131",
+    "line-subtle": "#1f2937",
+    line: "#2b3647",
+    "line-strong": "#3a4658",
+
+    "fg-base": "#e5e7eb",
+    fg: "#f3f4f6",
+    "fg-soft": "#e5e7eb",
+    "fg-secondary": "#d1d5db",
+    "fg-tertiary": "#b4bcc8",
+    "fg-muted": "#9ca3af",
+    "fg-faint": "#6b7280",
+    "fg-disabled": "#4b5563",
+    "fg-ghost": "#374151",
+    "on-solid": "#ffffff",
+
+    accent: "#60a5fa",
+    "accent-strong": "#93c5fd",
+    "accent-solid": "#2563eb",
+    "accent-solid-hover": "#1d4ed8",
+    "accent-muted": "#3b82f6",
+    "accent-ring": "#60a5fa",
+    "accent-soft": "#16213a",
+    "accent-line": "#1e40af",
+
+    danger: "#f87171",
+    "danger-strong": "#fca5a5",
+    "danger-muted": "#ef4444",
+    "danger-soft": "#2a1518",
+    "danger-line-soft": "#3b1d21",
+    "danger-line": "#5c2328",
+    "danger-line-strong": "#b91c1c",
+    "danger-solid": "#ef4444",
+
+    success: "#4ade80",
+    "success-strong": "#86efac",
+    "success-soft": "#10241a",
+    gain: "#34d399",
+
+    warning: "#fbbf24",
+    "warning-strong": "#fcd34d",
+    "warning-muted": "#f59e0b",
+    "warning-soft": "#2a2010",
+    "warning-line-soft": "#3a2c12",
+    "warning-line": "#5c4514",
+    "warning-line-strong": "#b45309",
+
+    caution: "#fb923c",
+    "caution-muted": "#f97316",
+    "caution-soft": "#2b1b10",
+
+    "data-good": "#22c55e",
+    "data-caution": "#facc15",
+    "data-warn": "#fb923c",
+    "data-over": "#ef4444",
+    "data-over-deep": "#b91c1c",
+
+    scrim: "#000000",
   },
 } as const satisfies Record<ThemeName, Record<string, string>>;
 

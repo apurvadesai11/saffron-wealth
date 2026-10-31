@@ -351,7 +351,7 @@ export default function MonarchImportModal({ onClose }: Props) {
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
+                  className="flex-1 bg-accent-solid text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
                 >
                   Confirm import
                 </button>
@@ -360,7 +360,7 @@ export default function MonarchImportModal({ onClose }: Props) {
             {step === "success" && (
               <button
                 onClick={onClose}
-                className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
+                className="flex-1 bg-accent-solid text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
               >
                 Done
               </button>

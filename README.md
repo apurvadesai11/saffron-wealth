@@ -79,9 +79,9 @@ Money is stored as `Decimal(14,2)` in Postgres and converted to a JS `number` at
 
 ```
 app/
-  layout.tsx                 Root layout (fonts, metadata, global styles)
+  layout.tsx                 Root layout (fonts, metadata, global styles, data-theme from the sw_theme cookie)
   error.tsx                  Error boundary
-  globals.css                Tailwind + theme variables (light mode only)
+  globals.css                Tailwind layers, body and form-field base styles
   (app)/                     Auth-gated route group
     layout.tsx               DB-backed session gate, AppProvider, sidebar/header chrome
     page.tsx                 Monthly Review (summary cards + tabbed budget/cashflow)

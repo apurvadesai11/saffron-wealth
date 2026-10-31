@@ -162,7 +162,7 @@ export default function NetWorthClient({ initialAccounts, initialArchivedAccount
           </button>
           <button
             onClick={() => setEditingAccount("new")}
-            className="bg-accent text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-strong transition-colors"
+            className="bg-accent-solid text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
           >
             + Add Account
           </button>

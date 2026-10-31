@@ -106,7 +106,12 @@ describe("TransactionList delete control accessibility", () => {
 
     const token = textTokenClass(control);
     expect(token).not.toBeNull();
-    expect(contrastRatio(tokenHex(token!), tokenHex("surface"))).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    for (const theme of ["light", "dark"] as const) {
+      expect(
+        contrastRatio(tokenHex(token!, theme), tokenHex("surface", theme)),
+        `${token} on surface, ${theme}`,
+      ).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    }
     expect(control.className).toMatch(/min-h-6/);
     expect(control.className).toMatch(/min-w-6/);
   });

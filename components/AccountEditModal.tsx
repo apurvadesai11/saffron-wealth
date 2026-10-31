@@ -203,7 +203,7 @@ export default function AccountEditModal({ account, onSave, onClose }: Props) {
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 bg-accent text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-strong transition-colors"
+            className="flex-1 bg-accent-solid text-on-solid rounded-lg py-2.5 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
           >
             {isEditing ? "Save Changes" : "Add Account"}
           </button>

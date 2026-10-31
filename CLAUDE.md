@@ -170,7 +170,8 @@ existing house style in `TransactionForm` and `BudgetEditModal`.
 ```
 app/
   layout.tsx               Root layout — fonts, metadata. No AppProvider here — see below.
-  globals.css              Tailwind + theme vars (light mode only)
+  layout.tsx               Root layout — fonts, metadata, <html data-theme> from the sw_theme cookie
+  globals.css              Tailwind layers + body/form-field base styles (colours come from tokens)
   error.tsx                Next.js error boundary
   (app)/                   Auth-gated route group
     layout.tsx             getSession() gate + fetches categories/transactions/budgets and
@@ -212,8 +213,11 @@ components/
   TransactionForm.tsx, TransactionList.tsx, TransactionFilters.tsx
   NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
   AccountRow.tsx, AccountEditModal.tsx
+  ThemeSelector.tsx                   Light / System / Dark control on the profile page
   *.test.tsx                          RTL unit tests colocated with each component
   __tests__/test-utils.tsx            renderWithApp + category fixtures
+  __tests__/contrast.ts               Contrast arithmetic, resolving token classes via lib/theme-tokens.ts
+  __tests__/no-raw-colors.test.ts     Backstop: no raw hues, arbitrary colours, or misspelled tokens
   auth/
     AuthCard.tsx, AuthFormError.tsx, AvatarFallback.tsx,
     GoogleSignInButton.tsx, PasswordStrengthHint.tsx, ProfilePictureUploader.tsx
@@ -232,6 +236,8 @@ lib/
   db-errors.ts             InvalidReferenceError — cross-user FK reference caught by query layers
   app-context.tsx          AppProvider — hydrated from Postgres by app/(app)/layout.tsx (see below)
   mock-data.ts             Test-fixture data only (renderWithApp, E2E fixture) — not read in production
+  theme-tokens.ts          Colour tokens for light and dark; tailwind.config.ts builds the CSS variables from it
+  theme.ts                 sw_theme cookie: parse/serialize, preference → data-theme
   use-alert-state.ts       Derives currently-active alerts (used by sidebar bell + widget)
   nav-config.ts            Sidebar nav item registry (icons + labels + routes)
   prisma.ts                PrismaClient singleton (avoids dev hot-reload leaks)
@@ -565,7 +571,16 @@ Two test runners, three scopes:
   filters, budget editing, transaction persistence across a reload);
   `e2e/net-worth.spec.ts` (account add/edit/delete); `e2e/auth-middleware.spec.ts`
   (gating — proxy redirect, forged shape-valid cookie rejected by the (app)
-  layout). `e2e/fixtures.ts`'s worker-scoped user is seeded with real Postgres
+  layout); `e2e/theme.spec.ts` (OS default, explicit override, and the
+  server-rendered `data-theme` after a reload).
+
+  `e2e/visual.spec.ts` is different: full-page screenshots of every screen in
+  both themes, compared against **local, uncommitted** baselines (font
+  rendering differs between macOS and CI Linux). It's skipped unless `VISUAL`
+  is set. Use it as a gate for changes meant to be visually neutral: on the base
+  branch run `npm run test:visual -- --update-snapshots`, then
+  `npm run test:visual` on yours. It compares with `threshold: 0`, because
+  Playwright's default per-pixel tolerance passed a grey-vs-navy field. `e2e/fixtures.ts`'s worker-scoped user is seeded with real Postgres
   rows built from `MOCK_CATEGORIES`/`MOCK_TRANSACTIONS`/`MOCK_BUDGETS` (Phase
   2a made financial data real, so `smoke.spec.ts`'s assertions — a Netflix
   transaction, a budgeted Groceries category with enough history for "Use
@@ -644,8 +659,20 @@ Testing gotchas (learned the hard way — repeat at your peril):
   hashes go in the database (sessions, reset tokens). The CSRF cookie is the
   one exception — it's the cookie half of a double-submit pattern, so the
   plaintext is intentionally readable by client JS.
-- **Light mode only.** The `globals.css` dark-mode block was deliberately
-  removed (PRD Implementation Log → Cleanup Pass).
+- **Colours go through theme tokens.** Write `text-fg-muted` / `bg-surface` /
+  `bg-accent-solid`, never `text-gray-500` / `bg-white` / `bg-blue-600`.
+  `tailwind.config.ts` *replaces* Tailwind's palette with the tokens in
+  `lib/theme-tokens.ts`, so a raw shade produces no CSS, and
+  `components/__tests__/no-raw-colors.test.ts` fails on one (that's the loud
+  half, since an unknown class otherwise just renders unstyled). Need a colour
+  that isn't there? Add a token with a value for **both** themes. Text and
+  button-fill tokens are deliberately separate (`accent` vs `accent-solid`). The
+  only raw hues left are the categorical palette, because `Category.color`
+  stores Tailwind class names in Postgres. See
+  `docs/decisions/0012-theme-tokens-and-cookie-preference.md`.
+- **Theme preference is the `sw_theme` cookie** (`light`/`dark`/`system`),
+  read in `app/layout.tsx` to set `<html data-theme>` before first paint. It's
+  a display setting: not on `User`, not HttpOnly, no CSRF.
 - **Two route groups: `(app)` and `(auth)`.** Both render under the same root
   layout, but `(app)` has an additional layout that runs `getSession()` and
   draws the Sidebar + TopHeader chrome.
@@ -843,6 +870,7 @@ npm test                   Vitest unit tests
 npm run test:watch         Vitest in watch mode
 npm run test:e2e           Playwright E2E (boots dev server on :3100)
 npm run test:e2e:ui        Playwright in UI mode
+npm run test:visual        Screenshot gate, both themes, vs local baselines (see Testing)
 npm run db:generate        prisma generate
 npm run db:deploy          prisma migrate deploy  (setup / CI / deploy path)
 npm run db:status          prisma migrate status  (drift check)

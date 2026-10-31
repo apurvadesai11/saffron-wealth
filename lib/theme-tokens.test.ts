@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import defaultColors from "tailwindcss/colors";
-import { CATEGORICAL_PALETTE, THEME_TOKENS, TOKEN_NAMES, hexToChannels, tokenVar } from "./theme-tokens";
+import { contrastRatio } from "@/components/__tests__/contrast";
+import { CATEGORICAL_PALETTE, THEME_TOKENS, TOKEN_NAMES, hexToChannels, tokenVar, type ThemeToken } from "./theme-tokens";
 
 // The shade each light token was converted from. The screenshot gate
 // (e2e/visual.spec.ts) proves the conversion for the states it captures; this
@@ -12,10 +13,10 @@ const LIGHT_SOURCE_SHADE: Record<string, string> = {
   fg: "gray-900", "fg-soft": "gray-800", "fg-secondary": "gray-700", "fg-tertiary": "gray-600",
   "fg-muted": "gray-500", "fg-faint": "gray-400", "fg-disabled": "gray-300", "fg-ghost": "gray-200",
   "on-solid": "white",
-  accent: "blue-600", "accent-strong": "blue-700", "accent-muted": "blue-500", "accent-ring": "blue-500",
+  accent: "blue-600", "accent-strong": "blue-700", "accent-solid": "blue-600", "accent-solid-hover": "blue-700", "accent-muted": "blue-500", "accent-ring": "blue-500",
   "accent-soft": "blue-50", "accent-line": "blue-300",
   danger: "red-600", "danger-strong": "red-700", "danger-muted": "red-500", "danger-soft": "red-50",
-  "danger-line-soft": "red-100", "danger-line": "red-200", "danger-line-strong": "red-400",
+  "danger-line-soft": "red-100", "danger-line": "red-200", "danger-line-strong": "red-400", "danger-solid": "red-500",
   success: "green-600", "success-strong": "green-700", "success-soft": "green-50", gain: "emerald-600",
   warning: "amber-600", "warning-strong": "amber-700", "warning-muted": "amber-500", "warning-soft": "amber-50",
   "warning-line-soft": "amber-100", "warning-line": "amber-200", "warning-line-strong": "amber-400",
@@ -45,6 +46,49 @@ describe("light tokens", () => {
 
   it("fg-base is the body colour globals.css used before tokens", () => {
     expect(THEME_TOKENS.light["fg-base"]).toBe("#171717");
+  });
+});
+
+describe("dark tokens", () => {
+  const light = THEME_TOKENS.light as Record<string, string>;
+  const dark = THEME_TOKENS.dark as Record<string, string>;
+  const onSurface = (theme: Record<string, string>, token: ThemeToken) =>
+    contrastRatio(theme[token], theme.surface);
+
+  it("defines exactly the same tokens as light", () => {
+    expect(Object.keys(dark).sort()).toEqual(Object.keys(light).sort());
+  });
+
+  it("puts each layer above the page lighter than the one below it", () => {
+    // Shadows barely register on a dark page, so elevation is brightness.
+    const luminanceOrder: ThemeToken[] = ["canvas", "surface", "surface-muted", "surface-strong"];
+    const ratios = luminanceOrder.map((t) => contrastRatio(dark[t], "#000000"));
+    expect(ratios).toEqual([...ratios].sort((a, b) => a - b));
+    expect(new Set(ratios).size).toBe(ratios.length);
+  });
+
+  // Each text token keeps at least the contrast it has in light mode, capped at
+  // 7:1 — near-black on white is ~18:1, and no dark surface can match that
+  // without being black.
+  const TEXT_TOKENS: ThemeToken[] = [
+    "fg-base", "fg", "fg-soft", "fg-secondary", "fg-tertiary", "fg-muted", "fg-faint", "fg-disabled",
+    "accent", "accent-strong", "accent-muted",
+    "danger", "danger-strong", "danger-muted",
+    "success", "success-strong", "gain",
+    "warning", "warning-strong", "warning-muted",
+    "caution", "caution-muted",
+  ];
+  it.each(TEXT_TOKENS)("%s stays as readable on a dark surface as it is on a light one", (token) => {
+    const target = Math.min(onSurface(light, token), 7);
+    expect(onSurface(dark, token)).toBeGreaterThanOrEqual(target);
+  });
+
+  // Fills that carry white text keep the contrast they have in light mode.
+  const SOLID_FILLS: ThemeToken[] = ["accent-solid", "accent-solid-hover", "danger-solid", "inverse"];
+  it.each(SOLID_FILLS)("white text on %s is no worse than in light mode", (token) => {
+    expect(contrastRatio(dark["on-solid"], dark[token])).toBeGreaterThanOrEqual(
+      Math.min(contrastRatio(light["on-solid"], light[token]), 7),
+    );
   });
 });
 

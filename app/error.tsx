@@ -19,7 +19,7 @@ export default function Error({
         </p>
         <button
           onClick={reset}
-          className="bg-accent text-on-solid rounded-lg py-2 px-6 text-sm font-medium hover:bg-accent-strong transition-colors"
+          className="bg-accent-solid text-on-solid rounded-lg py-2 px-6 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
         >
           Try again
         </button>
