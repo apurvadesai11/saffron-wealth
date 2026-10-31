@@ -41,7 +41,8 @@ export default function MonthlyReviewWidget() {
 
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear]   = useState(now.getFullYear());
-  const [widgetTab, setWidgetTab] = useState<WidgetTab>("budget");
+  // Cashflow is listed first, so it's the tab the widget opens on.
+  const [widgetTab, setWidgetTab] = useState<WidgetTab>("cashflow");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const asOf = useMemo(() => getAsOf(month, year), [month, year]);
@@ -176,10 +177,11 @@ export default function MonthlyReviewWidget() {
         {/* Header: tabs + shared month navigator */}
         <div className="flex items-center justify-between px-5 pt-3 pb-3">
           <div className="flex gap-1">
-            {(["budget", "cashflow"] as WidgetTab[]).map(tab => (
+            {(["cashflow", "budget"] as WidgetTab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setWidgetTab(tab)}
+                aria-pressed={widgetTab === tab}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg capitalize transition-colors ${
                   widgetTab === tab
                     ? "bg-surface-muted text-fg"

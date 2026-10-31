@@ -12,6 +12,11 @@ interface Props {
 }
 
 export default function MonthNavigator({ month, year, onChange }: Props) {
+  // Read on each render rather than once, so a page left open past midnight
+  // at month's end still knows which month "today" is.
+  const now = new Date();
+  const showingToday = month === now.getMonth() && year === now.getFullYear();
+
   function prev() {
     if (month === 0) onChange(11, year - 1);
     else onChange(month - 1, year);
@@ -36,6 +41,13 @@ export default function MonthNavigator({ month, year, onChange }: Props) {
         className="text-fg-faint hover:text-fg-secondary transition-colors text-xl leading-none px-1"
         aria-label="Next month"
       >›</button>
+      <button
+        onClick={() => onChange(now.getMonth(), now.getFullYear())}
+        disabled={showingToday}
+        className="ml-1 px-2 py-1 rounded-lg border border-line text-xs font-medium text-fg-secondary hover:bg-surface-sunken transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+      >
+        Today
+      </button>
     </div>
   );
 }

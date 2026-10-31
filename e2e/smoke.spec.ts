@@ -182,6 +182,8 @@ test.describe("Transactions: add + filter", () => {
 test.describe("Setting a monthly budget", () => {
   test("updates an existing category budget via the BudgetEditModal", async ({ page }) => {
     await page.goto("/monthly-review");
+    // The budget rows live on the Budget tab; Cashflow is the default.
+    await page.getByRole("button", { name: /^budget$/i }).click();
 
     // Open the edit modal for Groceries (a budgeted category in mock data — $400)
     await page.getByRole("button", { name: /Groceries/ }).first().click();
@@ -202,6 +204,8 @@ test.describe("Setting a monthly budget", () => {
 
   test("Use this → applies the historical average suggestion", async ({ page }) => {
     await page.goto("/monthly-review");
+    // The budget rows live on the Budget tab; Cashflow is the default.
+    await page.getByRole("button", { name: /^budget$/i }).click();
     await page.getByRole("button", { name: /Groceries/ }).first().click();
 
     const modal = page.getByRole("dialog");

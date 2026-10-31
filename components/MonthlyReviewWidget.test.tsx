@@ -38,11 +38,31 @@ const sampleTx = (overrides: Partial<Transaction>): Transaction => ({
 });
 
 describe("MonthlyReviewWidget", () => {
-  it("defaults to the Budget tab and switches to Cashflow on click", async () => {
+  it("lists Cashflow before Budget, opens on Cashflow, and switches to Budget on click", async () => {
     renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions: [], budgets: [] });
-    expect(screen.getByRole("button", { name: /^budget$/i })).toHaveClass(/bg-surface-muted/);
-    await userEvent.click(screen.getByRole("button", { name: /^cashflow$/i }));
-    expect(screen.getByRole("button", { name: /^cashflow$/i })).toHaveClass(/bg-surface-muted/);
+    const cashflow = screen.getByRole("button", { name: /^cashflow$/i });
+    const budget = screen.getByRole("button", { name: /^budget$/i });
+
+    expect(cashflow.compareDocumentPosition(budget) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cashflow).toHaveAttribute("aria-pressed", "true");
+    expect(budget).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(budget);
+
+    expect(budget).toHaveAttribute("aria-pressed", "true");
+    expect(cashflow).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("returns to the current month from Today", async () => {
+    renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions: [], budgets: [] });
+
+    await userEvent.click(screen.getByRole("button", { name: /previous month/i }));
+    await userEvent.click(screen.getByRole("button", { name: /previous month/i }));
+    expect(screen.getByText("March 2026")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    expect(screen.getByText("May 2026")).toBeInTheDocument();
   });
 
   it("Cashflow tab shows the no-data state when the selected month has no spend", async () => {
@@ -79,9 +99,10 @@ describe("MonthlyReviewWidget", () => {
     ];
     renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions, budgets: [] });
 
-    expect(screen.getByText("$1,000.00")).toBeInTheDocument();
-    expect(screen.getByText("$2,500.00")).toBeInTheDocument();
-    expect(screen.getByText("-$1,500.00")).toBeInTheDocument();
+    // Read from the cards: the Cashflow tab below lists Rent's $2,500.00 too.
+    expect(screen.getByText("Earned").nextElementSibling).toHaveTextContent(/^\$1,000\.00$/);
+    expect(screen.getByText("Spent").nextElementSibling).toHaveTextContent(/^\$2,500\.00$/);
+    expect(screen.getByText("Net").nextElementSibling).toHaveTextContent(/^-\$1,500\.00$/);
   });
 
   it("'Auto-Set All' is shown only when categories are missing budgets, and clicking it auto-sets categories with history", async () => {
@@ -99,6 +120,7 @@ describe("MonthlyReviewWidget", () => {
       transactions,
       budgets,
     });
+    await userEvent.click(screen.getByRole("button", { name: /^budget$/i }));
 
     const autoSet = screen.getByRole("button", { name: /Auto-Set All/i });
     expect(autoSet).toBeInTheDocument();
@@ -120,6 +142,7 @@ describe("MonthlyReviewWidget", () => {
       transactions: [],
       budgets,
     });
+    await userEvent.click(screen.getByRole("button", { name: /^budget$/i }));
     await userEvent.click(screen.getByRole("button", { name: /Groceries/ }));
     // BudgetEditModal renders with role="dialog".
     expect(screen.getByRole("dialog")).toBeInTheDocument();
