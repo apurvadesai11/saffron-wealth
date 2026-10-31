@@ -2,6 +2,7 @@
 
 import { useApp } from "@/lib/app-context";
 import { validateDate } from "@/lib/transaction-validation";
+import CategoryMultiSelect from "./CategoryMultiSelect";
 
 const inputClass =
   "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
@@ -89,16 +90,6 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
     value.amountMin === "" &&
     value.amountMax === "";
 
-  function toggleCategory(id: string) {
-    const selected = value.categoryIds.includes(id);
-    onChange({
-      ...value,
-      categoryIds: selected
-        ? value.categoryIds.filter(c => c !== id)
-        : [...value.categoryIds, id],
-    });
-  }
-
   return (
     <div className="bg-surface rounded-xl shadow-sm border border-line-subtle px-6 py-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -113,8 +104,8 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
         )}
       </div>
 
-      {/* Row 1: search + type */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Row 1: search + type + categories */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="sm:col-span-2">
           <label htmlFor="tx-filter-search" className="block text-xs font-medium text-fg-muted mb-1">Search</label>
           <input
@@ -138,6 +129,15 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
             <option value="income">Income</option>
             <option value="expense">Expense</option>
           </select>
+        </div>
+        <div>
+          <label htmlFor="tx-filter-categories" className="block text-xs font-medium text-fg-muted mb-1">Categories</label>
+          <CategoryMultiSelect
+            id="tx-filter-categories"
+            categories={categories}
+            selectedIds={value.categoryIds}
+            onChange={categoryIds => onChange({ ...value, categoryIds })}
+          />
         </div>
       </div>
 
@@ -188,35 +188,6 @@ export default function TransactionFilters({ value, onChange, onReset }: Props) 
             onChange={e => onChange({ ...value, amountMax: e.target.value })}
             className={inputClass}
           />
-        </div>
-      </div>
-
-      {/* Categories — colored chips, toggle multi-select */}
-      <div>
-        <label className="block text-xs font-medium text-fg-muted mb-2">
-          Categories {value.categoryIds.length > 0 && (
-            <span className="text-fg-faint">({value.categoryIds.length} selected)</span>
-          )}
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {categories.map(cat => {
-            const selected = value.categoryIds.includes(cat.id);
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => toggleCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                  selected
-                    ? "bg-accent-soft border-accent-line text-accent-strong"
-                    : "bg-surface border-line text-fg-tertiary hover:border-line-strong"
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${cat.color}`} />
-                {cat.name}
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>

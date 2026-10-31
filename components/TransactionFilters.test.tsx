@@ -58,19 +58,18 @@ describe("TransactionFilters", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ type: "income" }));
   });
 
-  it("clicking an unselected category chip adds its id to categoryIds", async () => {
+  it("checking a category in the dropdown adds its id to categoryIds", async () => {
     const onChange = vi.fn();
     renderWithApp(
       <TransactionFilters value={EMPTY_FILTERS} onChange={onChange} onReset={() => {}} />,
       { categories: CATS },
     );
-    await userEvent.click(screen.getByRole("button", { name: /Groceries/i }));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryIds: [CAT_GROCERIES.id] }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /^Categories:/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Groceries" }));
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, categoryIds: [CAT_GROCERIES.id] });
   });
 
-  it("clicking a selected category chip removes its id", async () => {
+  it("unchecking a selected category removes its id", async () => {
     const onChange = vi.fn();
     renderWithApp(
       <TransactionFilters
@@ -80,13 +79,12 @@ describe("TransactionFilters", () => {
       />,
       { categories: CATS },
     );
-    await userEvent.click(screen.getByRole("button", { name: /Groceries/i }));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryIds: [] }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /^Categories:/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Groceries" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: [] }));
   });
 
-  it("renders '(N selected)' when categories are selected", () => {
+  it("summarizes the selected categories on the dropdown's button", () => {
     renderWithApp(
       <TransactionFilters
         value={{ ...EMPTY_FILTERS, categoryIds: [CAT_GROCERIES.id, CAT_RENT.id] }}
@@ -95,7 +93,7 @@ describe("TransactionFilters", () => {
       />,
       { categories: CATS },
     );
-    expect(screen.getByText(/\(2 selected\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Categories:/ })).toHaveTextContent("2 categories");
   });
 
   it("date and amount inputs each propagate updates via onChange", async () => {

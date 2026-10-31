@@ -159,9 +159,12 @@ test.describe("Transactions: add + filter", () => {
     await expect(page.getByText("Whole Foods")).toHaveCount(0);
   });
 
-  test("filters by category chip (Groceries)", async ({ page }) => {
+  test("filters by a category picked from the searchable dropdown (Groceries)", async ({ page }) => {
     await page.goto("/transactions");
-    await page.getByRole("button", { name: /^Groceries$/ }).click();
+    await page.getByRole("button", { name: /^Categories:/ }).click();
+    await page.getByRole("searchbox", { name: "Search categories" }).fill("groc");
+    await page.getByRole("checkbox", { name: "Groceries" }).check();
+    await page.keyboard.press("Escape");
 
     await expect(page.getByText("Whole Foods").first()).toBeVisible();
     await expect(page.getByText("Rent")).toHaveCount(0);
@@ -237,6 +240,7 @@ test.describe("Monthly Review → Transactions", () => {
     await expect(page).toHaveURL(/\/transactions\?/);
     await expect(page.getByLabel("From", { exact: true })).toHaveValue("2026-02-01");
     await expect(page.getByLabel("To", { exact: true })).toHaveValue("2026-02-28");
+    await expect(page.getByRole("button", { name: /^Categories:/ })).toHaveText(/Groceries/);
     await expect(page.getByText("Whole Foods")).toBeVisible();
     await expect(page.getByText("Trader Joe's")).toBeVisible();
     // Every row on the page is a February grocery.
