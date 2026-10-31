@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import TransactionFilters, { EMPTY_FILTERS } from "./TransactionFilters";
+import TransactionFilters, {
+  EMPTY_FILTERS,
+  filtersFromSearchParams,
+  filtersToSearchParams,
+} from "./TransactionFilters";
 import {
   renderWithApp,
   CAT_GROCERIES,
@@ -102,5 +106,57 @@ describe("TransactionFilters", () => {
     );
     await userEvent.type(screen.getByLabelText("Min ($)"), "5");
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ amountMin: "5" }));
+  });
+});
+
+// The URL form of a filter, shared by the transactions API query and by links
+// into the page (Monthly Review's cashflow rows).
+describe("filter search params", () => {
+  it("writes only the filters that are set, under the API's names", () => {
+    const sp = filtersToSearchParams({
+      ...EMPTY_FILTERS,
+      categoryIds: ["cat-rent", "cat-groc"],
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+    });
+
+    expect(sp.toString()).toBe("categoryIds=cat-rent%2Ccat-groc&from=2026-05-01&to=2026-05-31");
+  });
+
+  it("leaves the type out for All", () => {
+    expect(filtersToSearchParams(EMPTY_FILTERS).toString()).toBe("");
+  });
+
+  it("reads back every filter it writes", () => {
+    const filters = {
+      search: "coffee",
+      type: "expense" as const,
+      categoryIds: ["cat-groc"],
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      amountMin: "5",
+      amountMax: "1200.50",
+    };
+
+    expect(filtersFromSearchParams(filtersToSearchParams(filters))).toEqual(filters);
+  });
+
+  it("starts from no filters when the URL has none", () => {
+    expect(filtersFromSearchParams(new URLSearchParams())).toEqual(EMPTY_FILTERS);
+  });
+
+  // A hand-edited or stale link shouldn't put a value in a field that the
+  // API would then reject, showing an error instead of the list.
+  it("drops values the API would reject", () => {
+    const sp = new URLSearchParams({
+      type: "bogus",
+      from: "2026-02-30",
+      to: "May",
+      amountMin: "-5",
+      amountMax: "lots",
+      categoryIds: ",cat-groc,,",
+    });
+
+    expect(filtersFromSearchParams(sp)).toEqual({ ...EMPTY_FILTERS, categoryIds: ["cat-groc"] });
   });
 });

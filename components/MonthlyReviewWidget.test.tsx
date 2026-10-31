@@ -92,6 +92,32 @@ describe("MonthlyReviewWidget", () => {
     expect(items[1]).toHaveTextContent(/Groceries/);
   });
 
+  it("links each cashflow category to that category's transactions for the month", () => {
+    const transactions: Transaction[] = [
+      sampleTx({ amount: 600, categoryId: CAT_RENT.id, description: "Rent" }),
+    ];
+    renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions, budgets: [] });
+
+    const link = screen.getByRole("link", { name: /Rent/ });
+
+    expect(link).toHaveAttribute("href", `/transactions?categoryIds=${CAT_RENT.id}&from=2026-05-01&to=2026-05-31`);
+  });
+
+  it("ends a February link on the month's real last day", async () => {
+    const transactions: Transaction[] = [
+      sampleTx({ amount: 600, categoryId: CAT_RENT.id, date: "2026-02-10" }),
+    ];
+    renderWithApp(<MonthlyReviewWidget />, { categories: CATS, transactions, budgets: [] });
+    for (let i = 0; i < 3; i++) {
+      await userEvent.click(screen.getByRole("button", { name: /previous month/i }));
+    }
+
+    expect(screen.getByRole("link", { name: /Rent/ })).toHaveAttribute(
+      "href",
+      `/transactions?categoryIds=${CAT_RENT.id}&from=2026-02-01&to=2026-02-28`,
+    );
+  });
+
   it("shows Earned, Spent, and a negative Net with thousands separators and the sign outside the $", () => {
     const transactions: Transaction[] = [
       sampleTx({ amount: 1000, categoryId: CAT_SALARY.id, type: "income", description: "Pay" }),

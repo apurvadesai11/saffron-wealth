@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useApp } from "@/lib/app-context";
 import TransactionForm from "@/components/TransactionForm";
 import TransactionList from "@/components/TransactionList";
 import TransactionFilters, {
   EMPTY_FILTERS,
   TransactionFilterState,
+  filtersFromSearchParams,
+  filtersToSearchParams,
 } from "@/components/TransactionFilters";
 import MonarchImportModal from "@/components/MonarchImportModal";
 import TransactionEditModal from "@/components/TransactionEditModal";
@@ -17,18 +20,10 @@ const PAGE_SIZE = 100;
 // that the list still feels live while typing.
 const FILTER_DEBOUNCE_MS = 250;
 
-// Filter state to query string. Empty values are omitted rather than sent as
-// blanks, so the URL reflects only what's actually filtering, and `type:
-// "all"` is the UI's own no-filter sentinel that the parser also understands.
+// Filter state to the API's query string; see filtersToSearchParams.
 function toQuery(filters: TransactionFilterState, cursor: string | null): string {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-  if (filters.search.trim()) params.set("search", filters.search.trim());
-  if (filters.type !== "all") params.set("type", filters.type);
-  if (filters.categoryIds.length) params.set("categoryIds", filters.categoryIds.join(","));
-  if (filters.dateFrom) params.set("from", filters.dateFrom);
-  if (filters.dateTo) params.set("to", filters.dateTo);
-  if (filters.amountMin) params.set("amountMin", filters.amountMin);
-  if (filters.amountMax) params.set("amountMax", filters.amountMax);
+  const params = filtersToSearchParams(filters);
+  params.set("limit", String(PAGE_SIZE));
   if (cursor) params.set("cursor", cursor);
   return params.toString();
 }
@@ -42,7 +37,13 @@ export default function TransactionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
-  const [filters, setFilters] = useState<TransactionFilterState>(EMPTY_FILTERS);
+  // A link into this page (Monthly Review's cashflow rows) carries its filter
+  // in the URL. Read once: after that the controls own the filter, and the
+  // URL isn't kept in step with them.
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<TransactionFilterState>(() =>
+    filtersFromSearchParams(new URLSearchParams(searchParams.toString())),
+  );
 
   const [rows, setRows] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);

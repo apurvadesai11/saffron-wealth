@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useApp } from "@/lib/app-context";
 import { formatUsd } from "@/lib/money";
 import { useAlertState, getAsOf } from "@/lib/use-alert-state";
@@ -14,6 +15,7 @@ import {
 import BudgetCategoryList from "./BudgetCategoryList";
 import BudgetEditModal from "./BudgetEditModal";
 import MonthNavigator from "./MonthNavigator";
+import { EMPTY_FILTERS, filtersToSearchParams } from "./TransactionFilters";
 
 type WidgetTab = "cashflow" | "budget";
 
@@ -162,6 +164,19 @@ export default function MonthlyReviewWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awaitingOlderData, monthStart]);
 
+  // Last calendar day of the selected month, built in local time like the
+  // rest of the period math; day 0 of next month is this month's last.
+  const monthEnd = `${monthPrefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
+  function transactionsHref(categoryId: string) {
+    const params = filtersToSearchParams({
+      ...EMPTY_FILTERS,
+      categoryIds: [categoryId],
+      dateFrom: monthStart,
+      dateTo: monthEnd,
+    });
+    return `/transactions?${params.toString()}`;
+  }
+
   const maxCategory = categoryTotals[0]?.amount ?? 0;
   const noData      = getNoDataState(month, year);
 
@@ -299,16 +314,21 @@ export default function MonthlyReviewWidget() {
                 <ul className="space-y-3">
                   {categoryTotals.map(({ categoryId, name, color, amount }) => (
                     <li key={categoryId}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-fg-secondary">{name}</span>
-                        <span className="text-sm font-semibold text-fg-soft">{formatUsd(amount)}</span>
-                      </div>
-                      <div className="w-full bg-surface-muted rounded-full h-1.5">
-                        <div
-                          className={`${color} h-1.5 rounded-full transition-all`}
-                          style={{ width: `${(amount / maxCategory) * 100}%` }}
-                        />
-                      </div>
+                      <Link
+                        href={transactionsHref(categoryId)}
+                        className="block rounded-lg px-1 -mx-1 py-1 -my-1 hover:bg-surface-sunken transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-fg-secondary">{name}</span>
+                          <span className="text-sm font-semibold text-fg-soft">{formatUsd(amount)}</span>
+                        </div>
+                        <div className="w-full bg-surface-muted rounded-full h-1.5">
+                          <div
+                            className={`${color} h-1.5 rounded-full transition-all`}
+                            style={{ width: `${(amount / maxCategory) * 100}%` }}
+                          />
+                        </div>
+                      </Link>
                     </li>
                   ))}
                 </ul>

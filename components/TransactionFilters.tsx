@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/app-context";
+import { validateDate } from "@/lib/transaction-validation";
 
 const inputClass =
   "w-full border border-line rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent-ring";
@@ -26,6 +27,49 @@ export const EMPTY_FILTERS: TransactionFilterState = {
   amountMin: "",
   amountMax: "",
 };
+
+// The URL form of a filter, under the names GET /api/transactions reads. The
+// page's API query is built from it, and so are links into the page (Monthly
+// Review's cashflow rows), which the page reads back on load. Empty values
+// are left out, and "all" is the no-type-filter sentinel.
+export function filtersToSearchParams(f: TransactionFilterState): URLSearchParams {
+  const params = new URLSearchParams();
+  if (f.search.trim()) params.set("search", f.search.trim());
+  if (f.type !== "all") params.set("type", f.type);
+  if (f.categoryIds.length) params.set("categoryIds", f.categoryIds.join(","));
+  if (f.dateFrom) params.set("from", f.dateFrom);
+  if (f.dateTo) params.set("to", f.dateTo);
+  if (f.amountMin) params.set("amountMin", f.amountMin);
+  if (f.amountMax) params.set("amountMax", f.amountMax);
+  return params;
+}
+
+// A value the API would reject is dropped rather than carried into a field: a
+// stale or hand-edited link should show the list, not a filter error.
+export function filtersFromSearchParams(sp: URLSearchParams): TransactionFilterState {
+  const date = (name: string) => {
+    const raw = sp.get(name) ?? "";
+    return raw && validateDate(raw) === null ? raw : "";
+  };
+  const amount = (name: string) => {
+    const raw = sp.get(name) ?? "";
+    const n = Number(raw);
+    return raw.trim() && Number.isFinite(n) && n >= 0 ? raw : "";
+  };
+  const type = sp.get("type");
+  return {
+    search: sp.get("search") ?? "",
+    type: type === "income" || type === "expense" ? type : "all",
+    categoryIds: (sp.get("categoryIds") ?? "")
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0),
+    dateFrom: date("from"),
+    dateTo: date("to"),
+    amountMin: amount("amountMin"),
+    amountMax: amount("amountMax"),
+  };
+}
 
 interface Props {
   value: TransactionFilterState;

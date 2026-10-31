@@ -222,3 +222,26 @@ test.describe("Setting a monthly budget", () => {
     await expect(modal).not.toBeVisible();
   });
 });
+
+test.describe("Monthly Review → Transactions", () => {
+  test("a cashflow category opens the Transactions page filtered to it and the month", async ({ page }) => {
+    await page.goto("/monthly-review");
+    // The seeded spending is in February 2026.
+    const prev = page.getByRole("button", { name: "Previous month" });
+    while (!(await page.getByText("February 2026").isVisible())) {
+      await prev.click();
+    }
+
+    await page.getByRole("link", { name: /Groceries/ }).click();
+
+    await expect(page).toHaveURL(/\/transactions\?/);
+    await expect(page.getByLabel("From", { exact: true })).toHaveValue("2026-02-01");
+    await expect(page.getByLabel("To", { exact: true })).toHaveValue("2026-02-28");
+    await expect(page.getByText("Whole Foods")).toBeVisible();
+    await expect(page.getByText("Trader Joe's")).toBeVisible();
+    // Every row on the page is a February grocery.
+    const sublines = await page.locator("ul li button p.text-xs").allInnerTexts();
+    expect(sublines.length).toBeGreaterThan(0);
+    for (const line of sublines) expect(line).toMatch(/^Groceries · 2026-02-/);
+  });
+});
