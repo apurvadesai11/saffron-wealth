@@ -6,6 +6,7 @@ import {
   merchantKey,
   isRecurringCharge,
   computeSpendingBaseline,
+  purchaseLifeYears,
 } from "./fire-spending";
 import type { MonthlyCpi, Transaction } from "./types";
 
@@ -182,6 +183,17 @@ describe("isRecurringCharge", () => {
     const a = tx({ merchant: "Insurer", amount: 6000, date: "2024-03-10" });
     const refund = tx({ merchant: "Insurer", amount: 6000, date: "2025-03-10", type: "income" });
     expect(isRecurringCharge(a, [a, refund])).toBe(false);
+  });
+});
+
+describe("purchaseLifeYears", () => {
+  it("is ten years for a history shorter than that", () => {
+    expect(purchaseLifeYears(18)).toBe(10);
+    expect(purchaseLifeYears(120)).toBe(10);
+  });
+
+  it("is the length of the history when that is longer", () => {
+    expect(purchaseLifeYears(150)).toBe(12.5);
   });
 });
 

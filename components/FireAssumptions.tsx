@@ -9,7 +9,7 @@ import {
   savingsRatePct,
   type ReadyLevers,
 } from "@/lib/fire-levers";
-import { BIG_PURCHASE_LIFE_YEARS } from "@/lib/fire-spending";
+import { purchaseLifeYears } from "@/lib/fire-spending";
 import { MARKET_HISTORY_SOURCE } from "@/lib/market-history-data";
 import { formatUsd } from "@/lib/money";
 
@@ -110,7 +110,9 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
   } else {
     taxSource = (
       <Source>
-        {`Estimated from your data: take-home ${formatUsd(takeHome.annual)} over ${takeHome.months} months + paycheck deductions ${formatUsd(inputs.payrollDeductions)}, against cash income ${formatUsd(inputs.cashIncome)}`}
+        {/* takeHome.annual is a yearly run-rate, annualized from as few as six
+            months, so the months say how much history it rests on. */}
+        {`Estimated from your data: take-home ${formatUsd(takeHome.annual)}/yr (annualized from ${takeHome.months} months) + paycheck deductions ${formatUsd(inputs.payrollDeductions)}, against cash income ${formatUsd(inputs.cashIncome)}`}
       </Source>
     );
   }
@@ -176,7 +178,7 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
         {purchaseCount > 0 && (
           <details>
             <summary className="cursor-pointer text-fg-muted">
-              {`${purchaseCount} large one-off ${purchaseCount === 1 ? "purchase" : "purchases"} smoothed over ${BIG_PURCHASE_LIFE_YEARS} years`}
+              {`${purchaseCount} large one-off ${purchaseCount === 1 ? "purchase" : "purchases"} smoothed over ${pct(purchaseLifeYears(spending.months), 1)} years`}
             </summary>
             <ul className="mt-2 space-y-1">
               {spending.amortized.map((purchase) => (
@@ -216,8 +218,12 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
             <Source>from the match and 401(k) contribution targets in your Financial Profile</Source>
           </p>
         ) : (
+          // Zero is also what a configured match with no 401(k) or Roth 401(k)
+          // target to apply it to comes to, so the copy names both inputs.
           <p>
-            <Value>None</Value> <Source>no employer match in your Financial Profile</Source>
+            <Source>
+              None counted — needs an employer match and a 401(k) contribution target in your Financial Profile
+            </Source>
           </p>
         )}
       </Row>

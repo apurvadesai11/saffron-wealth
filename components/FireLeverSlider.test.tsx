@@ -44,15 +44,20 @@ describe("FireLeverSlider", () => {
   });
 
   it("marks a modified lever", () => {
-    renderSlider({ modified: true });
-    const input = screen.getByLabelText("Safe withdrawal rate");
-    expect(input.closest("[data-modified]")).toHaveAttribute("data-modified", "true");
+    const { container } = renderSlider({ modified: true });
+    const marked = container.querySelectorAll("[data-modified]");
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toHaveAttribute("data-modified", "true");
+    // The wrapper carries it, and it contains the input.
+    expect(marked[0]).not.toBe(screen.getByLabelText("Safe withdrawal rate"));
+    expect(marked[0]).toContainElement(screen.getByLabelText("Safe withdrawal rate"));
   });
 
   it("does not mark an untouched lever", () => {
-    renderSlider({ modified: false });
-    const input = screen.getByLabelText("Safe withdrawal rate");
-    expect(input.closest("[data-modified]")).toHaveAttribute("data-modified", "false");
+    const { container } = renderSlider({ modified: false });
+    const marked = container.querySelectorAll("[data-modified]");
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toHaveAttribute("data-modified", "false");
   });
 
   it("disabled slider shows its hint", () => {

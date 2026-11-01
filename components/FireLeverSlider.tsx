@@ -44,8 +44,6 @@ export default function FireLeverSlider({
           {format(value)}
         </output>
       </div>
-      {/* The marker is on the input as well as the wrapper because the input is
-          the element a caller reaches by label. */}
       <input
         id={id}
         type="range"
@@ -54,7 +52,6 @@ export default function FireLeverSlider({
         step={step}
         value={value}
         disabled={disabled}
-        data-modified={marker}
         onChange={(e) => {
           // Only a finite number is a value the page can compute with; anything
           // else is dropped rather than passed on as NaN.

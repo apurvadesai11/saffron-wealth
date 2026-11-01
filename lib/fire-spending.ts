@@ -20,6 +20,16 @@ export const BIG_PURCHASE_THRESHOLD = 5000;
 /** The span a big purchase is spread over: a car or a roof, not a lifetime. */
 export const BIG_PURCHASE_LIFE_YEARS = 10;
 
+/**
+ * The years a big purchase is spread over for a history of `months`: ten, or
+ * the length of the history when that is longer. Exported so the assumptions
+ * panel states the life the baseline actually used instead of restating the
+ * rule.
+ */
+export function purchaseLifeYears(months: number): number {
+  return Math.max(months / 12, BIG_PURCHASE_LIFE_YEARS);
+}
+
 // "Same bill" tolerances for the recurrence test. 25 days is just under the
 // shortest real billing cycle, so two buys in one month at one shop don't make
 // each other recurring; 400 days is a year with slack for a due date that
@@ -177,7 +187,7 @@ export function computeSpendingBaseline(
   }
 
   const factorByMonth = new Map<string, number>();
-  const lifeYears = Math.max(months / 12, BIG_PURCHASE_LIFE_YEARS);
+  const lifeYears = purchaseLifeYears(months);
   let regularTotal = 0;
   const amortized: AmortizedPurchase[] = [];
 

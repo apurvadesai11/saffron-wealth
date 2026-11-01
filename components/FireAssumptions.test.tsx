@@ -120,6 +120,14 @@ describe("FireAssumptions", () => {
     expect(rowEl("spending").querySelector("details")).toBeNull();
   });
 
+  it("states the life the baseline used when the history is longer than ten years", () => {
+    // 150 months is 12.5 years, and computeSpendingBaseline spreads each
+    // purchase over that, so a label of "10 years" would not match the list.
+    const base = makeInputs();
+    const { row } = setup({ inputs: { ...base, spending: { ...base.spending, months: 150 } } });
+    expect(row("spending").getByText("2 large one-off purchases smoothed over 12.5 years")).toBeInTheDocument();
+  });
+
   it("uses the singular for a single purchase", () => {
     const base = makeInputs();
     const { row } = setup({
@@ -134,10 +142,22 @@ describe("FireAssumptions", () => {
     expect(income.getByText("20%")).toBeInTheDocument();
     expect(
       income.getByText(
-        `Estimated from your data: take-home ${formatUsd(78_000)} over 12 months + paycheck deductions ${formatUsd(18_000)}, against cash income ${formatUsd(120_000)}`,
+        `Estimated from your data: take-home ${formatUsd(78_000)}/yr (annualized from 12 months) + paycheck deductions ${formatUsd(18_000)}, against cash income ${formatUsd(120_000)}`,
       ),
     ).toBeInTheDocument();
     expect(income.queryByText(/adjusted by you/)).not.toBeInTheDocument();
+  });
+
+  it("says the take-home is annualized when it was measured over part of a year", () => {
+    // computeTakeHome allows 6 to 11 months; its figure is a yearly run-rate,
+    // not what landed in the bank over those months.
+    const { row } = setup({ inputs: makeInputs({ takeHome: { annual: 78_000, months: 8 } }) });
+    expect(
+      row("income").getByText(
+        `Estimated from your data: take-home ${formatUsd(78_000)}/yr (annualized from 8 months) + paycheck deductions ${formatUsd(18_000)}, against cash income ${formatUsd(120_000)}`,
+      ),
+    ).toBeInTheDocument();
+    expect(row("income").queryByText(/over 8 months/)).not.toBeInTheDocument();
   });
 
   it("says when the tax rate was entered rather than derived", () => {
@@ -223,7 +243,13 @@ describe("FireAssumptions", () => {
 
   it("shows the employer match, or says there is none", () => {
     expect(setup().row("match").getByText(`${formatUsd(4_500)}/yr`)).toBeInTheDocument();
-    expect(setup({ inputs: makeInputs({ employerMatch: 0 }) }).row("match").getByText("None")).toBeInTheDocument();
+    // Zero also covers a match with no 401(k) target to apply it to, so the copy
+    // cannot claim the profile has no match.
+    expect(
+      setup({ inputs: makeInputs({ employerMatch: 0 }) }).row("match").getByText(
+        "None counted — needs an employer match and a 401(k) contribution target in your Financial Profile",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the savings rate and the yearly contribution", () => {
