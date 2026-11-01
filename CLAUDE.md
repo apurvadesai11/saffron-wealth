@@ -614,8 +614,10 @@ ratio, and the simulation, the FI and Coast FI numbers and the chart are all
 real. Nominal appears only as the return slider's input; `realReturn(levers)`
 converts it using the inflation lever before it goes anywhere.
 
-**Spending is the state, not the savings rate.** Savings is
-`gross × (1 − tax) − spending` (0017). The savings-rate slider is a view of
+**Spending is the state, not the savings rate.** The yearly contribution is
+`gross × (1 − tax) − spending + employer match` (0017, `annualContribution`);
+gross leaves out interest and dividends, which the historical total returns
+already reinvest. The savings-rate slider is a view of
 spending (`spendingForSavingsRate`), so editing the tax rate moves the savings
 rate and leaves what the user spends alone.
 

@@ -59,7 +59,10 @@ function roundToHundredth(value: number): number {
  * the return slider is nominal (it is the figure people compare with an index
  * fund's history), so the nominal default is the one that reproduces the
  * profile's real return: (1 + real)(1 + inflation) − 1. It is rounded to 2 dp
- * because the slider steps in tenths and a longer default would not sit on it.
+ * to drop float dust and keep the displayed figure short, so for inputs that
+ * aren't round the default reproduces the profile's real return only
+ * approximately: 4.5% real at 2.5% inflation is 7.1125% nominal, kept as
+ * 7.11%, which is 4.4976% real.
  *
  * With no income the tax rate starts at 0 rather than null: it multiplies
  * nothing, so 0 is exact, and null would hold the page behind a prompt for a

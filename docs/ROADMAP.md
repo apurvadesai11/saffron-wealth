@@ -113,8 +113,9 @@ Plan: `docs/saffron-wealth-fire-calculator-plan.md`. Decisions:
 
 What shipped, against what this item asked for:
 
-- **Savings rate** — income is the Financial Profile's declared gross, after an effective tax rate,
-  less spending (0017), not a figure read off income transactions. The tax rate is pre-filled from
+- **Savings rate** — the yearly contribution is the Financial Profile's declared gross income after
+  an effective tax rate, less spending, plus the employer match (0017); the income is not a figure
+  read off income transactions. The tax rate is pre-filled from
   what reached the bank when the history supports it and asked for otherwise. The savings-rate
   slider is a view of spending: raising it lowers spending, and the FI number with it.
 - **FI number** — annual spending ÷ safe withdrawal rate. Spending is the average over every
