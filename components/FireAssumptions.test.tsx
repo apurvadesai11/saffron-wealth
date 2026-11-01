@@ -320,6 +320,14 @@ describe("FireAssumptions", () => {
     ).toBeInTheDocument();
   });
 
+  it("says the allocation changes the spread of outcomes, not the return", () => {
+    expect(
+      setup().row("allocation").getByText(
+        "Changes how bumpy the path is, not the average return — the return slider sets that for the whole mix.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("describes the history it replays and credits the source", () => {
     const history = setup().row("history");
     expect(

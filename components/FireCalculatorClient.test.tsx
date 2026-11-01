@@ -146,6 +146,16 @@ describe("FireCalculatorClient", () => {
     expect(modifiedSliders(container)).toHaveLength(1);
   });
 
+  it("says the allocation changes the spread of outcomes, not the return", () => {
+    renderReady();
+    // The return series is recentred to the return lever whatever the mix.
+    expect(
+      within(sliderWrapper("Stock allocation")).getByText(
+        "Changes how bumpy the path is, not the average return — the return slider sets that for the whole mix.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("a stock allocation reads as a stocks and bonds split", () => {
     renderReady();
     expect(screen.getByText("100% stocks / 0% bonds")).toBeInTheDocument();

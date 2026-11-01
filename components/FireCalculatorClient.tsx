@@ -28,7 +28,7 @@ import {
 } from "@/lib/fire-simulation";
 import { ANNUAL_REAL_RETURNS } from "@/lib/market-history-data";
 import { formatUsd } from "@/lib/money";
-import FireAssumptions from "./FireAssumptions";
+import FireAssumptions, { ALLOCATION_HINT } from "./FireAssumptions";
 import FireChart, { plotEndYear } from "./FireChart";
 import FireLeverSlider from "./FireLeverSlider";
 import FireScenarioTable, { formatYears } from "./FireScenarioTable";
@@ -354,6 +354,7 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
             format={formatAllocation}
             onChange={(v) => onChange({ stockAllocationPct: v })}
             modified={levers.stockAllocationPct !== defaults.stockAllocationPct}
+            hint={ALLOCATION_HINT}
           />
         </div>
       </section>

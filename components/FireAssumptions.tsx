@@ -24,6 +24,12 @@ interface Props {
   history: { windowCount: number; firstStartYear: number; lastStartYear: number; horizon: number };
 }
 
+// The blended series is recentred to the return lever whatever the mix (decision
+// 0015), so the allocation moves only the spread of outcomes. People expect
+// more stocks to mean more return, so the slider and its row both say so.
+export const ALLOCATION_HINT =
+  "Changes how bumpy the path is, not the average return — the return slider sets that for the whole mix.";
+
 // Percents as typed, without float dust or trailing zeros: 5 reads "5",
 // 7.1000000000000005 reads "7.1".
 function pct(value: number, digits = 2): string {
@@ -310,6 +316,9 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
           ) : (
             <Source>default, not read from your accounts</Source>
           )}
+        </p>
+        <p>
+          <Source>{ALLOCATION_HINT}</Source>
         </p>
       </Row>
 
