@@ -288,3 +288,30 @@ export interface MonthlyCpi {
   month: string;
   cpi: number;
 }
+
+// A one-off purchase that computeSpendingBaseline spread over its useful life
+// instead of counting in the month it happened (see decision 0016).
+// `amount` is what was paid, `realAmount` the same purchase in today's dollars,
+// and `annualized` the yearly slice of `realAmount` that enters the baseline.
+export interface AmortizedPurchase {
+  date: string; // "YYYY-MM-DD"
+  description: string;
+  amount: number;
+  realAmount: number;
+  annualized: number;
+}
+
+// Annual spending in today's dollars, measured over the whole usable
+// transaction history. `fromMonth`/`toMonth` ("YYYY-MM") bound the complete
+// months that were averaged and `months` is how many they span; `cpiThrough`
+// is the last month of the CPI table the restatement used.
+export interface SpendingBaseline {
+  annualSpending: number;
+  regularAnnual: number;
+  amortizedAnnual: number;
+  months: number;
+  fromMonth: string;
+  toMonth: string;
+  cpiThrough: string;
+  amortized: AmortizedPurchase[];
+}
