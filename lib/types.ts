@@ -268,3 +268,23 @@ export type FinancialProfile = Omit<FinancialProfileInput, 'age'> & {
   anchoredAge: number;
   ageAnchoredAt: string; // ISO timestamp
 };
+
+// ── Market history (FIRE calculator) ──────────────────────────────────────
+// Shiller's U.S. history, embedded by scripts/build-market-history.py in
+// lib/market-history-data.ts and lib/cpi-data.ts.
+
+// One calendar year of real (inflation-adjusted) total return, as fractions
+// (0.07 is 7%), because lib/fire-simulation.ts works in fractions, not the
+// percents the levers and profile use.
+export interface AnnualRealReturn {
+  year: number;
+  stocks: number;
+  bonds: number;
+}
+
+// The raw CPI index level for a month ("YYYY-MM", the same key shape the rest
+// of the app uses), not an inflation rate.
+export interface MonthlyCpi {
+  month: string;
+  cpi: number;
+}
