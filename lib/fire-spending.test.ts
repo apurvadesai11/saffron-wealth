@@ -148,12 +148,24 @@ describe("isRecurringCharge", () => {
     expect(isRecurringCharge(a, [a, tx({ merchant: " INSURER ", amount: 6000, date: "2025-03-10" })])).toBe(true);
   });
 
-  it("needs an amount within 25% of this charge's", () => {
+  it("needs the two amounts within 25% of the larger one", () => {
     const a = tx({ merchant: "Insurer", amount: 1000, date: "2024-03-10" });
-    expect(isRecurringCharge(a, [a, tx({ merchant: "Insurer", amount: 1250, date: "2025-03-10" })])).toBe(true);
-    expect(isRecurringCharge(a, [a, tx({ merchant: "Insurer", amount: 750, date: "2025-03-10" })])).toBe(true);
-    expect(isRecurringCharge(a, [a, tx({ merchant: "Insurer", amount: 1260, date: "2025-03-10" })])).toBe(false);
-    expect(isRecurringCharge(a, [a, tx({ merchant: "Insurer", amount: 740, date: "2025-03-10" })])).toBe(false);
+    const other = (amount: number) => tx({ merchant: "Insurer", amount, date: "2025-03-10" });
+    // Larger than this charge: 25% of the other amount.
+    expect(isRecurringCharge(a, [a, other(1333)])).toBe(true);
+    expect(isRecurringCharge(a, [a, other(1334)])).toBe(false);
+    // Smaller: 25% of this one.
+    expect(isRecurringCharge(a, [a, other(750)])).toBe(true);
+    expect(isRecurringCharge(a, [a, other(740)])).toBe(false);
+  });
+
+  it("classifies a pair the same from either side", () => {
+    // 1,900 apart is within 25% of 8,000 but not of 6,100. Measuring from each
+    // charge's own amount made the larger one recurring and the smaller a one-off.
+    const larger = tx({ merchant: "Insurer", amount: 8000, date: "2024-03-10" });
+    const smaller = tx({ merchant: "Insurer", amount: 6100, date: "2025-03-10" });
+    expect(isRecurringCharge(larger, [larger, smaller])).toBe(true);
+    expect(isRecurringCharge(smaller, [larger, smaller])).toBe(true);
   });
 
   it("needs the repeat to be 25 to 400 days away", () => {

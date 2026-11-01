@@ -25,8 +25,11 @@ at 10 years. Everything else goes into the plain average.
 
 A charge is **recurring** when some other expense has the same merchant (the
 merchant, or the description when there is none, trimmed and lower-cased), an
-amount within ±25% of this one's, and a date 25 to 400 days away. That covers
-monthly through annual bills.
+amount within 25% of the larger of the two, and a date 25 to 400 days away.
+That covers monthly through annual bills. Measuring against the larger amount
+makes the test symmetric: a pair of charges is recurring from both sides or
+from neither, where measuring from each charge's own amount let an $8,000
+premium vouch for a $6,100 one but not the reverse.
 
 ## Why the whole history
 
@@ -72,8 +75,8 @@ is not a one-off, so recurring charges stay in the plain average at any size.
 The test could have been "same merchant seen more than once". That fails at
 frequent merchants: a $6,000 purchase at a retailer you also buy $40 things
 from is the same merchant and not the same bill. Requiring a similar amount is
-what makes it the *same bill*. ±25% absorbs a premium that rises, a rent that
-steps up, a utility that follows the seasons, without matching unrelated
+what makes it the *same bill*. A 25% band absorbs a premium that rises, a rent
+that steps up, a utility that follows the seasons, without matching unrelated
 purchases. Amounts are compared nominal; across at most 400 days, inflation is
 well inside that band.
 

@@ -122,14 +122,17 @@ function isSameTransaction(a: Transaction, b: Transaction): boolean {
  * expense at the same merchant, for a similar amount, 25 to 400 days away.
  * That covers monthly through annual bills. `expenses` may include `t`; it is
  * never taken as evidence of itself.
+ *
+ * "Similar" is within 25% of the larger of the two amounts, so a pair is
+ * recurring from both sides or from neither.
  */
 export function isRecurringCharge(t: Transaction, expenses: Transaction[]): boolean {
   const key = merchantKey(t);
   const day = dayNumber(t.date);
-  const tolerance = t.amount * RECURRENCE_AMOUNT_TOLERANCE;
   return expenses.some((other) => {
     if (other.type !== "expense" || isSameTransaction(other, t)) return false;
     if (merchantKey(other) !== key) return false;
+    const tolerance = Math.max(t.amount, other.amount) * RECURRENCE_AMOUNT_TOLERANCE;
     if (Math.abs(other.amount - t.amount) > tolerance) return false;
     const apart = Math.abs(dayNumber(other.date) - day);
     return apart >= RECURRENCE_MIN_DAYS && apart <= RECURRENCE_MAX_DAYS;
