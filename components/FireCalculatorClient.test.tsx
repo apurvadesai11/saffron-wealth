@@ -218,38 +218,93 @@ describe("FireCalculatorClient", () => {
   });
 
   describe("without a derived tax rate", () => {
+    const TAX_PROMPT = "Effective tax rate (%)";
+
+    function typeTaxRate(value: string) {
+      fireEvent.change(screen.getByLabelText(TAX_PROMPT), { target: { value } });
+    }
+
+    // fireEvent.submit rather than a click on the button: happy-dom does not
+    // always turn a button click into a form submit (see CLAUDE.md).
+    function submitTaxRate() {
+      const form = screen.getByLabelText(TAX_PROMPT).closest("form");
+      if (!form) throw new Error("The tax prompt is not a form");
+      fireEvent.submit(form);
+    }
+
     it("asks for the tax rate when it can't be derived", () => {
       renderReady({ derivedTaxRatePct: null });
       expect(screen.getByText("We couldn't estimate this from your transactions.")).toBeInTheDocument();
-      const input = screen.getByLabelText("Effective tax rate (%)");
+      expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
       expect(screen.queryByText(formatUsd(1_200_000))).not.toBeInTheDocument();
       expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 
-      fireEvent.change(input, { target: { value: "25" } });
+      typeTaxRate("25");
+      submitTaxRate();
 
       expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
       // From here the rate is a slider like the others.
       expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
-      expect(screen.queryByLabelText("Effective tax rate (%)")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(TAX_PROMPT)).not.toBeInTheDocument();
     });
 
-    it.each(["", "-1", "60.5", "70"])("keeps the results hidden for %j", (value) => {
+    it("waits for the submit, so a rate typed one digit at a time is not committed early", () => {
       renderReady({ derivedTaxRatePct: null });
-      fireEvent.change(screen.getByLabelText("Effective tax rate (%)"), { target: { value } });
+
+      // "2" on the way to "25" is a valid rate, and must not open the page.
+      typeTaxRate("2");
+      expect(screen.getByLabelText(TAX_PROMPT)).toHaveValue(2);
       expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
-      expect(screen.getByLabelText("Effective tax rate (%)")).toBeInTheDocument();
+      expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+
+      typeTaxRate("25");
+      expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
+
+      submitTaxRate();
+      expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
+    });
+
+    it("submits from the Calculate button", () => {
+      renderReady({ derivedTaxRatePct: null });
+      typeTaxRate("25");
+      fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+      expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+    });
+
+    it.each(["", "-1", "60.5", "70"])("keeps the results hidden, and says why, for a submit of %j", (value) => {
+      renderReady({ derivedTaxRatePct: null });
+      typeTaxRate(value);
+      expect(screen.queryByText("Enter a rate from 0 to 60.")).not.toBeInTheDocument();
+
+      submitTaxRate();
+
+      expect(screen.getByText("Enter a rate from 0 to 60.")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
+      expect(screen.getByLabelText(TAX_PROMPT)).toBeInTheDocument();
+    });
+
+    it("clears the range message when the entry is edited again", () => {
+      renderReady({ derivedTaxRatePct: null });
+      typeTaxRate("70");
+      submitTaxRate();
+      expect(screen.getByText("Enter a rate from 0 to 60.")).toBeInTheDocument();
+
+      typeTaxRate("7");
+      expect(screen.queryByText("Enter a rate from 0 to 60.")).not.toBeInTheDocument();
     });
 
     it.each(["0", "60"])("accepts %s, the end of the allowed range", (value) => {
       renderReady({ derivedTaxRatePct: null });
-      fireEvent.change(screen.getByLabelText("Effective tax rate (%)"), { target: { value } });
+      typeTaxRate(value);
+      submitTaxRate();
       expect(screen.getByRole("region", { name: "FI number" })).toBeInTheDocument();
     });
 
     it("an entered rate is not a modification, but reset takes it back to the prompt", () => {
       const { container } = renderReady({ derivedTaxRatePct: null });
-      fireEvent.change(screen.getByLabelText("Effective tax rate (%)"), { target: { value: "25" } });
+      typeTaxRate("25");
+      submitTaxRate();
       // Nothing to be adjusted from: the user supplied the starting value.
       expect(sliderWrapper("Effective tax rate")).toHaveAttribute("data-modified", "false");
       expect(modifiedSliders(container)).toHaveLength(0);
@@ -258,7 +313,7 @@ describe("FireCalculatorClient", () => {
       expect(reset).toBeEnabled();
       fireEvent.click(reset);
 
-      expect(screen.getByLabelText("Effective tax rate (%)")).toHaveValue(null);
+      expect(screen.getByLabelText(TAX_PROMPT)).toHaveValue(null);
       expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
     });
   });

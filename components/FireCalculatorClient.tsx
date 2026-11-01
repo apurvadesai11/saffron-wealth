@@ -70,12 +70,25 @@ function EmptyState({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+// The rate commits on submit, not on every keystroke: "2" on the way to "25" is
+// a valid rate, and committing it would swap this form for the results and
+// drop the focus before the second digit arrived.
 function TaxRatePrompt({ onSet }: { onSet: (pct: number) => void }) {
   const [text, setText] = useState("");
-  const invalid = text.trim() !== "" && parseTaxRate(text) === null;
+  // Set by a submit that could not be used; cleared as soon as the entry changes.
+  const [rejected, setRejected] = useState(false);
 
   return (
-    <div className={`${cardClass} max-w-md space-y-3`}>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        const rate = parseTaxRate(text);
+        if (rate === null) setRejected(true);
+        else onSet(rate);
+      }}
+      className={`${cardClass} max-w-md space-y-3`}
+    >
       <p className="text-sm text-fg-muted">
         Your savings come from your Financial Profile income after tax, so the calculator needs a
         tax rate to start from.
@@ -84,30 +97,37 @@ function TaxRatePrompt({ onSet }: { onSet: (pct: number) => void }) {
         <label htmlFor="fire-tax-prompt" className={labelClass}>
           Effective tax rate (%)
         </label>
-        <input
-          id="fire-tax-prompt"
-          type="number"
-          inputMode="decimal"
-          min={TAX_RATE_MIN}
-          max={TAX_RATE_MAX}
-          step="any"
-          value={text}
-          aria-invalid={invalid ? true : undefined}
-          onChange={(e) => {
-            setText(e.target.value);
-            const rate = parseTaxRate(e.target.value);
-            if (rate !== null) onSet(rate);
-          }}
-          className={controlClass}
-        />
+        <div className="flex items-center gap-3">
+          <input
+            id="fire-tax-prompt"
+            type="number"
+            inputMode="decimal"
+            min={TAX_RATE_MIN}
+            max={TAX_RATE_MAX}
+            step="any"
+            value={text}
+            aria-invalid={rejected ? true : undefined}
+            onChange={(e) => {
+              setText(e.target.value);
+              setRejected(false);
+            }}
+            className={controlClass}
+          />
+          <button
+            type="submit"
+            className="shrink-0 bg-accent-solid text-on-solid rounded-lg py-2 px-4 text-sm font-medium hover:bg-accent-solid-hover transition-colors"
+          >
+            Calculate
+          </button>
+        </div>
         <p className="text-xs text-fg-faint mt-1.5">We couldn&apos;t estimate this from your transactions.</p>
-        {invalid && (
+        {rejected && (
           <p className="text-xs text-danger-muted mt-1.5">
             Enter a rate from {TAX_RATE_MIN} to {TAX_RATE_MAX}.
           </p>
         )}
       </div>
-    </div>
+    </form>
   );
 }
 
