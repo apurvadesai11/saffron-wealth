@@ -18,6 +18,7 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof FireScenario
       rows={ROWS}
       view="fi"
       age={35}
+      targetRetirementAge={55}
       asOf="2026-01-15"
       horizon={40}
       windowCount={87}
@@ -109,6 +110,25 @@ describe("FireScenarioTable", () => {
   it("describes the share of starts that reach FI by the target age", () => {
     renderTable({ view: "fi", share: 0.634 });
     expect(screen.getByText("63% of historical starts reach FI by your target age")).toBeInTheDocument();
+  });
+
+  it("says the target age has passed instead of a share of starts reaching FI by it", () => {
+    renderTable({ view: "fi", pastTarget: true, share: 0 });
+    expect(screen.queryByText(/of historical starts reach FI by your target age/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("The share reaching FI is measured against your target age, and you are past it."),
+    ).toBeInTheDocument();
+    // The scenarios still say when each start gets there.
+    expect(bodyCells()).toHaveLength(5);
+  });
+
+  it("names the target age when a coast scenario never gets there", () => {
+    // Coast FI is bounded by the target age, not by the simulation's horizon.
+    renderTable({ view: "coast" });
+    const worst = bodyCells()[4];
+    expect(worst[1]).toBe("Not by age 55");
+    expect(worst[2]).toBe("—");
+    expect(worst[3]).toBe("—");
   });
 
   it("describes the share of starts that are already Coast FI", () => {

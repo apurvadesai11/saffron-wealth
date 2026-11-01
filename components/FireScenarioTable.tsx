@@ -4,6 +4,10 @@ interface Props {
   rows: ScenarioRow[];
   view: "fi" | "coast";
   age: number;
+  targetRetirementAge: number;
+  // True once the target age is behind the user: there is then no "by your
+  // target age" for the FI view's share to count.
+  pastTarget?: boolean;
   // "YYYY-MM-DD", as in FireInputs.asOf.
   asOf: string;
   horizon: number;
@@ -46,6 +50,8 @@ export default function FireScenarioTable({
   rows,
   view,
   age,
+  targetRetirementAge,
+  pastTarget = false,
   asOf,
   horizon,
   windowCount,
@@ -55,11 +61,18 @@ export default function FireScenarioTable({
 }: Props) {
   const percent = Math.round(share * 100);
   // The windows overlap (each starts a year after the last), so this is a
-  // description of the history replayed, not the odds of the future.
-  const summary =
-    view === "fi"
-      ? `${percent}% of historical starts reach FI by your target age`
-      : `${percent}% of historical starts are already Coast FI`;
+  // description of the history replayed, not the odds of the future. Past the
+  // target age the share would be 0% by construction, and saying so would read
+  // as a verdict on the plan.
+  let summary: string;
+  if (view === "coast") summary = `${percent}% of historical starts are already Coast FI`;
+  else if (pastTarget) summary = "The share reaching FI is measured against your target age, and you are past it.";
+  else summary = `${percent}% of historical starts reach FI by your target age`;
+
+  // Coast FI is crossed by the target age or not at all, so a start that never
+  // crosses it is named by that age, not by the simulation's horizon.
+  const formatRowYears = (years: number | null) =>
+    years === null && view === "coast" ? `Not by age ${targetRetirementAge}` : formatYears(years, horizon);
 
   return (
     <div>
@@ -88,7 +101,7 @@ export default function FireScenarioTable({
           {rows.map((row) => (
             <tr key={row.label} data-scenario={row.label} className="border-b border-line-subtle last:border-b-0">
               <td className={`${cellClass} font-medium`}>{row.label}</td>
-              <td className={cellClass}>{formatYears(row.years, horizon)}</td>
+              <td className={cellClass}>{formatRowYears(row.years)}</td>
               <td className={cellClass}>{row.years === null ? "—" : Math.floor(age + row.years)}</td>
               <td className={cellClass}>{row.years === null ? "—" : milestoneYear(asOf, row.years)}</td>
               <td className={cellClass}>{row.startYear}</td>

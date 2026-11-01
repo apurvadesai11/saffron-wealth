@@ -352,6 +352,18 @@ describe("FireCalculatorClient", () => {
     expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
   });
 
+  it("replaces the FI share line with a note past the target age", () => {
+    renderReady({ age: 52, targetRetirementAge: 50 });
+    expect(screen.queryByText(/of historical starts reach FI by your target age/)).not.toBeInTheDocument();
+    expect(screen.getByText(/The share reaching FI is measured against your target age/)).toBeInTheDocument();
+  });
+
+  it("keeps the FI share line at the target age itself", () => {
+    renderReady({ age: 50, targetRetirementAge: 50 });
+    expect(screen.getByText(/of historical starts reach FI by your target age/)).toBeInTheDocument();
+    expect(screen.queryByText(/you are past it/)).not.toBeInTheDocument();
+  });
+
   it("explains that Coast FI has no meaning past the target age", () => {
     renderReady({ age: 52, targetRetirementAge: 50 });
     fireEvent.click(screen.getByRole("tab", { name: "Coast FI" }));

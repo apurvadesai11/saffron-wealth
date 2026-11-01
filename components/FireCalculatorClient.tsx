@@ -397,6 +397,8 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
               rows={view === "fi" ? summary.fi : summary.coast}
               view={view}
               age={inputs.age}
+              targetRetirementAge={inputs.targetRetirementAge}
+              pastTarget={yearsToTarget < 0}
               asOf={inputs.asOf}
               horizon={horizon}
               windowCount={summary.windowCount}
