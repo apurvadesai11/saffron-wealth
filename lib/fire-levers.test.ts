@@ -11,6 +11,7 @@ import {
   realReturn,
   savingsRatePct,
   spendingForSavingsRate,
+  stockShare,
 } from "./fire-levers";
 import type { FireInputs, FireLevers } from "./types";
 
@@ -72,6 +73,12 @@ describe("defaultLevers and realReturn", () => {
 
   it("carries a missing derived tax rate through as null", () => {
     expect(defaultLevers(inputs({ derivedTaxRatePct: null })).effectiveTaxRatePct).toBeNull();
+  });
+});
+
+describe("stockShare", () => {
+  it("turns the allocation percent into the fraction the simulation takes", () => {
+    expect(stockShare(ready({ stockAllocationPct: 60 }))).toBe(0.6);
   });
 });
 

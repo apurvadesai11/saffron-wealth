@@ -69,6 +69,11 @@ export function realReturn(levers: FireLevers): number {
   return (1 + levers.nominalReturnPct / 100) / (1 + levers.inflationPct / 100) - 1;
 }
 
+/** The stock allocation as a fraction, the unit lib/fire-simulation.ts takes. */
+export function stockShare(levers: FireLevers): number {
+  return levers.stockAllocationPct / 100;
+}
+
 /** Profile income left after the tax-rate lever, per year. */
 export function afterTaxIncome(inputs: FireInputs, levers: ReadyLevers): number {
   return inputs.grossIncome * (1 - levers.effectiveTaxRatePct / 100);
