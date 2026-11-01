@@ -36,8 +36,6 @@ export interface LeverRange {
   step: number;
 }
 
-const SAVINGS_RATE_MAX_PCT = 90;
-
 // Rate arithmetic leaves dust (-20 comes out as -20.000000000000004), and a
 // floor or ceiling over dust would put a slider bound a whole step past a
 // default that is, to every displayed digit, on a step.
@@ -116,27 +114,73 @@ export function coastFiNumber(fi: number, realReturn: number, yearsToTarget: num
   return fi / (1 + realReturn) ** yearsToTarget;
 }
 
+// Bounds the sliders keep when nothing needs more room. Every min and max is a
+// multiple of its step, which is what lets stretching snap to a grid anchored
+// at zero.
+const BASE_RANGES: Record<LeverKey, LeverRange> = {
+  nominalReturnPct: { min: -2, max: 15, step: 0.1 },
+  inflationPct: { min: 0, max: 10, step: 0.1 },
+  savingsRatePct: { min: 0, max: 90, step: 1 },
+  safeWithdrawalRatePct: { min: 2.5, max: 6, step: 0.05 },
+  stockAllocationPct: { min: 0, max: 100, step: 5 },
+  effectiveTaxRatePct: { min: 0, max: 60, step: 0.5 },
+};
+
+// Multiples of a step like 0.1 carry binary dust (3 * 0.1 is
+// 0.30000000000000004); six places is far finer than any step here.
+function cleanGridValue(value: number): number {
+  return Math.round(value * 1e6) / 1e6 || 0;
+}
+
+// Widens a range to hold each value, rounding outward to the next step so the
+// value itself is selectable. Null values (a savings rate that cannot be
+// computed) leave the range alone.
+function stretchToInclude(range: LeverRange, values: (number | null)[]): LeverRange {
+  let { min, max } = range;
+  for (const value of values) {
+    if (value === null) continue;
+    const steps = value / range.step;
+    min = Math.min(min, cleanGridValue(Math.floor(steps + ROUNDING_TOLERANCE) * range.step));
+    max = Math.max(max, cleanGridValue(Math.ceil(steps - ROUNDING_TOLERANCE) * range.step));
+  }
+  return { ...range, min, max };
+}
+
 /**
- * Slider bounds. The savings range stretches to include the default savings
- * rate at either end: down for a household that overspends today, up for one
- * that saves more than 90%, so both can still see their own starting point.
- * With no default savings rate (no tax rate yet, or no after-tax income) it is
- * 0 to 90.
+ * Slider bounds. Each keeps its fixed range unless the lever's value falls
+ * outside it, and then the range stretches to hold the value, because a range
+ * input clamps a value outside its bounds without saying so and the page would
+ * show a lever at a figure the plan is not using. The profile accepts more than
+ * the fixed bounds do (inflation below 0 or above 10, a withdrawal rate of 7%),
+ * so a default can start outside them; a household that overspends starts at a
+ * negative savings rate, and one that saves nearly everything above 90.
+ *
+ * Pass the initial `defaults` and the live levers as `current`. Both are kept
+ * on the slider, so dragging one lever (the tax rate moves the savings rate)
+ * cannot carry another off its end. `current` defaults to `defaults` for the
+ * first render.
+ *
+ * The savings rate takes part only when it can be computed: with no tax rate,
+ * or no after-tax income, that range stays 0 to 90.
  */
-export function leverRanges(inputs: FireInputs, defaults: FireLevers): Record<LeverKey, LeverRange> {
-  const defaultSavings = hasTaxRate(defaults) ? savingsRatePct(inputs, defaults) : null;
-  const savingsMin = defaultSavings === null ? 0 : Math.min(0, Math.floor(defaultSavings + ROUNDING_TOLERANCE));
-  const savingsMax =
-    defaultSavings === null
-      ? SAVINGS_RATE_MAX_PCT
-      : Math.max(SAVINGS_RATE_MAX_PCT, Math.ceil(defaultSavings - ROUNDING_TOLERANCE));
+export function leverRanges(
+  inputs: FireInputs,
+  defaults: FireLevers,
+  current: FireLevers = defaults,
+): Record<LeverKey, LeverRange> {
+  const savingsRate = (levers: FireLevers) => (hasTaxRate(levers) ? savingsRatePct(inputs, levers) : null);
+  const stretch = (key: LeverKey, ...values: (number | null)[]) => stretchToInclude(BASE_RANGES[key], values);
   return {
-    nominalReturnPct: { min: -2, max: 15, step: 0.1 },
-    inflationPct: { min: 0, max: 10, step: 0.1 },
-    savingsRatePct: { min: savingsMin, max: savingsMax, step: 1 },
-    safeWithdrawalRatePct: { min: 2.5, max: 6, step: 0.05 },
-    stockAllocationPct: { min: 0, max: 100, step: 5 },
-    effectiveTaxRatePct: { min: 0, max: 60, step: 0.5 },
+    nominalReturnPct: stretch("nominalReturnPct", defaults.nominalReturnPct, current.nominalReturnPct),
+    inflationPct: stretch("inflationPct", defaults.inflationPct, current.inflationPct),
+    savingsRatePct: stretch("savingsRatePct", savingsRate(defaults), savingsRate(current)),
+    safeWithdrawalRatePct: stretch(
+      "safeWithdrawalRatePct",
+      defaults.safeWithdrawalRatePct,
+      current.safeWithdrawalRatePct,
+    ),
+    stockAllocationPct: stretch("stockAllocationPct", defaults.stockAllocationPct, current.stockAllocationPct),
+    effectiveTaxRatePct: stretch("effectiveTaxRatePct", defaults.effectiveTaxRatePct, current.effectiveTaxRatePct),
   };
 }
 
