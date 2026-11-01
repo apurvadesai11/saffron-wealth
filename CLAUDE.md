@@ -621,11 +621,14 @@ rate and leaves what the user spends alone.
 
 **The tax-rate gate.** `derivedTaxRatePct` is null unless the transactions support
 it (no cash income — an RSU-only profile has none — under six months of history,
-or a result outside 0 to 60). Null renders only the tax prompt, and the rate
-commits on submit, not per keystroke. `defaults` are held fixed for the page's life,
-so "Reset to defaults" after the user *supplied* a rate returns to the prompt: that
-is deliberate and pinned in `FireCalculatorClient.test.tsx`, and
-`e2e/fire.spec.ts` re-enters the rate after resetting.
+no income transactions in the window, or a result outside 0 to 60). Null renders
+only the tax prompt, and the rate commits on submit, not per keystroke. A submitted
+rate becomes part of `defaults`, so "Reset to defaults" keeps it rather than asking
+again; at that rate the assumptions panel says "entered by you", and moved off it
+says "adjusted by you (you entered X%)" with the slider marked modified. Pinned in
+`FireCalculatorClient.test.tsx` and `e2e/fire.spec.ts`. A profile with no income
+(`grossIncome <= 0`) skips the prompt: `defaultLevers` sets the tax rate to 0 and
+its slider is disabled.
 
 **Dates.** Month keys are `"YYYY-MM"` sliced from `"YYYY-MM-DD"` transaction
 dates, never built from a `Date`; `asOf`'s month comes from its local fields
@@ -736,8 +739,8 @@ Two test runners, three scopes:
   filters, budget editing, transaction persistence across a reload);
   `e2e/net-worth.spec.ts` (account add/edit/delete); `e2e/financial-profile.spec.ts`
   (save, reload, versioning, unchanged-save no-op); `e2e/fire.spec.ts` (tax
-  prompt, FI number moving with the withdrawal-rate slider, Coast FI tab, reset —
-  seeded with an RSU-only profile so the prompt is always shown, whatever today's
+  prompt, FI number moving with the withdrawal-rate slider, Coast FI tab, reset
+  keeping the entered tax rate — seeded with an RSU-only profile so the prompt is always shown, whatever today's
   date is relative to the fixed fixture dates); `e2e/auth-middleware.spec.ts`
   (gating — proxy redirect, forged shape-valid cookie rejected by the (app)
   layout); `e2e/theme.spec.ts` (OS default, explicit override, and the

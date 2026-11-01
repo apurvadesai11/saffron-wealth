@@ -31,8 +31,8 @@ function pct(value: number, digits = 2): string {
 }
 
 // Every row says where its number came from, and flags the ones the user
-// has moved. `adjusted` is only ever true where the page offered a starting
-// value; a number the user had to supply has nothing to be adjusted from.
+// has moved off their starting value. A tax rate the user had to supply is
+// its own starting value once entered: sitting on it is not an adjustment.
 function Row({
   name,
   term,
@@ -92,9 +92,15 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
   const derivedTax = inputs.derivedTaxRatePct;
   let taxSource: ReactNode;
   if (derivedTax === null) {
+    // The page makes a submitted rate the default, so defaults holds it.
+    const entered = defaults.effectiveTaxRatePct;
     taxSource = (
       <>
-        <Source>entered by you</Source>
+        {taxAdjusted && entered !== null ? (
+          <Adjusted>{`adjusted by you (you entered ${pct(entered)}%)`}</Adjusted>
+        ) : (
+          <Source>entered by you</Source>
+        )}
         {noIncomeTransactions && (
           <>
             {" "}

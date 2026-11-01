@@ -86,15 +86,14 @@ test.describe("FIRE calculator page", () => {
     await page.getByRole("tab", { name: "Years to FI" }).click();
     await expect(page.getByText(/of historical starts reach FI by your target age/)).toBeVisible();
 
-    // Reset goes back to what the data said, and the data had no tax rate to
-    // offer: the rate typed above was supplied, not derived. So the page asks
-    // for it again (components/FireCalculatorClient.test.tsx pins this), and
-    // once it has one, the withdrawal rate is back where it started.
+    // Reset goes back to the starting point. The data had no tax rate to offer,
+    // so the rate typed above became part of that starting point: Reset keeps
+    // it rather than asking again (components/FireCalculatorClient.test.tsx
+    // pins this), and only the withdrawal rate moves back.
     await page.getByRole("button", { name: "Reset to defaults" }).click();
-    await expect(fiCard).toHaveCount(0);
-    await page.getByLabel("Effective tax rate (%)").fill("25");
-    await page.getByLabel("Effective tax rate (%)").press("Enter");
     await expect(fiFigure).toHaveText(startingFi!);
+    await expect(page.getByLabel("Effective tax rate (%)")).toHaveCount(0);
+    await expect(page.getByRole("slider", { name: "Effective tax rate" })).toHaveValue("25");
     await expect(withdrawal.locator("xpath=..")).toHaveAttribute("data-modified", "false");
   });
 });

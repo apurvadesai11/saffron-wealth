@@ -48,9 +48,13 @@ function ready(defaults: FireLevers, overrides: Partial<ReadyLevers>): ReadyLeve
   return { ...defaults, effectiveTaxRatePct: defaults.effectiveTaxRatePct ?? 25, ...overrides };
 }
 
-function setup(opts: { inputs?: FireInputs; levers?: Partial<ReadyLevers> } = {}) {
+// `defaults` overrides stand in for what the page adds to the data's own
+// defaults: a tax rate the user had to enter becomes the starting value.
+function setup(
+  opts: { inputs?: FireInputs; defaults?: Partial<FireLevers>; levers?: Partial<ReadyLevers> } = {},
+) {
   const inputs = opts.inputs ?? makeInputs();
-  const defaults = defaultLevers(inputs);
+  const defaults = { ...defaultLevers(inputs), ...opts.defaults };
   const levers = ready(defaults, opts.levers ?? {});
   const utils = render(<FireAssumptions inputs={inputs} levers={levers} defaults={defaults} history={HISTORY} />);
   const rowEl = (name: string): HTMLElement => {
@@ -177,20 +181,35 @@ describe("FireAssumptions", () => {
   it("says when the tax rate was entered rather than derived", () => {
     const { row, rowEl } = setup({
       inputs: makeInputs({ derivedTaxRatePct: null }),
+      defaults: { effectiveTaxRatePct: 25 },
       levers: { effectiveTaxRatePct: 25 },
     });
     expect(row("income").getByText("25%")).toBeInTheDocument();
     expect(row("income").getByText("entered by you")).toBeInTheDocument();
     expect(row("income").queryByText(/Estimated from your data/)).not.toBeInTheDocument();
-    // There was no estimate to move off, so this is not an adjustment.
+    // The entered rate is the starting value, so sitting on it is not an adjustment.
     expect(rowEl("income")).toHaveAttribute("data-adjusted", "false");
     expect(rowEl("savings")).toHaveAttribute("data-adjusted", "false");
+  });
+
+  it("flags a tax rate moved off the one entered and says what was entered", () => {
+    const { row, rowEl } = setup({
+      inputs: makeInputs({ derivedTaxRatePct: null }),
+      defaults: { effectiveTaxRatePct: 25 },
+      levers: { effectiveTaxRatePct: 30 },
+    });
+    expect(row("income").getByText("30%")).toBeInTheDocument();
+    expect(row("income").getByText("adjusted by you (you entered 25%)")).toBeInTheDocument();
+    expect(row("income").queryByText("entered by you")).not.toBeInTheDocument();
+    expect(rowEl("income")).toHaveAttribute("data-adjusted", "true");
+    expect(rowEl("savings")).toHaveAttribute("data-adjusted", "true");
   });
 
   it("says there are no income transactions instead of showing a take-home", () => {
     // computeTakeHome is null, never a $0 run-rate, when nothing came in.
     const { row } = setup({
       inputs: makeInputs({ derivedTaxRatePct: null, takeHome: null }),
+      defaults: { effectiveTaxRatePct: 25 },
       levers: { effectiveTaxRatePct: 25 },
     });
     expect(row("income").getByText(/No income transactions in the last 12 months/)).toBeInTheDocument();

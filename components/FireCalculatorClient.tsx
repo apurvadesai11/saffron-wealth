@@ -419,13 +419,22 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
 }
 
 function FireCalculator({ inputs }: { inputs: FireInputs }) {
-  // Held fixed for the page's life: "modified" and "reset" both mean "back to
-  // what the data said", even after the user has supplied a missing tax rate.
-  const [defaults] = useState(() => defaultLevers(inputs));
+  // "Modified" and "reset" both mean "back to the starting point": what the
+  // data said, plus a tax rate the user had to supply because the data had
+  // none. A submitted rate joins the defaults, so Reset keeps it instead of
+  // asking for it again, and moving off it reads as an adjustment of it.
+  const [defaults, setDefaults] = useState(() => defaultLevers(inputs));
   const [levers, setLevers] = useState<FireLevers>(defaults);
 
   if (!hasTaxRate(levers)) {
-    return <TaxRatePrompt onSet={(pct) => setLevers((prev) => ({ ...prev, effectiveTaxRatePct: pct }))} />;
+    return (
+      <TaxRatePrompt
+        onSet={(pct) => {
+          setDefaults((prev) => ({ ...prev, effectiveTaxRatePct: pct }));
+          setLevers((prev) => ({ ...prev, effectiveTaxRatePct: pct }));
+        }}
+      />
+    );
   }
   return (
     <FireResults

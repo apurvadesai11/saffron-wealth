@@ -302,20 +302,34 @@ describe("FireCalculatorClient", () => {
       expect(screen.getByRole("region", { name: "FI number" })).toBeInTheDocument();
     });
 
-    it("an entered rate is not a modification, but reset takes it back to the prompt", () => {
+    it("an entered rate becomes the starting value: not a modification, and reset keeps it", () => {
       const { container } = renderReady({ derivedTaxRatePct: null });
       typeTaxRate("25");
       submitTaxRate();
-      // Nothing to be adjusted from: the user supplied the starting value.
       expect(sliderWrapper("Effective tax rate")).toHaveAttribute("data-modified", "false");
       expect(modifiedSliders(container)).toHaveLength(0);
-
+      expect(screen.getByText("entered by you")).toBeInTheDocument();
+      // Nothing has moved off the starting point yet.
       const reset = screen.getByRole("button", { name: "Reset to defaults" });
+      expect(reset).toBeDisabled();
+
+      // Moved off the entered rate, it reads as an adjustment of it.
+      fireEvent.change(screen.getByLabelText("Effective tax rate"), { target: { value: "30" } });
+      expect(sliderWrapper("Effective tax rate")).toHaveAttribute("data-modified", "true");
+      expect(screen.getByText("adjusted by you (you entered 25%)")).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Safe withdrawal rate"), { target: { value: "3" } });
       expect(reset).toBeEnabled();
+
       fireEvent.click(reset);
 
-      expect(screen.getByLabelText(TAX_PROMPT)).toHaveValue(null);
-      expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
+      // Back to the entered rate, not to the prompt.
+      expect(screen.queryByLabelText(TAX_PROMPT)).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
+      expect(screen.getByLabelText("Safe withdrawal rate")).toHaveValue("4");
+      expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+      expect(screen.getByText("entered by you")).toBeInTheDocument();
+      expect(modifiedSliders(container)).toHaveLength(0);
+      expect(reset).toBeDisabled();
     });
   });
 
