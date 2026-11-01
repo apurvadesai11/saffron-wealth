@@ -27,6 +27,11 @@ const DOMAIN_PADDING_RATIO = 0.08;
 const Y_TICK_TARGET = 4;
 const X_TICK_TARGET = 6;
 
+// How far the chart runs past the slowest start's FI crossing: enough to show
+// the crossing with room after it. The decades beyond are growth past the
+// goal, and plotting them pins everything before the crossing to the axis.
+const YEARS_PAST_WORST_FI = 5;
+
 type Bands = FireSummary["bands"];
 
 // ---------------------------------------------------------------------------
@@ -54,6 +59,25 @@ export function yDomain(
   const span = max - min;
   const pad = span > 0 ? span * DOMAIN_PADDING_RATIO : 1; // all-zero data still needs a non-empty range
   return [min < 0 ? min - pad : 0, max + pad];
+}
+
+// The last year (from now) to plot: YEARS_PAST_WORST_FI past the slowest
+// start's FI crossing, or the whole horizon when some start never crosses. The
+// coast view also runs to the target age, where its curve ends. Never past the
+// horizon, which is all the simulation has.
+export function plotEndYear({
+  horizon,
+  yearsToTarget,
+  worstFiYears,
+  view,
+}: {
+  horizon: number;
+  yearsToTarget: number;
+  worstFiYears: number | null;
+  view: "fi" | "coast";
+}): number {
+  const pastWorst = Math.ceil(worstFiYears ?? horizon) + YEARS_PAST_WORST_FI;
+  return Math.min(horizon, Math.max(view === "coast" ? yearsToTarget : 0, pastWorst));
 }
 
 // The p10-p90 area as one closed path: out along p90, back along p10. `x` maps
@@ -93,8 +117,8 @@ interface Props {
   bands: Bands;
   age: number;
   fiNumber: number;
-  // coastLine[k] = coastFiNumber(F, r, T - k), aligned with bands[k]. Only
-  // drawn in the coast view.
+  // From coastLine in lib/fire-levers.ts: the Coast FI requirement k years
+  // from now, aligned with bands[k]. Only drawn in the coast view.
   coastLine: number[] | null;
   view: "fi" | "coast";
 }

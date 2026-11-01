@@ -6,6 +6,7 @@ import type { FireInputs, FireLevers, FirePageState } from "@/lib/types";
 import {
   annualContribution,
   coastFiNumber,
+  coastLine,
   defaultLevers,
   fiNumber,
   hasIncome,
@@ -28,7 +29,7 @@ import {
 import { ANNUAL_REAL_RETURNS } from "@/lib/market-history-data";
 import { formatUsd } from "@/lib/money";
 import FireAssumptions from "./FireAssumptions";
-import FireChart from "./FireChart";
+import FireChart, { plotEndYear } from "./FireChart";
 import FireLeverSlider from "./FireLeverSlider";
 import FireScenarioTable, { formatYears } from "./FireScenarioTable";
 
@@ -215,15 +216,14 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
 
   // A target at or before today leaves no "by the target" to coast to.
   const coastNeeded = coastFiNumber(fi, real, yearsToTarget);
-  // The requirement k years from now, against the same history the band uses.
-  // At the target age it is the FI number itself; coastFiNumber is null at zero
-  // years, where "grow untouched" has no length, so that point is set here.
-  const coastLine =
-    yearsToTarget > 0
-      ? Array.from({ length: Math.min(Math.floor(yearsToTarget), horizon) + 1 }, (_, k) =>
-          k < yearsToTarget ? (coastFiNumber(fi, real, yearsToTarget - k) ?? fi) : fi,
-        )
-      : null;
+
+  // The chart stops a few years past the slowest start's FI crossing, so the
+  // crossing is legible; the band, the coast curve, the y range and the
+  // chart's aria-label all come from the plotted years only.
+  const worstFiYears = summary.fi.find((row) => row.label === "Worst")?.years ?? null;
+  const plotEnd = plotEndYear({ horizon, yearsToTarget, worstFiYears, view });
+  const plottedBands = summary.bands.slice(0, plotEnd + 1);
+  const plottedCoast = coastLine(fi, real, yearsToTarget, horizon)?.slice(0, plotEnd + 1) ?? null;
 
   const history = {
     windowCount: summary.windowCount,
@@ -389,10 +389,10 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
 
         <div role="tabpanel" id="fire-view-panel" aria-labelledby={`fire-tab-${view}`} className="space-y-4">
           <FireChart
-            bands={summary.bands}
+            bands={plottedBands}
             age={inputs.age}
             fiNumber={fi}
-            coastLine={coastLine}
+            coastLine={plottedCoast}
             view={view}
           />
           {view === "coast" && coastNeeded === null ? (

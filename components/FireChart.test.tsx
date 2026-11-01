@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import FireChart, { bandPath, niceTicks, yDomain } from "./FireChart";
+import FireChart, { bandPath, niceTicks, plotEndYear, yDomain } from "./FireChart";
 import type { FireSummary } from "@/lib/fire-simulation";
 
 // Synthetic round numbers only (CLAUDE.md: real balances never appear in
@@ -115,6 +115,35 @@ describe("niceTicks", () => {
 
   it("falls back to the one value when the range has no width", () => {
     expect(niceTicks([5, 5], 4)).toEqual([5]);
+  });
+});
+
+describe("plotEndYear", () => {
+  const base = { horizon: 40, yearsToTarget: 30, view: "fi" as const };
+
+  it("runs five years past the slowest start's FI crossing, rounded up", () => {
+    expect(plotEndYear({ ...base, worstFiYears: 12.3 })).toBe(18);
+    expect(plotEndYear({ ...base, worstFiYears: 0 })).toBe(5);
+  });
+
+  it("runs to the horizon when some start never reaches FI", () => {
+    expect(plotEndYear({ ...base, worstFiYears: null })).toBe(40);
+  });
+
+  it("never runs past the horizon", () => {
+    expect(plotEndYear({ ...base, worstFiYears: 38 })).toBe(40);
+  });
+
+  it("reaches the target age in the coast view, whose curve ends there", () => {
+    expect(plotEndYear({ ...base, view: "coast", worstFiYears: 12.3 })).toBe(30);
+    // A target nearer than the crossing changes nothing.
+    expect(plotEndYear({ ...base, view: "coast", yearsToTarget: 10, worstFiYears: 12.3 })).toBe(18);
+    // Past the target, there is no curve to reach.
+    expect(plotEndYear({ ...base, view: "coast", yearsToTarget: -2, worstFiYears: 12.3 })).toBe(18);
+  });
+
+  it("ignores the target age in the FI view", () => {
+    expect(plotEndYear({ ...base, yearsToTarget: 35, worstFiYears: 12.3 })).toBe(18);
   });
 });
 

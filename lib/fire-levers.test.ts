@@ -3,6 +3,7 @@ import {
   afterTaxIncome,
   annualContribution,
   coastFiNumber,
+  coastLine,
   defaultLevers,
   fiNumber,
   hasIncome,
@@ -156,6 +157,30 @@ describe("coastFiNumber", () => {
   it("coastFiNumber is null at or past the target age", () => {
     expect(coastFiNumber(1_000_000, 0.05, 0)).toBeNull();
     expect(coastFiNumber(1_000_000, 0.05, -3)).toBeNull();
+  });
+});
+
+describe("coastLine", () => {
+  it("has one point per year from now to the target age", () => {
+    expect(coastLine(1_000_000, 0.05, 15, 40)).toHaveLength(16);
+  });
+
+  it("is the Coast FI number k years from now, ending at the FI number itself", () => {
+    const line = coastLine(1_000_000, 0.05, 15, 40)!;
+    for (let k = 0; k < 15; k++) expect(line[k]).toBeCloseTo(coastFiNumber(1_000_000, 0.05, 15 - k)!, 6);
+    // At the target age there is nothing left to grow: the requirement is the FI number.
+    expect(line[15]).toBe(1_000_000);
+  });
+
+  it("stops at the horizon when the target is beyond it", () => {
+    const line = coastLine(1_000_000, 0.05, 75, 70)!;
+    expect(line).toHaveLength(71);
+    expect(line[70]).toBeCloseTo(coastFiNumber(1_000_000, 0.05, 5)!, 6);
+  });
+
+  it("is null at or past the target age", () => {
+    expect(coastLine(1_000_000, 0.05, 0, 40)).toBeNull();
+    expect(coastLine(1_000_000, 0.05, -3, 40)).toBeNull();
   });
 });
 

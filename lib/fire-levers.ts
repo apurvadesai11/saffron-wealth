@@ -122,6 +122,11 @@ export function fiNumber(levers: FireLevers): number {
   return levers.annualSpending / (levers.safeWithdrawalRatePct / 100);
 }
 
+// What a portfolio must be `years` ahead of a goal of `fi` to grow to it untouched.
+function discountedTo(fi: number, realReturn: number, years: number): number {
+  return fi / (1 + realReturn) ** years;
+}
+
 /**
  * What the portfolio must be today to grow, untouched, to the FI number by the
  * target age. Null when the target age is now or past, where "coast" has no
@@ -129,7 +134,21 @@ export function fiNumber(levers: FireLevers): number {
  */
 export function coastFiNumber(fi: number, realReturn: number, yearsToTarget: number): number | null {
   if (yearsToTarget <= 0) return null;
-  return fi / (1 + realReturn) ** yearsToTarget;
+  return discountedTo(fi, realReturn, yearsToTarget);
+}
+
+/**
+ * The Coast FI requirement k years from now, for every whole year up to the
+ * target age or the horizon, whichever comes first: index k lines up with the
+ * simulation's bands[k]. At the target age it is the FI number itself, with
+ * nothing left to grow. Null when the target age is now or past, as for
+ * coastFiNumber.
+ */
+export function coastLine(fi: number, realReturn: number, yearsToTarget: number, horizon: number): number[] | null {
+  if (yearsToTarget <= 0) return null;
+  return Array.from({ length: Math.min(Math.floor(yearsToTarget), horizon) + 1 }, (_, k) =>
+    discountedTo(fi, realReturn, yearsToTarget - k),
+  );
 }
 
 // Bounds the sliders keep when nothing needs more room. Every min and max is a

@@ -214,6 +214,22 @@ describe("FireCalculatorClient", () => {
     expect(screen.getByText("Investable portfolio", { selector: "dt" })).toBeInTheDocument();
   });
 
+  it("charts to a few years past the slowest FI crossing, not the whole horizon", () => {
+    // 69,000 a year into 300,000 reaches 1,200,000 well inside 40 years in every
+    // start, so the years after are growth past the goal and are not plotted.
+    renderReady();
+    const label = screen.getByRole("img", { name: /Median projection reaches/ }).getAttribute("aria-label")!;
+    const plottedTo = Number(label.match(/by age (\d+)/)![1]);
+    expect(plottedTo).toBeGreaterThan(35 + 5);
+    expect(plottedTo).toBeLessThan(35 + 40);
+  });
+
+  it("charts the whole horizon when some start never reaches FI", () => {
+    // Spending above after-tax income: no start ever gets there.
+    renderReady({ spending: { ...makeInputs().spending, annualSpending: 120_000, regularAnnual: 120_000 } });
+    expect(screen.getByRole("img", { name: /by age 75\./ })).toBeInTheDocument();
+  });
+
   it("keeps the savings slider on its track when the tax rate moves", () => {
     // Spending of 100,000 against 112,500 after tax saves 11%; at a 60% tax
     // rate it overspends by two thirds. The savings range has to follow the
