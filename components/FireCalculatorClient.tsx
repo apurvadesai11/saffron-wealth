@@ -133,11 +133,14 @@ function TaxRatePrompt({ onSet }: { onSet: (pct: number) => void }) {
 }
 
 // A named region, so the figure inside it can be found by what it is.
+// min-w-0 lets a grid cell narrower than its figure shrink instead of pushing
+// out of the row, and break-words wraps the figure rather than letting it
+// overflow: a backstop, since the figures are whole dollars to begin with.
 function HeadlineCard({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section
       aria-labelledby={id}
-      className="bg-surface rounded-xl p-4 shadow-sm border border-line-subtle"
+      className="min-w-0 break-words bg-surface rounded-xl p-4 shadow-sm border border-line-subtle"
     >
       <h2 id={id} className="text-sm text-fg-muted mb-1">
         {title}
@@ -147,6 +150,9 @@ function HeadlineCard({ id, title, children }: { id: string; title: string; chil
   );
 }
 
+// Headline figures are whole dollars: cents on a seven-figure FI number
+// overflow a quarter-width card, and no decision turns on them. The
+// assumptions panel keeps the cents.
 const headlineValueClass = "text-2xl font-bold text-fg";
 const headlineNoteClass = "text-sm text-fg-muted mt-1";
 
@@ -230,7 +236,7 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HeadlineCard id="fire-card-fi" title="FI number">
-          <p className={headlineValueClass}>{formatUsd(fi)}</p>
+          <p className={headlineValueClass}>{formatUsd(fi, { wholeDollars: true })}</p>
           <p className={headlineNoteClass}>
             {formatUsd(levers.annualSpending, { wholeDollars: true })} a year at a{" "}
             {formatPct(levers.safeWithdrawalRatePct)} withdrawal rate
@@ -238,7 +244,7 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
         </HeadlineCard>
 
         <HeadlineCard id="fire-card-portfolio" title="Investable portfolio">
-          <p className={headlineValueClass}>{formatUsd(inputs.portfolio.total)}</p>
+          <p className={headlineValueClass}>{formatUsd(inputs.portfolio.total, { wholeDollars: true })}</p>
           {fi > 0 && (
             <p className={headlineNoteClass}>
               {Math.round((inputs.portfolio.total / fi) * 100)}% of your FI number
@@ -260,12 +266,13 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
             <p className={headlineValueClass}>Past your target age</p>
           ) : (
             <>
-              <p className={headlineValueClass}>{formatUsd(coastNeeded)}</p>
+              <p className={headlineValueClass}>{formatUsd(coastNeeded, { wholeDollars: true })}</p>
               <p className={headlineNoteClass}>
                 {inputs.portfolio.total >= coastNeeded ? "Reached now" : "Not reached yet"}
               </p>
               <p className="text-xs text-fg-faint mt-1">
-                Enough today to reach your FI number by {inputs.targetRetirementAge} without saving more
+                The amount that would grow to your FI number by {inputs.targetRetirementAge} with no more
+                saving, at your assumed return
               </p>
             </>
           )}

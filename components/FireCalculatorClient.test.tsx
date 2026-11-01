@@ -55,6 +55,12 @@ function headline(name: string) {
   return within(screen.getByRole("region", { name }));
 }
 
+// Headline figures are whole dollars, so a seven-figure number fits its card;
+// the assumptions panel keeps the cents.
+function whole(value: number): string {
+  return formatUsd(value, { wholeDollars: true });
+}
+
 function sliderWrapper(label: string): HTMLElement {
   const wrapper = screen.getByLabelText(label).closest("[data-modified]");
   if (!(wrapper instanceof HTMLElement)) throw new Error(`No slider wrapper for ${label}`);
@@ -68,7 +74,7 @@ function modifiedSliders(container: HTMLElement): Element[] {
 describe("FireCalculatorClient", () => {
   it("pre-fills from the inputs", () => {
     renderReady();
-    expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
     expect(screen.getByLabelText("Safe withdrawal rate")).toHaveValue("4");
     expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
     expect(screen.getByLabelText("Stock allocation")).toHaveValue("100");
@@ -77,7 +83,7 @@ describe("FireCalculatorClient", () => {
   it("shows the portfolio against the FI number, and the neutral years to FI", () => {
     renderReady();
     const portfolio = headline("Investable portfolio");
-    expect(portfolio.getByText(formatUsd(300_000))).toBeInTheDocument();
+    expect(portfolio.getByText(whole(300_000))).toBeInTheDocument();
     expect(portfolio.getByText(/25% of your FI number/)).toBeInTheDocument();
 
     // The neutral scenario's own figure depends on the market history, so the
@@ -92,9 +98,15 @@ describe("FireCalculatorClient", () => {
     const coast = coastFiNumber(1_200_000, realReturn(defaultLevers(inputs)), 15);
     expect(coast).not.toBeNull();
     const card = headline("Coast FI number");
-    expect(card.getByText(formatUsd(coast as number))).toBeInTheDocument();
+    expect(card.getByText(whole(coast as number))).toBeInTheDocument();
     // 300,000 is below it
     expect(card.getByText("Not reached yet")).toBeInTheDocument();
+    // The note describes the number; the line above is the status.
+    expect(
+      card.getByText(
+        "The amount that would grow to your FI number by 50 with no more saving, at your assumed return",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("says Coast FI is reached once the portfolio covers it", () => {
@@ -118,7 +130,7 @@ describe("FireCalculatorClient", () => {
 
     fireEvent.change(screen.getByLabelText("Safe withdrawal rate"), { target: { value: "3" } });
 
-    expect(headline("FI number").getByText(formatUsd(1_600_000))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(1_600_000))).toBeInTheDocument();
     expect(sliderWrapper("Safe withdrawal rate")).toHaveAttribute("data-modified", "true");
     // One element per modified slider, so one moved lever is one match.
     expect(modifiedSliders(container)).toHaveLength(1);
@@ -129,7 +141,7 @@ describe("FireCalculatorClient", () => {
     fireEvent.change(screen.getByLabelText("Savings rate"), { target: { value: "70" } });
 
     // After-tax income 112,500 at a 70% savings rate leaves 33,750 to spend.
-    expect(headline("FI number").getByText(formatUsd(33_750 / 0.04))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(33_750 / 0.04))).toBeInTheDocument();
     expect(sliderWrapper("Savings rate")).toHaveAttribute("data-modified", "true");
     expect(modifiedSliders(container)).toHaveLength(1);
   });
@@ -149,11 +161,11 @@ describe("FireCalculatorClient", () => {
     fireEvent.change(screen.getByLabelText("Safe withdrawal rate"), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText("Stock allocation"), { target: { value: "60" } });
     expect(reset).toBeEnabled();
-    expect(headline("FI number").getByText(formatUsd(1_600_000))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(1_600_000))).toBeInTheDocument();
 
     fireEvent.click(reset);
 
-    expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
     expect(screen.getByLabelText("Safe withdrawal rate")).toHaveValue("4");
     expect(screen.getByLabelText("Stock allocation")).toHaveValue("100");
     expect(modifiedSliders(container)).toHaveLength(0);
@@ -238,13 +250,15 @@ describe("FireCalculatorClient", () => {
       expect(screen.getByText("We couldn't estimate this from your transactions.")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "FI number" })).not.toBeInTheDocument();
+      // Neither the headline's whole dollars nor the assumptions panel's cents.
+      expect(screen.queryByText(whole(1_200_000))).not.toBeInTheDocument();
       expect(screen.queryByText(formatUsd(1_200_000))).not.toBeInTheDocument();
       expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 
       typeTaxRate("25");
       submitTaxRate();
 
-      expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+      expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
       // From here the rate is a slider like the others.
       expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
       expect(screen.queryByLabelText(TAX_PROMPT)).not.toBeInTheDocument();
@@ -270,7 +284,7 @@ describe("FireCalculatorClient", () => {
       renderReady({ derivedTaxRatePct: null });
       typeTaxRate("25");
       fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
-      expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+      expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
     });
 
     it.each(["", "-1", "60.5", "70"])("keeps the results hidden, and says why, for a submit of %j", (value) => {
@@ -326,7 +340,7 @@ describe("FireCalculatorClient", () => {
       expect(screen.queryByLabelText(TAX_PROMPT)).not.toBeInTheDocument();
       expect(screen.getByLabelText("Effective tax rate")).toHaveValue("25");
       expect(screen.getByLabelText("Safe withdrawal rate")).toHaveValue("4");
-      expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+      expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
       expect(screen.getByText("entered by you")).toBeInTheDocument();
       expect(modifiedSliders(container)).toHaveLength(0);
       expect(reset).toBeDisabled();
@@ -349,7 +363,7 @@ describe("FireCalculatorClient", () => {
       within(sliderWrapper("Effective tax rate")).getByText("No income in your Financial Profile"),
     ).toBeInTheDocument();
     // The projection still runs, with contributions of −spending + match: a drawdown.
-    expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
+    expect(headline("FI number").getByText(whole(1_200_000))).toBeInTheDocument();
   });
 
   it("replaces the FI share line with a note past the target age", () => {

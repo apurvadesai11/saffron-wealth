@@ -66,7 +66,8 @@ test.describe("FIRE calculator page", () => {
 
     // exact: "Coast FI number" is a second region whose name contains this one.
     await expect(fiCard).toBeVisible();
-    const fiFigure = fiCard.getByText(/^\$[\d,]+\.\d{2}$/);
+    // Whole dollars: the headline drops the cents so the figure fits its card.
+    const fiFigure = fiCard.getByText(/^\$[\d,]+$/);
     await expect(fiFigure).toBeVisible();
     const startingFi = await fiFigure.textContent();
 
