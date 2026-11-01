@@ -4,6 +4,7 @@ import {
   afterTaxIncome,
   annualContribution,
   fiNumber,
+  hasIncome,
   hasTaxRate,
   realReturn,
   savingsRatePct,
@@ -210,7 +211,17 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
           </p>
         )}
         <p>
-          Effective tax rate <Value>{pct(levers.effectiveTaxRatePct)}%</Value> {taxSource}
+          {hasIncome(inputs) ? (
+            <>
+              Effective tax rate <Value>{pct(levers.effectiveTaxRatePct)}%</Value> {taxSource}
+            </>
+          ) : (
+            // The rate is 0 and cannot be moved; printing "0%" would read as a
+            // measurement.
+            <>
+              Effective tax rate <Source>not applicable — no income in your Financial Profile</Source>
+            </>
+          )}
         </p>
         <p>
           <Value>{formatUsd(afterTaxIncome(inputs, levers))}</Value> <Source>after-tax income</Source>

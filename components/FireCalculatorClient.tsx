@@ -8,6 +8,7 @@ import {
   coastFiNumber,
   defaultLevers,
   fiNumber,
+  hasIncome,
   hasTaxRate,
   leverRanges,
   leversEqual,
@@ -308,6 +309,8 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
               defaults.effectiveTaxRatePct !== null &&
               levers.effectiveTaxRatePct !== defaults.effectiveTaxRatePct
             }
+            disabled={!hasIncome(inputs)}
+            hint={hasIncome(inputs) ? undefined : "No income in your Financial Profile"}
           />
           <FireLeverSlider
             id="fire-nominal-return"

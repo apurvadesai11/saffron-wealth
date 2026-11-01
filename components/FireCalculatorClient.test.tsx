@@ -319,13 +319,22 @@ describe("FireCalculatorClient", () => {
     });
   });
 
-  it("disables the savings slider when there is no income", () => {
-    renderReady({ grossIncome: 0, cashIncome: 0, employerMatch: 0 });
+  it("skips the tax prompt and disables the income sliders when there is no income", () => {
+    // What buildFireInputs gives a profile with no income: no cash income, so
+    // no derived tax rate.
+    renderReady({ grossIncome: 0, cashIncome: 0, employerMatch: 0, derivedTaxRatePct: null });
+    // A tax rate on no income changes nothing, so the page does not ask for one.
+    expect(screen.queryByLabelText("Effective tax rate (%)")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Savings rate")).toBeDisabled();
-    // The assumptions panel says the same thing further down, so the hint is
-    // looked up inside the slider.
+    expect(screen.getByLabelText("Effective tax rate")).toBeDisabled();
+    expect(screen.getByLabelText("Effective tax rate")).toHaveValue("0");
+    // The assumptions panel says the same thing further down, so the hints are
+    // looked up inside the sliders.
     expect(within(sliderWrapper("Savings rate")).getByText("No income in your Financial Profile")).toBeInTheDocument();
-    // The projection still runs, on the portfolio's growth alone.
+    expect(
+      within(sliderWrapper("Effective tax rate")).getByText("No income in your Financial Profile"),
+    ).toBeInTheDocument();
+    // The projection still runs, with contributions of −spending + match: a drawdown.
     expect(headline("FI number").getByText(formatUsd(1_200_000))).toBeInTheDocument();
   });
 

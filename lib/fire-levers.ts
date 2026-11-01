@@ -22,6 +22,15 @@ export function hasTaxRate(levers: FireLevers): levers is ReadyLevers {
   return levers.effectiveTaxRatePct !== null;
 }
 
+/**
+ * Whether the profile declares any income that funds savings. Without it a tax
+ * rate has nothing to apply to, so the page neither asks for one nor lets it
+ * be moved.
+ */
+export function hasIncome(inputs: FireInputs): boolean {
+  return inputs.grossIncome > 0;
+}
+
 export type LeverKey =
   | "nominalReturnPct"
   | "inflationPct"
@@ -51,6 +60,10 @@ function roundToHundredth(value: number): number {
  * fund's history), so the nominal default is the one that reproduces the
  * profile's real return: (1 + real)(1 + inflation) − 1. It is rounded to 2 dp
  * because the slider steps in tenths and a longer default would not sit on it.
+ *
+ * With no income the tax rate starts at 0 rather than null: it multiplies
+ * nothing, so 0 is exact, and null would hold the page behind a prompt for a
+ * number that cannot matter.
  */
 export function defaultLevers(inputs: FireInputs): FireLevers {
   const nominal = (1 + inputs.profileRealReturnPct / 100) * (1 + inputs.profileInflationPct / 100) - 1;
@@ -60,7 +73,7 @@ export function defaultLevers(inputs: FireInputs): FireLevers {
     annualSpending: inputs.spending.annualSpending,
     safeWithdrawalRatePct: inputs.profileSafeWithdrawalRatePct,
     stockAllocationPct: 100,
-    effectiveTaxRatePct: inputs.derivedTaxRatePct,
+    effectiveTaxRatePct: hasIncome(inputs) ? inputs.derivedTaxRatePct : 0,
   };
 }
 

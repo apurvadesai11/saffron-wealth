@@ -5,6 +5,7 @@ import {
   coastFiNumber,
   defaultLevers,
   fiNumber,
+  hasIncome,
   hasTaxRate,
   leverRanges,
   leversEqual,
@@ -75,11 +76,26 @@ describe("defaultLevers and realReturn", () => {
   it("carries a missing derived tax rate through as null", () => {
     expect(defaultLevers(inputs({ derivedTaxRatePct: null })).effectiveTaxRatePct).toBeNull();
   });
+
+  it("defaults the tax rate to 0 when the profile declares no income, so there is nothing to ask for", () => {
+    // No income means no cash income, so nothing is ever derived; a rate on
+    // zero income changes nothing, and asking for one would block the page.
+    const levers = defaultLevers(inputs({ grossIncome: 0, cashIncome: 0, derivedTaxRatePct: null }));
+    expect(levers.effectiveTaxRatePct).toBe(0);
+    expect(hasTaxRate(levers)).toBe(true);
+  });
 });
 
 describe("stockShare", () => {
   it("turns the allocation percent into the fraction the simulation takes", () => {
     expect(stockShare(ready({ stockAllocationPct: 60 }))).toBe(0.6);
+  });
+});
+
+describe("hasIncome", () => {
+  it("is true only for positive income that funds savings", () => {
+    expect(hasIncome(inputs())).toBe(true);
+    expect(hasIncome(inputs({ grossIncome: 0 }))).toBe(false);
   });
 });
 

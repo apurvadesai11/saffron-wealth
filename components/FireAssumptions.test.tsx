@@ -277,6 +277,16 @@ describe("FireAssumptions", () => {
     expect(row("savings").getByText("No income in your Financial Profile")).toBeInTheDocument();
   });
 
+  it("says the tax rate does not apply without income", () => {
+    const { row, rowEl } = setup({
+      inputs: makeInputs({ grossIncome: 0, cashIncome: 0, takeHome: null, derivedTaxRatePct: null }),
+    });
+    expect(row("income").getByText("not applicable — no income in your Financial Profile")).toBeInTheDocument();
+    expect(row("income").queryByText("0%")).not.toBeInTheDocument();
+    expect(row("income").queryByText(/entered by you|No income transactions/)).not.toBeInTheDocument();
+    expect(rowEl("income")).toHaveAttribute("data-adjusted", "false");
+  });
+
   it("shows nominal, inflation and the resulting real return", () => {
     // The defaults reproduce the profile's 5% real at 2% inflation: 7.1% nominal.
     const ret = setup().row("return");
