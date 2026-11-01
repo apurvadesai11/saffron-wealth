@@ -139,6 +139,20 @@ describe("simulateWindows", () => {
       expect(simulate({ yearsToTarget: 15 })[0].coastFiYears).toBe(0);
     });
 
+    it("grows each window on its own returns, not the first window's", () => {
+      // Constant returns hide which window's growth is read. Here the +100% year
+      // falls after the target in window 0 and inside it in window 1.
+      const results = simulate({
+        returns: [0, 1, 0],
+        horizon: 2,
+        yearsToTarget: 1,
+        portfolio: 100,
+        contribution: 0,
+        fiNumber: 150,
+      });
+      expect(results.map((r) => r.coastFiYears)).toEqual([null, 0]);
+    });
+
     it("reads the target as the horizon when the target lies beyond it", () => {
       const zero = new Array(10).fill(0);
       const [first] = simulate({ returns: zero, horizon: 10, portfolio: 100_000, contribution: 10_000, fiNumber: 200_000, yearsToTarget: 50 });

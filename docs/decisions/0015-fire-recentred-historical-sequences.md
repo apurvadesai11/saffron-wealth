@@ -23,8 +23,10 @@ contribution and FI number, and reporting the spread of outcomes.
    years that is 116 windows; at 70, 86.
 4. **Step with mid-year contributions.** `P[k+1] = P[k]·(1 + r) + C·√(1 + r)`,
    in real dollars, with `C` constant.
-5. **Accumulation only.** A window ends where the portfolio reaches the FI
-   number; nothing is withdrawn.
+5. **Accumulation only.** Years to FI stops counting at the crossing, but the
+   balance path does not: every window runs the full horizon, compounding and
+   still receiving the contribution after the FI number is passed. That path is
+   what the chart bands are taken from. Nothing is withdrawn.
 
 Years to FI interpolates linearly inside the year the balance crosses. Coast FI
 is the first year in which the balance, left to grow on that window's own
@@ -115,8 +117,11 @@ Whether it then lasts is the safe-withdrawal-rate's job, and that rate is alread
 a lever the user sets. Simulating withdrawals as well would answer a second
 question with the same table, add a retirement length and a spending path
 as new assumptions, and make "years to FI" depend on how the drawdown is
-modelled. A window therefore stops at FI. Contributions and spending are held
-constant in real dollars: no raises, no windfalls.
+modelled. So years to FI stops counting at the crossing, and the balance path
+carries on to the horizon with contributions continuing and nothing withdrawn;
+`bands` takes its percentiles of that path, so past a window's FI year it shows
+a portfolio still being added to, not one being drawn down. The contribution is
+held constant in real dollars: no raises, no windfalls.
 
 ## Rejected alternatives
 
