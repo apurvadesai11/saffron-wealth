@@ -1,6 +1,6 @@
 # Saffron Wealth — Roadmap
 
-**Last updated:** 2026-10-31 · **Current version:** v0.4
+**Last updated:** 2026-10-31 · **Current version:** v0.5
 
 This is the sequenced source of truth for what gets built next. `README.md` describes what
 exists today; this file describes what doesn't yet and in what order. When the two disagree,
@@ -31,11 +31,14 @@ asserted.
 | **Net Worth** (Phases 1–3) | 12 account types across 5 buckets, current net worth, over-time chart with range selector, archive/restore, Monarch balance-history backfill |
 | **Dark mode** | Light / System / Dark on the profile page, defaulting to the OS. Every colour is a theme token, so a new component gets both themes for free |
 | **Financial Profile** (#1) | Declared planning inputs on `/financial-profile`: typed income streams, current and retirement age, real return / withdrawal / inflation assumptions, filing status, employer match, per-account contribution targets. Append-only dated versions |
+| **FIRE calculator** (#4) | `/fire`: FI number, investable-portfolio progress, years to FI and Coast FI replayed against every rolling stretch of US market history since 1871 (five scenarios, percentile-band chart), spending baseline from the full transaction history in today's dollars, and sliders for the levers. Read-only; nothing persisted |
 
-**Where that leaves us:** tracking is solid and all first-class financial data is persisted.
-The declared inputs planning needs now exist, but nothing reads them yet — the cashflow forecast
-is still the only forward-looking feature in the app. Everything below is about extending the
-horizon from weeks to decades.
+**Where that leaves us:** tracking is solid, all first-class financial data is persisted, and
+the Financial Profile now has its first reader: the FIRE calculator turns the declared inputs, the
+accounts and the full spending history into a years-to-FI answer. Net worth projections (#3) is
+the next consumer, and the first that needs an *old* profile version. Everything below is about
+extending the horizon from this answer to the rest of the plan — holdings, projections, loans,
+and drawdown.
 
 ---
 
@@ -101,21 +104,34 @@ return and savings assumptions from #1.
 - Scenario comparison: a few named assumption sets side by side, since a single line invites
   false confidence
 
-### 4. FIRE calculator
+### 4. FIRE calculator — ✅ shipped (v0.5)
 
-**Prerequisite:** Financial Profile (#1). Better with Investment holdings (#2).
+Plan: `docs/saffron-wealth-fire-calculator-plan.md`. Decisions:
+`docs/decisions/0015-fire-recentred-historical-sequences.md`,
+`docs/decisions/0016-fire-spending-baseline.md`,
+`docs/decisions/0017-fire-savings-from-profile-income.md`.
 
-The feature the philosophy in the README has been promising. Everything it needs beyond #1
-already exists.
+What shipped, against what this item asked for:
 
-- **Savings rate** — from income and expense history, which the app already has
-- **FI number** — annual spend ÷ safe withdrawal rate
-- **Progress to FI** — current net worth against that number
-- **Years to FI** — under declared return and savings-rate assumptions
-- **Coast FI** — the point where no further contributions are needed to hit the target by the
-  target age
-- **Sensitivity** — how years-to-FI moves with savings rate and return, because the sensitivity
-  is more decision-relevant than the point estimate
+- **Savings rate** — income is the Financial Profile's declared gross, after an effective tax rate,
+  less spending (0017), not a figure read off income transactions. The tax rate is pre-filled from
+  what reached the bank when the history supports it and asked for otherwise. The savings-rate
+  slider is a view of spending: raising it lowers spending, and the FI number with it.
+- **FI number** — annual spending ÷ safe withdrawal rate. Spending is the average over every
+  complete month of history, in today's dollars, with big one-offs spread over their useful life (0016).
+- **Progress to FI** — the *investable* portfolio (cash, investments, retirement, less credit-card
+  debt; no property or mortgage) as a share of the FI number. That is deliberately narrower than net worth.
+- **Years to FI** — not a point estimate. Every complete rolling stretch of US stock and bond
+  history since 1871 is replayed, recentred to the declared return, giving five scenarios and a
+  percentile-band chart (0015).
+- **Coast FI** — the portfolio needed today to reach the FI number by the target age without
+  saving more, and the same historical replay for when that is crossed.
+- **Sensitivity** — sliders for savings rate, tax rate, nominal return, inflation, withdrawal rate
+  and stock allocation recompute everything live, with "Reset to defaults". Overrides are not saved.
+
+**Left for later:** accumulation only — drawdown, Social Security and tax on withdrawal belong to
+#6. Without holdings (#2) the allocation is one stock/bond slider for the whole portfolio, not the
+user's actual mix. There is no side-by-side sensitivity grid.
 
 ### 5. Loan tracking
 
@@ -196,5 +212,7 @@ Recording these so they don't get re-litigated:
 #10 Budget periods   (independent — data model already supports it)
 ```
 
-Financial Profile was the single unlock for the entire planning tier, and it has shipped —
-#3 and #4 are unblocked. Investment holdings (#2) is the remaining item in Now.
+Financial Profile was the single unlock for the entire planning tier, and it has shipped, and the
+FIRE calculator (#4) is the first thing built on it. Net worth projections (#3) is next, and
+retirement planning (#6) now waits only on that. Investment holdings (#2) is the remaining item
+in Now; it would replace the calculator's single stock/bond slider with the real allocation.

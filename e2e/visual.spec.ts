@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import { prisma } from "../lib/prisma";
 import { archiveAccount, createAccount } from "../lib/accounts";
+import { saveFinancialProfile } from "../lib/financial-profile";
 
 // Full-page screenshots of every screen, used as a local gate when a change is
 // meant to be visually neutral (the theme-token conversion was the first).
@@ -118,6 +119,41 @@ for (const scheme of ["light", "dark"] as const) {
       await page.goto("/financial-profile");
       await settle(page);
       await expect(page).toHaveScreenshot(name("financial-profile"), SHOT);
+    });
+
+    test("fire calculator — tax prompt, years to FI, coast FI", async ({ page, authedUser }) => {
+      // Saved here and removed after, not in beforeAll: a saved profile would
+      // turn the financial-profile screen above into the filled-in form. An
+      // RSU-only income has no bank deposits to infer a tax rate from, so the
+      // page opens on the prompt.
+      await saveFinancialProfile(authedUser.id, {
+        age: 35,
+        targetRetirementAge: 55,
+        expectedRealReturnPct: 5,
+        safeWithdrawalRatePct: 4,
+        inflationPct: 2.5,
+        filingStatus: null,
+        employerMatch: null,
+        incomeStreams: [{ kind: "rsu", label: null, annualAmount: 60000, frequency: "quarterly" }],
+        contributionTargets: [],
+      });
+      try {
+        await page.goto("/fire");
+        await settle(page);
+        await expect(page).toHaveScreenshot(name("fire-tax-prompt"), SHOT);
+
+        await page.getByLabel("Effective tax rate (%)").fill("25");
+        await page.getByRole("button", { name: "Calculate" }).click();
+        await expect(page.getByRole("region", { name: "FI number", exact: true })).toBeVisible();
+        await settle(page);
+        await expect(page).toHaveScreenshot(name("fire"), SHOT);
+
+        await page.getByRole("tab", { name: "Coast FI" }).click();
+        await settle(page);
+        await expect(page).toHaveScreenshot(name("fire-coast"), SHOT);
+      } finally {
+        await prisma.financialProfile.deleteMany({ where: { userId: authedUser.id } });
+      }
     });
 
     test("profile", async ({ page }) => {

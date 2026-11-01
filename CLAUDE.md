@@ -108,8 +108,16 @@ User-visible v1 capabilities:
   versions) — income as typed streams (salary, bonus, RSUs, ESPP, rental, …),
   current and target retirement age, real return / safe withdrawal / inflation
   assumptions, and optionally filing status, employer match, and per-account
-  contribution targets. Nothing consumes it yet; it's the input layer for
-  roadmap #3/#4/#6.
+  contribution targets. Read by the FIRE calculator (roadmap #4); projections
+  (#3) and retirement planning (#6) are the next consumers.
+- **FIRE Calculator** screen (`/fire`, read-only, nothing persisted) — years to
+  financial independence and Coast FI as a spread: the user's plan replayed
+  against every rolling stretch of US stock/bond history since 1871, reported
+  as five scenarios (Best to Worst) with a percentile-band chart. Pre-filled
+  from the Financial Profile, the investable accounts and the full transaction
+  history, with sliders for savings rate, tax rate, nominal return, inflation,
+  withdrawal rate and stock allocation, an assumptions panel, and Reset to
+  defaults. See "Architecture: FIRE calculator".
 - **Profile** screen — name/email edit, password change, avatar upload, single
   & global sign-out.
 - **Authentication** — full email/password + Google OAuth sign-in, password
@@ -141,6 +149,7 @@ From the PRD:
 | **Categories**                         | ✅ Postgres | `Category` (soft-deleted via `archivedAt`) — `lib/categories.ts` |
 | **Transactions**                       | ✅ Postgres | `Transaction` — `lib/transactions.ts`              |
 | **Budgets**                            | ✅ Postgres | `Budget` — `lib/budgets.ts`                        |
+| **FIRE calculator levers**             | ❌ In-memory | React state in `FireCalculatorClient` — the page is read-only; overrides are ephemeral by design |
 | **Alert dismissals**                   | ❌ In-memory | React state in `AppProvider` — resets on reload, low-stakes (just re-shows a dismissed alert) |
 
 Net Worth Phase 1 + Phase 2a (this) cover all first-class financial data —
@@ -195,6 +204,7 @@ app/
     net-worth/page.tsx     Net Worth summary + account management (RSC; real Postgres).
                             The landing page: next.config.ts redirects / here
     financial-profile/page.tsx  Financial Profile (RSC; current version + account options → client form)
+    fire/page.tsx          FIRE calculator (RSC; full history → buildFireInputs → client). Read-only, no API route
     profile/page.tsx       Account / password / picture / sessions
   (auth)/                  Unauthed route group
     layout.tsx
@@ -234,6 +244,8 @@ components/
   NetWorthClient.tsx, NetWorthSummaryCards.tsx, AccountBucketGroup.tsx,
   AccountRow.tsx, AccountEditModal.tsx
   FinancialProfileClient.tsx, IncomeStreamsEditor.tsx, ContributionTargetsEditor.tsx
+  FireCalculatorClient.tsx, FireChart.tsx, FireLeverSlider.tsx, FireAssumptions.tsx,
+  FireScenarioTable.tsx
   ThemeSelector.tsx                   Light / System / Dark control on the profile page
   *.test.tsx                          RTL unit tests colocated with each component
   __tests__/test-utils.tsx            renderWithApp + category fixtures
@@ -258,6 +270,13 @@ lib/
   financial-profile-utils.ts  Pure: income/frequency/filing taxonomy, ageOn, profileInputsEqual
   financial-profile-validation.ts  Pure: parseFinancialProfileBody + parseNumberInput — shared by
                             the route AND the client form
+  fire-inputs.ts           Pure: investable portfolio, take-home, derived tax rate, buildFireInputs → FirePageState
+  fire-spending.ts         Pure: CPI restatement, recurrence test, spending baseline (amortized one-offs)
+  fire-levers.ts           Pure: default levers, FI / Coast FI numbers, savings-rate coupling — the
+                            percent → fraction boundary
+  fire-simulation.ts       Pure: blend, recentre, historical windows, scenarios, chart bands (fractions, real $)
+  market-history-data.ts   Generated: ANNUAL_REAL_RETURNS (1871 on) + MARKET_HISTORY_SOURCE — client-safe
+  cpi-data.ts              Generated: MONTHLY_CPI (1970-01 on) — imported by the fire page only
   db-errors.ts             InvalidReferenceError — cross-user FK reference caught by query layers
   app-context.tsx          AppProvider — hydrated from Postgres by app/(app)/layout.tsx (see below)
   mock-data.ts             Test-fixture data only (renderWithApp, E2E fixture) — not read in production
@@ -279,7 +298,9 @@ docs/saffron-wealth-monthly-budget-prd.md   Monthly Budget PRD + Implementation 
 docs/saffron-wealth-net-worth-phase1-plan.md   Net Worth Phase 1 plan (Accounts + page) — shipped
 docs/saffron-wealth-net-worth-phase2-3-plan.md Phase 2b (Monarch import) + Phase 3 (graph) — shipped; v2 records the validated export schemas and 15 build-time rulings
 docs/saffron-wealth-financial-profile-plan.md  Financial Profile (roadmap #1) — shipped
+docs/saffron-wealth-fire-calculator-plan.md  FIRE calculator (roadmap #4) — shipped
 scripts/fetch-blocklist.mjs   Refreshes lib/auth/blocklist-data.ts
+scripts/build-market-history.py  Shiller ie_data.xls → lib/market-history-data.ts + lib/cpi-data.ts (see "Architecture: FIRE calculator")
 .githooks/pre-push         Runs lint + typecheck + unit tests before every push
 .github/workflows/ci.yml   GitHub Actions: lint, build, unit, e2e (Playwright)
 vercel.json                Vercel cron schedule
@@ -565,6 +586,72 @@ accounts only when the current version names them.
 **Not built yet:** a reader for an *old* version (`getFinancialProfileAsOf`).
 Roadmap #3 is its first consumer.
 
+### Architecture: FIRE calculator (`lib/fire-*.ts`, `components/Fire*.tsx`)
+
+Roadmap #4; plan `docs/saffron-wealth-fire-calculator-plan.md`. **Read-only:** no
+API route, no schema change, nothing persisted — the levers are React state.
+
+**Data flow.** `app/(app)/fire/page.tsx` is an async RSC. It reads the current
+financial profile, active *and* archived accounts, and the **full** transaction
+history (`listTransactions(userId)` with no `from` — *not* `AppProvider`'s
+13-month window, which can't answer a baseline that averages every complete
+month). `buildFireInputs` (`lib/fire-inputs.ts`, pure) reduces them to a
+`FirePageState`: `no-profile` or `no-spending` (each renders a link to the page
+that fixes it), or `ready` with a small `FireInputs`. Only that crosses to
+`FireCalculatorClient`, which holds the levers in `useState` and replays history in
+`useMemo`, so a slider move recomputes on the client with no round trip. The page
+does not use `AppProvider`.
+
+**The percent/fraction boundary lives in `lib/fire-levers.ts`.** Levers, the
+profile and everything displayed are percents as typed (`5` means 5%).
+`lib/fire-simulation.ts` takes and returns fractions (`0.05`). The conversion
+into the simulation's fractions (`realReturn`, `stockShare`) happens there and
+nowhere else: a component or `fire-simulation.ts` that divides by 100 itself is
+how a unit bug gets in.
+
+**Real dollars throughout.** Spending is restated in today's dollars with the CPI
+ratio, and the simulation, the FI and Coast FI numbers and the chart are all
+real. Nominal appears only as the return slider's input; `realReturn(levers)`
+converts it using the inflation lever before it goes anywhere.
+
+**Spending is the state, not the savings rate.** Savings is
+`gross × (1 − tax) − spending` (0017). The savings-rate slider is a view of
+spending (`spendingForSavingsRate`), so editing the tax rate moves the savings
+rate and leaves what the user spends alone.
+
+**The tax-rate gate.** `derivedTaxRatePct` is null unless the transactions support
+it (no cash income — an RSU-only profile has none — under six months of history,
+or a result outside 0 to 60). Null renders only the tax prompt, and the rate
+commits on submit, not per keystroke. `defaults` are held fixed for the page's life,
+so "Reset to defaults" after the user *supplied* a rate returns to the prompt: that
+is deliberate and pinned in `FireCalculatorClient.test.tsx`, and
+`e2e/fire.spec.ts` re-enters the rate after resetting.
+
+**Dates.** Month keys are `"YYYY-MM"` sliced from `"YYYY-MM-DD"` transaction
+dates, never built from a `Date`; `asOf`'s month comes from its local fields
+(decision 0010).
+
+**Market data is generated, never hand-edited.** `lib/market-history-data.ts`
+(annual real stock and bond returns since 1871, plus `MARKET_HISTORY_SOURCE`)
+ships to the client. `lib/cpi-data.ts` (monthly CPI since 1970-01) is imported only
+by the fire page so its rows stay out of the client bundle — a convention, not a
+guard, so nothing else should import it. To refresh both: download
+`ie_data.xls` from https://shillerdata.com/, `pip3 install --user pandas xlrd`
+once, then `python3 -E scripts/build-market-history.py ~/Downloads/ie_data.xls`
+(`-E`, not `-I`, which would hide the user site-packages) and commit the two
+files. The script finds columns by label and exits non-zero on a missing or
+ambiguous one rather than reading the wrong column. The data is Robert J.
+Shiller's U.S. stock market data; the credit is in the README and in the
+generated headers.
+
+**Decisions:**
+`0015-fire-recentred-historical-sequences.md` (replay real windows, recentred in
+log space; complete windows only; accumulation only),
+`0016-fire-spending-baseline.md` (full-history average in today's dollars, big
+one-offs amortized), `0017-fire-savings-from-profile-income.md` (savings from
+profile gross income and a tax rate pre-filled from the bank), all in
+`docs/decisions/`.
+
 ### Auth subsystem (`lib/auth/`)
 
 This is the most production-grade part of the codebase. It exists partly as a
@@ -648,7 +735,10 @@ Two test runners, three scopes:
   Files: `e2e/smoke.spec.ts` (app shell, nav, alerts popover, transaction
   filters, budget editing, transaction persistence across a reload);
   `e2e/net-worth.spec.ts` (account add/edit/delete); `e2e/financial-profile.spec.ts`
-  (save, reload, versioning, unchanged-save no-op); `e2e/auth-middleware.spec.ts`
+  (save, reload, versioning, unchanged-save no-op); `e2e/fire.spec.ts` (tax
+  prompt, FI number moving with the withdrawal-rate slider, Coast FI tab, reset —
+  seeded with an RSU-only profile so the prompt is always shown, whatever today's
+  date is relative to the fixed fixture dates); `e2e/auth-middleware.spec.ts`
   (gating — proxy redirect, forged shape-valid cookie rejected by the (app)
   layout); `e2e/theme.spec.ts` (OS default, explicit override, and the
   server-rendered `data-theme` after a reload).
