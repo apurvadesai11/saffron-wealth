@@ -361,6 +361,20 @@ export interface FireInputs {
   profileSafeWithdrawalRatePct: number;
 }
 
+// The sliders on the FIRE page, in percent as typed (5 means 5%). The state is
+// spending, not the savings rate: the savings-rate slider is a view of
+// spending, so changing the tax rate leaves spending alone and moves the
+// savings rate. `effectiveTaxRatePct` is null when the transactions could not
+// derive one and the user has not set it. See lib/fire-levers.ts.
+export interface FireLevers {
+  nominalReturnPct: number;
+  inflationPct: number;
+  annualSpending: number;
+  safeWithdrawalRatePct: number;
+  stockAllocationPct: number;
+  effectiveTaxRatePct: number | null;
+}
+
 // The page shows the calculator only when it has a profile and a spending
 // history to build on; otherwise it says which one is missing.
 export type FirePageState =
