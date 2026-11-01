@@ -37,6 +37,15 @@ const TransactionsIcon = createElement(
   createElement("path",     { d: "M21 13v2a4 4 0 0 1-4 4H3" }),
 );
 
+const FireIcon = createElement(
+  "svg",
+  iconProps,
+  // flame (FIRE)
+  createElement("path", {
+    d: "M12 3c.5 3.5 5 5.5 5 10.5a5 5 0 0 1-10 0c0-2 .8-3.3 2-4.5.3 1.6 1 2.4 2 3 .4-3 .2-6 1-9z",
+  }),
+);
+
 const NetWorthIcon = createElement(
   "svg",
   iconProps,
@@ -78,6 +87,7 @@ export const NAV_SECTIONS: NavItem[][] = [
     { href: "/net-worth",      label: "Net Worth",      icon: NetWorthIcon      },
     { href: "/monthly-review", label: "Monthly Review", icon: MonthlyReviewIcon },
     { href: "/transactions",   label: "Transactions",   icon: TransactionsIcon  },
+    { href: "/fire",           label: "FIRE",           icon: FireIcon          },
   ],
   [
     { href: "/financial-profile", label: "Financial Profile", icon: FinancialProfileIcon },

@@ -30,6 +30,9 @@ rediscover the same wrong answer.
 | [0012](0012-theme-tokens-and-cookie-preference.md) | Colours are theme tokens; the theme preference is a server-read cookie | Accepted (supersedes the light-only PRD fix) |
 | [0013](0013-financial-profile-append-only-versions.md) | The financial profile is append-only versions; an unchanged save writes nothing | Accepted |
 | [0014](0014-age-anchored-to-its-own-date.md) | Age is stored as an anchor with its own date, carried forward until the age itself changes | Accepted |
+| [0015](0015-fire-recentred-historical-sequences.md) | FIRE projections replay real historical return sequences, recentred in log space to the declared return | Accepted |
+| [0016](0016-fire-spending-baseline.md) | The FIRE spending baseline is the full-history average in today's dollars, with big one-offs amortized | Accepted |
+| [0017](0017-fire-savings-from-profile-income.md) | FIRE savings are the profile's gross income after a tax rate, minus spending; the rate is pre-filled from the bank | Accepted |
 
 ## Where "Task N" references point
 

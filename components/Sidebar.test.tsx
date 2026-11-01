@@ -23,10 +23,19 @@ describe("Sidebar", () => {
       "Net Worth",
       "Monthly Review",
       "Transactions",
+      "FIRE",
       "---",
       "Financial Profile",
       "Profile",
     ]);
+  });
+
+  it("links FIRE to the FIRE calculator", () => {
+    renderWithApp(<Sidebar />);
+    expect(within(screen.getByRole("navigation")).getByRole("link", { name: /FIRE/ })).toHaveAttribute(
+      "href",
+      "/fire",
+    );
   });
 
   it("links Monthly Review to its own route, now that / lands on Net Worth", () => {

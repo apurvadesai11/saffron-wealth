@@ -2,7 +2,7 @@
 
 A personal-wealth app built on the Boglehead and FIRE philosophy: track what you have, track what you spend, and close the gap between financial intention and real-time awareness. Set monthly budgets, track spending with color-coded progress bars, track net worth across accounts, and get contextual alerts before you overspend.
 
-> **Status:** v0.4 — Monthly Budget, Net Worth (Phases 1–3) and the Financial Profile shipped on a production-grade auth foundation. All first-class financial data is persisted to Postgres. The planning features that run on the profile (projections, FIRE calculator, retirement) are next — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status:** v0.5 — Monthly Budget, Net Worth (Phases 1–3), the Financial Profile and the FIRE calculator shipped on a production-grade auth foundation. All first-class financial data is persisted to Postgres. The remaining planning features that run on the profile (net worth projections, retirement) are next — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Features
 
@@ -22,6 +22,13 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 - **Assumptions** — expected real return, safe withdrawal rate, inflation; deliberately no pre-filled defaults
 - **Optional** — filing status, employer match (% of contributions up to % of salary), and annual contribution targets per cash, investment or retirement account
 - **Append-only versions** — every save that changes something is kept as a dated version, so a number computed from last year's assumptions stays explicable; an unchanged save writes nothing
+
+### FIRE Calculator (shipped)
+- **Years to financial independence, as a spread rather than a point estimate** — your plan is replayed against every complete rolling stretch of US stock and bond history since 1871 (annual real returns, recentred to the return you declared), reported as five scenarios from best to worst with a percentile-band chart
+- **FI number and Coast FI** — annual spending ÷ safe withdrawal rate, and the portfolio you'd need today to reach it by your target age without saving another dollar
+- **Pre-filled from what the app already knows** — investable portfolio from your accounts (cash, investments and retirement, less credit-card debt; not your home), spending from your *full* transaction history restated in today's dollars with big one-off purchases spread over their useful life, income from the Financial Profile. The tax rate is estimated from your deposits when the history supports it and asked for otherwise
+- **Every assumption on the page, and sliders for the levers** — savings rate, tax rate, nominal return, inflation, withdrawal rate and stock/bond allocation, with Reset to defaults. Read-only: nothing is saved, and all figures are in today's dollars
+- **Data credit** — historical returns and CPI are from Robert J. Shiller's U.S. stock market data ([shillerdata.com](https://shillerdata.com/)), embedded at build time by `scripts/build-market-history.py`; the spreadsheet itself is not in the repo
 
 ### Monthly Budget (shipped)
 - **Pre-commitment budgeting** — Set monthly budget targets for income and expense categories
@@ -51,7 +58,7 @@ A personal-wealth app built on the Boglehead and FIRE philosophy: track what you
 
 ### Not yet built
 
-Tracking is in good shape; **planning is one month deep**. The app can tell you where this month lands and nothing beyond that. The Financial Profile now holds the declared inputs planning needs; nothing reads them yet. Notably absent: investment holdings (accounts carry a balance only — no positions, cost basis, or asset allocation), loan amortization and payoff dates, net-worth projections, a FIRE calculator, and retirement planning. Sequencing and rationale live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Tracking is in good shape, and the FIRE calculator gives planning its first decades-long answer: when your current plan reaches financial independence. What it can't do yet is draw the portfolio down or project your net worth forward on its own. Notably absent: investment holdings (accounts carry a balance only — no positions, cost basis, or asset allocation, so the calculator takes one stock/bond split for the whole portfolio), loan amortization and payoff dates, net-worth projections, and retirement planning. Sequencing and rationale live in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Tech Stack
 
@@ -96,6 +103,7 @@ app/
     transactions/page.tsx    Transactions list + filters + add form + CSV import
     net-worth/page.tsx       Net worth chart, summary, accounts by bucket (the landing page; / redirects here)
     financial-profile/page.tsx  Declared planning inputs (income, ages, assumptions, savings)
+    fire/page.tsx            FIRE calculator (reads the full history server-side; client runs the replay)
     profile/page.tsx         Account, password, picture, sessions
   (auth)/                    Unauthenticated route group
     login, register, password-reset, password-reset/[token]
@@ -115,6 +123,7 @@ components/
   NetWorthClient, NetWorthChart, NetWorthSummaryCards, AccountBucketGroup,
   AccountRow, AccountEditModal, ArchivedAccountsGroup, BalanceHistoryImportModal
   FinancialProfileClient, IncomeStreamsEditor, ContributionTargetsEditor
+  FireCalculatorClient, FireChart, FireLeverSlider, FireAssumptions, FireScenarioTable
   __tests__/                 renderWithApp helper + contrast assertions
   auth/                      AuthCard, GoogleSignInButton, PasswordStrengthHint,
                              ProfilePictureUploader, AvatarFallback, AuthFormError
@@ -131,6 +140,12 @@ lib/
   budgets.ts                 Budget query layer
   financial-profile.ts       Financial profile query layer (append-only versions)
   financial-profile-utils.ts Profile taxonomy, age derivation, version equality
+  fire-inputs.ts             Profile + accounts + history → the FIRE page's inputs
+  fire-spending.ts           Spending baseline: CPI restatement, recurrence test, amortized one-offs
+  fire-levers.ts             Slider state, FI / Coast FI numbers (the percent→fraction boundary)
+  fire-simulation.ts         Historical-window replay, scenarios and chart bands
+  market-history-data.ts     Generated: annual real stock/bond returns since 1871 (Shiller)
+  cpi-data.ts                Generated: monthly CPI since 1970 (server only)
   csv.ts                     papaparse wrapper + header validation
   monarch-transform.ts       Pure row→domain transforms shared by both imports
   transaction-import.ts      Phase 2b import pipeline
@@ -161,7 +176,7 @@ prisma/
 proxy.ts                     Next.js Edge middleware (cookie shape check + CSRF cookie)
 middleware.ts                Re-exports from proxy.ts
 e2e/                         Playwright tests + worker-scoped auth fixture
-  smoke, net-worth, net-worth-history, monarch-import, financial-profile, auth-middleware,
+  smoke, net-worth, net-worth-history, monarch-import, financial-profile, fire, auth-middleware,
   security-headers, accessibility
 docs/
   decisions/                                    Decision records (one per ruling)
@@ -171,8 +186,10 @@ docs/
   saffron-wealth-net-worth-phase1-plan.md       Net Worth Phase 1 plan
   saffron-wealth-net-worth-phase2-3-plan.md     Net Worth Phases 2b & 3 plan
   saffron-wealth-financial-profile-plan.md      Financial Profile plan (roadmap #1)
+  saffron-wealth-fire-calculator-plan.md        FIRE calculator plan (roadmap #4)
 scripts/
   fetch-blocklist.mjs        Refreshes lib/auth/blocklist-data.ts
+  build-market-history.py    Shiller spreadsheet → lib/market-history-data.ts + lib/cpi-data.ts
   check-env-parity.mjs       Fails CI when code and .env.example disagree
 CLAUDE.md                    In-depth project context for AI coding agents
 ```
@@ -254,4 +271,5 @@ A pre-push git hook runs `lint`, `typecheck`, and `test` before every push (inst
 - `docs/saffron-wealth-net-worth-phase1-plan.md` — Net Worth Phase 1 (accounts + current net worth)
 - `docs/saffron-wealth-net-worth-phase2-3-plan.md` — Net Worth Phases 2b & 3 (Monarch imports + over-time chart)
 - `docs/saffron-wealth-financial-profile-plan.md` — Financial Profile (declared planning inputs, append-only versions)
+- `docs/saffron-wealth-fire-calculator-plan.md` — FIRE calculator (historical-sequence replay, spending baseline, levers)
 - `CLAUDE.md` — In-depth architecture, auth subsystem, and conventions for AI coding agents

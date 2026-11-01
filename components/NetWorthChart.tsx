@@ -19,20 +19,20 @@ const DEFAULT_RANGE: ChartRange = "MAX";
 // Used until (or unless) ResizeObserver reports a real size — most notably
 // happy-dom in unit tests, which has no layout engine at all, but also the
 // brief instant before a real browser's first callback fires.
-const DEFAULT_WIDTH = 640;
+export const DEFAULT_WIDTH = 640;
 const HEIGHT = 260;
 const MARGIN = { top: 16, right: 16, bottom: 24, left: 64 };
 
 // Headroom so the line doesn't touch the top/bottom edge of the plot area.
 const DOMAIN_PADDING_RATIO = 0.08;
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
+export const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 });
 
-const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
+export const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   notation: "compact",
@@ -160,7 +160,7 @@ function makeXScale(times: number[], left: number, right: number): (t: number) =
   return (t: number) => left + ((t - first) / span) * (right - left);
 }
 
-function makeYScale(domain: [number, number], top: number, bottom: number): (v: number) => number {
+export function makeYScale(domain: [number, number], top: number, bottom: number): (v: number) => number {
   const [min, max] = domain;
   const span = max - min || 1;
   return (v: number) => bottom - ((v - min) / span) * (bottom - top);
