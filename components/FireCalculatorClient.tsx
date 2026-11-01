@@ -397,7 +397,7 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
               rows={view === "fi" ? summary.fi : summary.coast}
               view={view}
               age={inputs.age}
-              asOfYear={Number(inputs.asOf.slice(0, 4))}
+              asOf={inputs.asOf}
               horizon={horizon}
               windowCount={summary.windowCount}
               firstStartYear={summary.firstStartYear}

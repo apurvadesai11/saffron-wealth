@@ -4,7 +4,8 @@ interface Props {
   rows: ScenarioRow[];
   view: "fi" | "coast";
   age: number;
-  asOfYear: number;
+  // "YYYY-MM-DD", as in FireInputs.asOf.
+  asOf: string;
   horizon: number;
   windowCount: number;
   firstStartYear: number;
@@ -25,18 +26,27 @@ export function formatYears(years: number | null, horizon: number): string {
   return `${Math.floor(totalMonths / 12)} yrs ${totalMonths % 12} mo`;
 }
 
+// The calendar year of the month a milestone `years` from `asOf` falls in.
+// It counts the same rounded months formatYears prints, from asOf's own month,
+// so October 2026 plus "5 yrs 10 mo" is 2032 (adding 5.83 to 2026 says 2031).
+function milestoneYear(asOf: string, years: number): number {
+  const year = Number(asOf.slice(0, 4));
+  const month = Number(asOf.slice(5, 7));
+  return year + Math.floor((month - 1 + Math.round(years * 12)) / 12);
+}
+
 const headerClass = "py-2 pr-4 text-left font-medium text-fg-muted";
 const cellClass = "py-2 pr-4 tabular-nums";
 
 // The five percentile scenarios of the historical replay, for whichever
-// milestone the page is showing. The age and year are floors: they name the
-// age you are in, and the calendar year it falls in, when the milestone is
-// crossed.
+// milestone the page is showing. The age is a floor: the age you are in when
+// the milestone is crossed. The year is the calendar year of the month it is
+// crossed in, counted from today's month (see milestoneYear).
 export default function FireScenarioTable({
   rows,
   view,
   age,
-  asOfYear,
+  asOf,
   horizon,
   windowCount,
   firstStartYear,
@@ -80,7 +90,7 @@ export default function FireScenarioTable({
               <td className={`${cellClass} font-medium`}>{row.label}</td>
               <td className={cellClass}>{formatYears(row.years, horizon)}</td>
               <td className={cellClass}>{row.years === null ? "—" : Math.floor(age + row.years)}</td>
-              <td className={cellClass}>{row.years === null ? "—" : Math.floor(asOfYear + row.years)}</td>
+              <td className={cellClass}>{row.years === null ? "—" : milestoneYear(asOf, row.years)}</td>
               <td className={cellClass}>{row.startYear}</td>
             </tr>
           ))}

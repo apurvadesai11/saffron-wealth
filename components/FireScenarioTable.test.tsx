@@ -18,7 +18,7 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof FireScenario
       rows={ROWS}
       view="fi"
       age={35}
-      asOfYear={2026}
+      asOf="2026-01-15"
       horizon={40}
       windowCount={87}
       firstStartYear={1871}
@@ -73,11 +73,20 @@ describe("FireScenarioTable", () => {
     const [scenario, years, age, year, startYear] = bodyCells()[0];
     expect(scenario).toBe("Neutral");
     expect(years).toBe("14 yrs 2 mo");
-    // floor(35 + 14.2027) and floor(2026 + 14.2027): the age and year the
-    // target is crossed in, not a rounded-up neighbour.
+    // floor(35 + 14.2027): the age the target is crossed in. The year counts
+    // the rounded 170 months on from January 2026, landing in March 2040.
     expect(age).toBe("49");
     expect(year).toBe("2040");
     expect(startYear).toBe("1966");
+  });
+
+  it("counts the year from today's month, so a late-year start rolls over", () => {
+    // 5.8333 years is 70 months; from October 2026 that is August 2032. Adding
+    // the years to 2026 alone would say 2031.
+    renderTable({ asOf: "2026-10-31", rows: [{ label: "Neutral", years: 70 / 12, startYear: 1966 }] });
+    const [, years, , year] = bodyCells()[0];
+    expect(years).toBe("5 yrs 10 mo");
+    expect(year).toBe("2032");
   });
 
   it("shows a dash for age and year when the scenario never gets there", () => {
