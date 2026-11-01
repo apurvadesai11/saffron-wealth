@@ -4,8 +4,9 @@
 // Income comes from the profile's declared (gross) streams, not from the
 // transactions: savings is gross × (1 − tax) − spending, and the tax rate is
 // pre-filled from what the transactions show actually landing in the bank. Why
-// that and not gross − spending, and why only some income kinds take part in
-// the derivation, is in docs/decisions/0017-fire-savings-from-profile-income.md.
+// that and not gross − spending, why interest and dividends are not part of
+// gross, and why only some income kinds take part in the derivation, is in
+// docs/decisions/0017-fire-savings-from-profile-income.md.
 //
 // asOf's month and day come from its local calendar fields, and month keys
 // ("YYYY-MM") are sliced from transaction dates, never built through a Date —
@@ -39,6 +40,11 @@ export const MATCH_ACCOUNT_TYPES: AccountType[] = ["401k", "roth_401k"];
 // RSUs arrive as shares, ESPP as a purchase, and interest and dividends stay in
 // the account that earned them.
 export const CASH_INCOME_KINDS: IncomeKind[] = ["salary", "bonus", "rental", "self_employment", "other"];
+
+// Income the portfolio already earns. It stays in the account that earned it,
+// and the simulation's historical returns are total returns, reinvested, so
+// counting it as a contribution as well would count it twice.
+export const PASSIVE_INCOME_KINDS: IncomeKind[] = ["interest_dividends"];
 
 // Take-home is a run-rate, and a run-rate over a few months is mostly noise
 // (one bonus month reads as a yearly pattern), so it needs half a year to count.
@@ -209,7 +215,9 @@ export function buildFireInputs(args: {
   for (const a of archivedAccounts) accountTypes.set(a.id, a.type);
   for (const a of accounts) accountTypes.set(a.id, a.type);
 
-  const grossIncome = totalAnnualIncome(profile.incomeStreams);
+  const isPassive = (kind: IncomeKind) => PASSIVE_INCOME_KINDS.includes(kind);
+  const grossIncome = totalAnnualIncome(profile.incomeStreams.filter((s) => !isPassive(s.kind)));
+  const excludedPassiveIncome = totalAnnualIncome(profile.incomeStreams.filter((s) => isPassive(s.kind)));
   const cashIncome = totalAnnualIncome(profile.incomeStreams.filter((s) => CASH_INCOME_KINDS.includes(s.kind)));
   const takeHome = computeTakeHome(transactions, asOf, spending.fromMonth);
   const payroll = payrollDeductions(profile, accountTypes);
@@ -223,6 +231,7 @@ export function buildFireInputs(args: {
       portfolio: computeInvestablePortfolio(accounts),
       spending,
       grossIncome,
+      excludedPassiveIncome,
       cashIncome,
       takeHome,
       payrollDeductions: payroll,

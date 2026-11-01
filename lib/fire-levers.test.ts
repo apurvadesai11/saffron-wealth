@@ -34,6 +34,7 @@ function inputs(overrides: Partial<FireInputs> = {}): FireInputs {
       amortized: [],
     },
     grossIncome: 100_000,
+    excludedPassiveIncome: 0,
     cashIncome: 100_000,
     takeHome: null,
     payrollDeductions: 0,

@@ -27,6 +27,7 @@ function makeInputs(overrides: Partial<FireInputs> = {}): FireInputs {
       ],
     },
     grossIncome: 150_000,
+    excludedPassiveIncome: 0,
     cashIncome: 120_000,
     takeHome: { annual: 78_000, months: 12 },
     payrollDeductions: 18_000,
@@ -89,6 +90,19 @@ describe("FireAssumptions", () => {
 
     expect(row("withdrawal").getByText(formatUsd(fiNumber(levers)))).toBeInTheDocument();
     expect(fiNumber(levers)).toBe(1_320_000);
+  });
+
+  it("says interest and dividends were left out of income, and why", () => {
+    const { row } = setup({ inputs: makeInputs({ excludedPassiveIncome: 3_000 }) });
+    expect(
+      row("income").getByText(
+        `Interest & dividends ${formatUsd(3_000)} left out: the historical returns already reinvest them`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about interest and dividends when there are none", () => {
+    expect(setup().row("income").queryByText(/Interest & dividends/)).not.toBeInTheDocument();
   });
 
   it("shows the ages from the Financial Profile", () => {

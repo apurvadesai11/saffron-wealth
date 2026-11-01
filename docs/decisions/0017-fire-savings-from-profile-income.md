@@ -11,9 +11,11 @@ The projection's yearly savings is
 savings = grossIncome × (1 − t) − annualSpending
 ```
 
-`grossIncome` is the total of the Financial Profile's declared income streams.
-`annualSpending` is the baseline from decision 0016. `t` is a tax-rate lever
-that the page pre-fills from the transactions when they support it.
+`grossIncome` is the total of the Financial Profile's declared income streams,
+except interest and dividends (see below); the amount left out travels as
+`excludedPassiveIncome` so the page can say so. `annualSpending` is the
+baseline from decision 0016. `t` is a tax-rate lever that the page pre-fills
+from the transactions when they support it.
 
 The pre-fill is derived, not assumed:
 
@@ -48,6 +50,18 @@ portfolio when $54,000 does (150,000 × 0.76 − 60,000), an overstatement of
 exactly the tax, two-thirds on top of the real figure. A retirement date built
 on that is years too early, and the error is in the flattering direction.
 
+## Why interest and dividends are not in grossIncome
+
+They stay in the account that earned them, and that account is already in the
+investable portfolio. The simulation grows that portfolio at historical
+**total** real returns, with every dividend and coupon reinvested (see the
+header of `lib/market-history-data.ts`), so this income is already compounding
+inside the projection.
+Counting it in `grossIncome` as well would add it again as a yearly
+contribution, and a household living partly on its portfolio's yield would see
+that yield twice. The page names the amount left out rather than dropping it
+silently.
+
 ## Why the income is the profile's, not the transactions'
 
 Take-home from the transactions is what reached the bank, and it is not the
@@ -81,7 +95,8 @@ it is in the numerator turns a 24% rate into 43%. ESPP is a
 payroll purchase into an account, with the same problem. Interest and dividends
 are paid into the account that earned them and are rarely a transaction at all.
 
-The rate that comes out is then applied to **all** gross income, RSUs included.
+The rate that comes out is then applied to **all** of `grossIncome`, RSUs
+included (interest and dividends are not in it; see above).
 That is an approximation (RSU withholding is often at a flat supplemental rate
 that differs from the salary's effective rate), and the lever is there to
 correct it.

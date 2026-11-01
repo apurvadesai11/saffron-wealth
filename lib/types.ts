@@ -341,8 +341,10 @@ export interface TakeHome {
 
 // Everything the FIRE page starts from. Percents are as typed in the profile
 // (5 means 5%) and `asOf` is "YYYY-MM-DD". `grossIncome` is every declared
-// stream; `cashIncome` leaves out the kinds that rarely land in checking, and
-// is what `derivedTaxRatePct` is measured against — see
+// stream except interest and dividends, which the historical returns already
+// reinvest; `excludedPassiveIncome` is how much that left out. `cashIncome`
+// leaves out the kinds that rarely land in checking, and is what
+// `derivedTaxRatePct` is measured against — see
 // docs/decisions/0017-fire-savings-from-profile-income.md.
 export interface FireInputs {
   asOf: string;
@@ -351,6 +353,7 @@ export interface FireInputs {
   portfolio: InvestablePortfolio;
   spending: SpendingBaseline;
   grossIncome: number;
+  excludedPassiveIncome: number;
   cashIncome: number;
   takeHome: TakeHome | null;
   payrollDeductions: number;

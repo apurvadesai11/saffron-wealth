@@ -203,6 +203,13 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
         <p>
           <Value>{formatUsd(inputs.grossIncome)}</Value> <Source>gross income, from your Financial Profile</Source>
         </p>
+        {inputs.excludedPassiveIncome > 0 && (
+          <p>
+            <Source>
+              {`Interest & dividends ${formatUsd(inputs.excludedPassiveIncome)} left out: the historical returns already reinvest them`}
+            </Source>
+          </p>
+        )}
         <p>
           Effective tax rate <Value>{pct(levers.effectiveTaxRatePct)}%</Value> {taxSource}
         </p>

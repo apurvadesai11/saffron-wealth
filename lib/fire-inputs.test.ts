@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CASH_INCOME_KINDS,
   MATCH_ACCOUNT_TYPES,
+  PASSIVE_INCOME_KINDS,
   PAYROLL_ACCOUNT_TYPES,
   buildFireInputs,
   computeInvestablePortfolio,
@@ -113,10 +114,11 @@ function typesOf(...accounts: Account[]): Map<string, AccountType> {
 const OCT_15_2026 = new Date(2026, 9, 15);
 
 describe("account type groups", () => {
-  it("names the paycheck, match and cash-income sets", () => {
+  it("names the paycheck, match, cash-income and passive-income sets", () => {
     expect(PAYROLL_ACCOUNT_TYPES).toEqual(["401k", "roth_401k", "hsa", "espp"]);
     expect(MATCH_ACCOUNT_TYPES).toEqual(["401k", "roth_401k"]);
     expect(CASH_INCOME_KINDS).toEqual(["salary", "bonus", "rental", "self_employment", "other"]);
+    expect(PASSIVE_INCOME_KINDS).toEqual(["interest_dividends"]);
   });
 });
 
@@ -492,8 +494,25 @@ describe("buildFireInputs", () => {
       }),
     );
     if (result.state !== "ready") throw new Error(`expected ready, got ${result.state}`);
-    expect(result.inputs.grossIncome).toBe(179_000);
+    // Gross leaves out only the interest and dividends (see the next test).
+    expect(result.inputs.grossIncome).toBe(176_000);
     expect(result.inputs.cashIncome).toBe(131_000);
+  });
+
+  it("leaves interest and dividends out of the income that funds savings, and says how much", () => {
+    // The simulation compounds total (reinvested) returns, so this income is
+    // already growing the portfolio; counting it as a contribution too would
+    // count it twice.
+    const result = buildFireInputs(
+      args({
+        profile: profile({
+          incomeStreams: [stream("salary", 100_000), stream("interest_dividends", 2_000), stream("interest_dividends", 1_500)],
+        }),
+      }),
+    );
+    if (result.state !== "ready") throw new Error(`expected ready, got ${result.state}`);
+    expect(result.inputs.grossIncome).toBe(100_000);
+    expect(result.inputs.excludedPassiveIncome).toBe(3_500);
   });
 
   it("assembles every input from one profile, its accounts and the history", () => {
@@ -539,6 +558,7 @@ describe("buildFireInputs", () => {
     expect(inputs.spending.fromMonth).toBe("2025-02");
     expect(inputs.spending.toMonth).toBe("2026-09");
     expect(inputs.grossIncome).toBe(200_000);
+    expect(inputs.excludedPassiveIncome).toBe(0);
     expect(inputs.cashIncome).toBe(150_000);
     expect(inputs.takeHome).toEqual({ annual: 72_000, months: 12 });
     // Paycheck accounts: 401k 16,000 + HSA 4,000 + the archived Roth 401(k) 4,000.
