@@ -28,7 +28,7 @@ import {
 } from "@/lib/fire-simulation";
 import { ANNUAL_REAL_RETURNS } from "@/lib/market-history-data";
 import { formatUsd } from "@/lib/money";
-import FireAssumptions, { ALLOCATION_HINT } from "./FireAssumptions";
+import FireAssumptions, { ALLOCATION_HINT, formatSavingsRate } from "./FireAssumptions";
 import FireChart, { plotEndYear } from "./FireChart";
 import FireLeverSlider from "./FireLeverSlider";
 import FireScenarioTable, { formatYears } from "./FireScenarioTable";
@@ -299,7 +299,7 @@ function FireResults({ inputs, levers, defaults, onChange, onReset }: ResultsPro
             label="Savings rate"
             value={savingsRate ?? 0}
             {...ranges.savingsRatePct}
-            format={(v) => (savingsRate === null ? "—" : formatPct(v))}
+            format={(v) => (savingsRate === null ? "—" : formatSavingsRate(v))}
             onChange={(pct) => onChange({ annualSpending: spendingForSavingsRate(inputs, levers, pct) })}
             modified={savingsModified}
             disabled={savingsRate === null}

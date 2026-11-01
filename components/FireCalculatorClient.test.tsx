@@ -156,6 +156,15 @@ describe("FireCalculatorClient", () => {
     ).toBeInTheDocument();
   });
 
+  it("prints the savings rate the same way on the slider and in the assumptions", () => {
+    // 112,500 after tax less 48,000 spent saves 57.333...%.
+    const { container } = renderReady();
+    expect(within(sliderWrapper("Savings rate")).getByText("57.3%")).toBeInTheDocument();
+    const savingsRow = container.querySelector<HTMLElement>('[data-row="savings"]');
+    if (!savingsRow) throw new Error("no savings row");
+    expect(within(savingsRow).getByText("57.3%")).toBeInTheDocument();
+  });
+
   it("a stock allocation reads as a stocks and bonds split", () => {
     renderReady();
     expect(screen.getByText("100% stocks / 0% bonds")).toBeInTheDocument();

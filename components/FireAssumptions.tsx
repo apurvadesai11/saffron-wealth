@@ -36,6 +36,14 @@ function pct(value: number, digits = 2): string {
   return String(Number(value.toFixed(digits)));
 }
 
+/**
+ * The savings rate as the page prints it, to one decimal: "57.3%". The slider
+ * and this panel both use it, so the two never show the same rate differently.
+ */
+export function formatSavingsRate(value: number): string {
+  return `${pct(value, 1)}%`;
+}
+
 // Every row says where its number came from, and flags the ones the user
 // has moved off their starting value. A tax rate the user had to supply is
 // its own starting value once entered: sitting on it is not an adjustment.
@@ -263,13 +271,13 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
             <Value>No income in your Financial Profile</Value>
           ) : (
             <>
-              <Value>{pct(savingsRate, 1)}%</Value> <Source>of after-tax income</Source>
+              <Value>{formatSavingsRate(savingsRate)}</Value> <Source>of after-tax income</Source>
             </>
           )}
           {savingsAdjusted && defaultSavingsRate !== null && (
             <>
               {" "}
-              <Adjusted>{`adjusted by you (was ${pct(defaultSavingsRate, 1)}%)`}</Adjusted>
+              <Adjusted>{`adjusted by you (was ${formatSavingsRate(defaultSavingsRate)})`}</Adjusted>
             </>
           )}
         </p>
