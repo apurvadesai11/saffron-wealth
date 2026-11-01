@@ -40,7 +40,14 @@ function bodyCells(): string[][] {
 
 describe("formatYears", () => {
   it("rounds to whole months", () => {
-    expect(formatYears(14.2027, 40)).toBe("14 yrs 2 mo");
+    expect(formatYears(14.2027, 40)).toBe("14 yrs 2 mos");
+  });
+
+  it("uses the singular for one year or one month", () => {
+    expect(formatYears(13 / 12, 40)).toBe("1 yr 1 mo");
+    expect(formatYears(1, 40)).toBe("1 yr 0 mos");
+    expect(formatYears(25 / 12, 40)).toBe("2 yrs 1 mo");
+    expect(formatYears(0.5, 40)).toBe("0 yrs 6 mos");
   });
 
   it("says Now for zero", () => {
@@ -52,8 +59,8 @@ describe("formatYears", () => {
   });
 
   it("carries a month that rounds up to a full year", () => {
-    // 14.97 years is 179.6 months; rounding the remainder alone gives "14 yrs 12 mo".
-    expect(formatYears(14.97, 40)).toBe("15 yrs 0 mo");
+    // 14.97 years is 179.6 months; rounding the remainder alone gives "14 yrs 12 mos".
+    expect(formatYears(14.97, 40)).toBe("15 yrs 0 mos");
   });
 });
 
@@ -73,7 +80,7 @@ describe("FireScenarioTable", () => {
     renderTable({ rows: [{ label: "Neutral", years: 14.2027, startYear: 1966 }] });
     const [scenario, years, age, year, startYear] = bodyCells()[0];
     expect(scenario).toBe("Neutral");
-    expect(years).toBe("14 yrs 2 mo");
+    expect(years).toBe("14 yrs 2 mos");
     // floor(35 + 14.2027): the age the target is crossed in. The year counts
     // the rounded 170 months on from January 2026, landing in March 2040.
     expect(age).toBe("49");
@@ -86,7 +93,7 @@ describe("FireScenarioTable", () => {
     // the years to 2026 alone would say 2031.
     renderTable({ asOf: "2026-10-31", rows: [{ label: "Neutral", years: 70 / 12, startYear: 1966 }] });
     const [, years, , year] = bodyCells()[0];
-    expect(years).toBe("5 yrs 10 mo");
+    expect(years).toBe("5 yrs 10 mos");
     expect(year).toBe("2032");
   });
 

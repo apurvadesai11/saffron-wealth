@@ -83,7 +83,7 @@ describe("FireCalculatorClient", () => {
     // The neutral scenario's own figure depends on the market history, so the
     // test pins its shape rather than a value.
     const years = headline("Years to FI");
-    expect(years.getByText(/\d+ yrs \d+ mo|Now/)).toBeInTheDocument();
+    expect(years.getByText(/^(\d+ yrs? \d+ mos?|Now)$/)).toBeInTheDocument();
     expect(years.getByText(/FI at age \d+/)).toBeInTheDocument();
   });
 

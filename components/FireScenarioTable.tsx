@@ -19,20 +19,23 @@ interface Props {
 }
 
 /**
- * "14 yrs 2 mo". Months are rounded from the total so a remainder that rounds
- * up to twelve carries into the years (14.97 reads "15 yrs 0 mo", not
- * "14 yrs 12 mo"). A figure that rounds to zero months is "Now".
+ * "14 yrs 2 mos", or "1 yr 1 mo". Months are rounded from the total so a
+ * remainder that rounds up to twelve carries into the years (14.97 reads
+ * "15 yrs 0 mos", not "14 yrs 12 mos"). A figure that rounds to zero months
+ * is "Now".
  */
 export function formatYears(years: number | null, horizon: number): string {
   if (years === null) return `Not within ${horizon} years`;
   const totalMonths = Math.round(years * 12);
   if (totalMonths === 0) return "Now";
-  return `${Math.floor(totalMonths / 12)} yrs ${totalMonths % 12} mo`;
+  const wholeYears = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  return `${wholeYears} ${wholeYears === 1 ? "yr" : "yrs"} ${months} ${months === 1 ? "mo" : "mos"}`;
 }
 
 // The calendar year of the month a milestone `years` from `asOf` falls in.
 // It counts the same rounded months formatYears prints, from asOf's own month,
-// so October 2026 plus "5 yrs 10 mo" is 2032 (adding 5.83 to 2026 says 2031).
+// so October 2026 plus "5 yrs 10 mos" is 2032 (adding 5.83 to 2026 says 2031).
 function milestoneYear(asOf: string, years: number): number {
   const year = Number(asOf.slice(0, 4));
   const month = Number(asOf.slice(5, 7));
