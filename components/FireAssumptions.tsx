@@ -84,9 +84,8 @@ export default function FireAssumptions({ inputs, levers, defaults, history }: P
   const defaultSavingsRate = hasTaxRate(defaults) ? savingsRatePct(inputs, defaults) : null;
   const savingsAdjusted = defaultSavingsRate !== null && savingsRate !== defaultSavingsRate;
 
-  // A take-home of nothing is the absence of income transactions, not a
-  // measurement of $0, and the page should not print it as one.
-  const noIncomeTransactions = takeHome === null || takeHome.annual === 0;
+  // computeTakeHome gives null, not $0, when no income came in.
+  const noIncomeTransactions = takeHome === null;
   const NO_INCOME_TRANSACTIONS = "No income transactions in the last 12 months";
 
   const derivedTax = inputs.derivedTaxRatePct;

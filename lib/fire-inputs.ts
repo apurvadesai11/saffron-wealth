@@ -109,7 +109,9 @@ export function computeInvestablePortfolio(accounts: Account[]): InvestablePortf
  * The window is the last 12 complete months before `asOf`'s month (the current
  * one is partial), but not before `fromMonth`: the spending baseline's first
  * month, so income and spending describe the same stretch of life. Months with
- * no income count in the average. Fewer than 6 months gives null.
+ * no income count in the average. Fewer than 6 months gives null, and so does
+ * a window with no income transactions at all: that is the absence of a
+ * measurement, not a take-home of $0.
  */
 export function computeTakeHome(transactions: Transaction[], asOf: Date, fromMonth: string): TakeHome | null {
   const toIndex = asOf.getFullYear() * 12 + asOf.getMonth() - 1;
@@ -120,12 +122,15 @@ export function computeTakeHome(transactions: Transaction[], asOf: Date, fromMon
   const start = monthFromIndex(startIndex);
   const end = monthFromIndex(toIndex);
   let total = 0;
+  let count = 0;
   for (const t of transactions) {
     if (t.type !== "income") continue;
     const month = t.date.slice(0, 7);
     if (month < start || month > end) continue;
     total += t.amount;
+    count += 1;
   }
+  if (count === 0) return null;
   return { annual: roundToCent((total / months) * 12), months };
 }
 

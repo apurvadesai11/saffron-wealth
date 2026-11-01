@@ -25,7 +25,8 @@ t = 1 − (takeHome + payrollDeductions) / cashIncome        (percent, 1 dp)
 
 - **`takeHome`** is the income transactions of the last 12 complete months
   before `asOf`'s month, but not before the spending baseline's first month,
-  annualized (`Σ / months × 12`). It is `null` below 6 months of history.
+  annualized (`Σ / months × 12`). It is `null` below 6 months of history, and
+  when the window holds no income transactions at all.
 - **`payrollDeductions`** is the profile's yearly contribution targets on
   401(k), Roth 401(k), HSA and ESPP accounts, the ones filled from the paycheck
   before it is deposited. The account type is looked up among active **and

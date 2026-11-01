@@ -187,16 +187,14 @@ describe("FireAssumptions", () => {
     expect(rowEl("savings")).toHaveAttribute("data-adjusted", "false");
   });
 
-  it("says there are no income transactions instead of showing a $0 take-home", () => {
-    for (const takeHome of [null, { annual: 0, months: 12 }]) {
-      const { row, unmount } = setup({
-        inputs: makeInputs({ derivedTaxRatePct: null, takeHome }),
-        levers: { effectiveTaxRatePct: 25 },
-      });
-      expect(row("income").getByText(/No income transactions in the last 12 months/)).toBeInTheDocument();
-      expect(row("income").queryByText(/take-home/)).not.toBeInTheDocument();
-      unmount();
-    }
+  it("says there are no income transactions instead of showing a take-home", () => {
+    // computeTakeHome is null, never a $0 run-rate, when nothing came in.
+    const { row } = setup({
+      inputs: makeInputs({ derivedTaxRatePct: null, takeHome: null }),
+      levers: { effectiveTaxRatePct: 25 },
+    });
+    expect(row("income").getByText(/No income transactions in the last 12 months/)).toBeInTheDocument();
+    expect(row("income").queryByText(/take-home/)).not.toBeInTheDocument();
   });
 
   it("flags a tax rate moved off the estimate and says what the estimate was", () => {

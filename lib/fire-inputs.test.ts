@@ -422,8 +422,16 @@ describe("computeTakeHome", () => {
     expect(computeTakeHome([], OCT_15_2026, "2027-01")).toBeNull();
   });
 
-  it("is a rounded zero with no income at all over a long enough window", () => {
-    expect(computeTakeHome([], OCT_15_2026, LONG_AGO)).toEqual({ annual: 0, months: 12 });
+  it("is null when the window has no income transactions, rather than a measured $0", () => {
+    expect(computeTakeHome([], OCT_15_2026, LONG_AGO)).toBeNull();
+    // Income outside the window (the current month, the thirteenth month back)
+    // and spending inside it are not take-home.
+    const noneInWindow = [
+      tx({ type: "income", amount: 6_000, date: "2026-10-01" }),
+      tx({ type: "income", amount: 6_000, date: "2025-09-30" }),
+      ...onEach(monthsBetween("2025-10", "2026-09"), { type: "expense", amount: 3_000 }),
+    ];
+    expect(computeTakeHome(noneInWindow, OCT_15_2026, LONG_AGO)).toBeNull();
   });
 });
 
