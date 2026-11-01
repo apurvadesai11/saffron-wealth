@@ -160,6 +160,23 @@ describe("leverRanges", () => {
     expect(leverRanges(inputs(), defaults).savingsRatePct.min).toBe(-21);
   });
 
+  it("savings max stays at 90 for a default below it", () => {
+    // 75,000 after tax, 45,000 spent: 40%.
+    expect(leverRanges(inputs(), ready()).savingsRatePct.max).toBe(90);
+  });
+
+  it("savings max rises to the next step above a default over 90", () => {
+    // 75,000 after tax, 5,700 spent: 92.4%.
+    const defaults = ready({ annualSpending: 5_700 });
+    expect(leverRanges(inputs(), defaults).savingsRatePct.max).toBe(93);
+  });
+
+  it("savings max is 90 when the default savings rate is null", () => {
+    expect(leverRanges(inputs({ grossIncome: 0 }), ready()).savingsRatePct.max).toBe(90);
+    const noTax = { ...defaultLevers(inputs()), effectiveTaxRatePct: null };
+    expect(leverRanges(inputs(), noTax).savingsRatePct.max).toBe(90);
+  });
+
   it("savings min is 0 when the default savings rate is null", () => {
     expect(leverRanges(inputs({ grossIncome: 0 }), ready()).savingsRatePct.min).toBe(0);
   });

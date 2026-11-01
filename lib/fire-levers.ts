@@ -39,9 +39,9 @@ export interface LeverRange {
 const SAVINGS_RATE_MAX_PCT = 90;
 
 // Rate arithmetic leaves dust (-20 comes out as -20.000000000000004), and a
-// floor over dust would put the slider's minimum a whole step below a default
-// that is, to every displayed digit, on a step.
-const FLOOR_TOLERANCE = 1e-9;
+// floor or ceiling over dust would put a slider bound a whole step past a
+// default that is, to every displayed digit, on a step.
+const ROUNDING_TOLERANCE = 1e-9;
 
 function roundToHundredth(value: number): number {
   return Math.round(value * 100) / 100;
@@ -117,18 +117,23 @@ export function coastFiNumber(fi: number, realReturn: number, yearsToTarget: num
 }
 
 /**
- * Slider bounds. The savings range reaches down to a negative default so a
- * household that overspends today can still see its own starting point; with
- * no default savings rate (no tax rate yet, or no after-tax income) it starts
- * at 0.
+ * Slider bounds. The savings range stretches to include the default savings
+ * rate at either end: down for a household that overspends today, up for one
+ * that saves more than 90%, so both can still see their own starting point.
+ * With no default savings rate (no tax rate yet, or no after-tax income) it is
+ * 0 to 90.
  */
 export function leverRanges(inputs: FireInputs, defaults: FireLevers): Record<LeverKey, LeverRange> {
   const defaultSavings = hasTaxRate(defaults) ? savingsRatePct(inputs, defaults) : null;
-  const savingsMin = defaultSavings === null ? 0 : Math.min(0, Math.floor(defaultSavings + FLOOR_TOLERANCE));
+  const savingsMin = defaultSavings === null ? 0 : Math.min(0, Math.floor(defaultSavings + ROUNDING_TOLERANCE));
+  const savingsMax =
+    defaultSavings === null
+      ? SAVINGS_RATE_MAX_PCT
+      : Math.max(SAVINGS_RATE_MAX_PCT, Math.ceil(defaultSavings - ROUNDING_TOLERANCE));
   return {
     nominalReturnPct: { min: -2, max: 15, step: 0.1 },
     inflationPct: { min: 0, max: 10, step: 0.1 },
-    savingsRatePct: { min: savingsMin, max: SAVINGS_RATE_MAX_PCT, step: 1 },
+    savingsRatePct: { min: savingsMin, max: savingsMax, step: 1 },
     safeWithdrawalRatePct: { min: 2.5, max: 6, step: 0.05 },
     stockAllocationPct: { min: 0, max: 100, step: 5 },
     effectiveTaxRatePct: { min: 0, max: 60, step: 0.5 },
