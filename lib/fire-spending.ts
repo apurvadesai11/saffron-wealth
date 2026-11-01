@@ -31,11 +31,12 @@ const RECURRENCE_MAX_DAYS = 400;
 const MS_PER_DAY = 86_400_000;
 
 // A month as a single integer, so month arithmetic never goes through a Date.
-function monthIndex(month: string): number {
+// Exported for lib/fire-inputs.ts, which windows income by the same months.
+export function monthIndex(month: string): number {
   return Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
 }
 
-function monthFromIndex(index: number): string {
+export function monthFromIndex(index: number): string {
   const year = Math.floor(index / 12);
   const month = (index % 12) + 1;
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;

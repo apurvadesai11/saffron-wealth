@@ -315,3 +315,55 @@ export interface SpendingBaseline {
   cpiThrough: string;
   amortized: AmortizedPurchase[];
 }
+
+// ── FIRE calculator inputs ────────────────────────────────────────────────
+// What lib/fire-inputs.ts reduces the profile, accounts and transaction
+// history to, so the page can hand the client one object.
+
+// What can be drawn on to fund retirement: cash, investments and retirement
+// accounts, net of credit-card debt. A home and its mortgage are left out
+// because living in the house is not a withdrawal. `creditCardDebt` is net
+// owed, so a statement credit makes it smaller and can take it below zero.
+export interface InvestablePortfolio {
+  total: number;
+  cash: number;
+  investments: number;
+  retirement: number;
+  creditCardDebt: number;
+}
+
+// What lands in the bank each year after tax and payroll deductions: income
+// transactions annualized over the `months` complete months measured.
+export interface TakeHome {
+  annual: number;
+  months: number;
+}
+
+// Everything the FIRE page starts from. Percents are as typed in the profile
+// (5 means 5%) and `asOf` is "YYYY-MM-DD". `grossIncome` is every declared
+// stream; `cashIncome` leaves out the kinds that rarely land in checking, and
+// is what `derivedTaxRatePct` is measured against — see
+// docs/decisions/0017-fire-savings-from-profile-income.md.
+export interface FireInputs {
+  asOf: string;
+  age: number;
+  targetRetirementAge: number;
+  portfolio: InvestablePortfolio;
+  spending: SpendingBaseline;
+  grossIncome: number;
+  cashIncome: number;
+  takeHome: TakeHome | null;
+  payrollDeductions: number;
+  employerMatch: number;
+  derivedTaxRatePct: number | null;
+  profileRealReturnPct: number;
+  profileInflationPct: number;
+  profileSafeWithdrawalRatePct: number;
+}
+
+// The page shows the calculator only when it has a profile and a spending
+// history to build on; otherwise it says which one is missing.
+export type FirePageState =
+  | { state: 'ready'; inputs: FireInputs }
+  | { state: 'no-profile' }
+  | { state: 'no-spending' };
